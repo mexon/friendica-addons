@@ -7,7 +7,6 @@
  */
 
 function retriever_install() {
-    set_config('retriever', 'dbversion', '0.1');
     register_hook('post_remote', 'addon/retriever/retriever.php', 'retriever_post_remote_hook');
     register_hook('plugin_settings',  'addon/retriever/retriever.php', 'retriever_plugin_settings');
     register_hook('plugin_settings_post',  'addon/retriever/retriever.php', 'retriever_plugin_settings_post');
