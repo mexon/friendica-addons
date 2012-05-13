@@ -189,7 +189,6 @@ function publicise_post_remote_hook(&$a, &$item) {
     }
 
     logger('Publicise: moving to wall: ' . $item['plink']);
-    $item['contact-id'] = $r2[0]['id'];
     $item['type'] = 'wall';
     $item['wall'] = 1;
 }
