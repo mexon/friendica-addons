@@ -26,6 +26,7 @@ function retriever_install() {
         foreach ($retrievers as $k => $v) {
             $rr = q("SELECT `uid` FROM `contact WHERE id = %d", intval($k));
             $uid = $rr[0]['uid'];
+            $v->images = 'on';
             q("INSERT INTO `retriever_rules` (`uid`, `contact-id`, `data`) VALUES (%d, %d, '%s')",
               intval($uid), intval($k), dbesc(json_encode($v)));
         }
