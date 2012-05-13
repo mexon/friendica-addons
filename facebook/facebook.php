@@ -33,6 +33,7 @@ define('FACEBOOK_MAXPOSTLEN', 63206);
 define('FACEBOOK_SESSION_ERR_NOTIFICATION_INTERVAL', 259200); // 3 days
 define('FACEBOOK_DEFAULT_POLL_INTERVAL', 60); // given in minutes
 define('FACEBOOK_MIN_POLL_INTERVAL', 5);
+define('FACEBOOK_RTU_ERR_MAIL_AFTER_MINUTES', 180); // 3 hours
 
 require_once('include/security.php');
 
@@ -592,7 +593,7 @@ function facebook_cron($a,$b) {
 		$poll_interval = FACEBOOK_DEFAULT_POLL_INTERVAL;
 
 	if($last) {
-		$next = $last + $poll_interval;
+		$next = $last + ($poll_interval * 60);
 		if($next > time()) 
 			return;
 	}
@@ -643,8 +644,15 @@ function facebook_cron($a,$b) {
 				logger('facebook_cron: Successful', LOGGER_NORMAL);
 			else {
 				logger('facebook_cron: Failed', LOGGER_NORMAL);
-				
-				if(strlen($a->config['admin_email']) && !get_config('facebook', 'realtime_err_mailsent')) {
+
+				$first_err = get_config('facebook', 'realtime_first_err');
+				if (!$first_err) {
+					$first_err = time();
+					set_config('facebook', 'realtime_first_err', $first_err);
+				}
+				$first_err_ago = (time() - $first_err);
+
+				if(strlen($a->config['admin_email']) && !get_config('facebook', 'realtime_err_mailsent') && $first_err_ago > (FACEBOOK_RTU_ERR_MAIL_AFTER_MINUTES * 60)) {
 					mail($a->config['admin_email'], t('Problems with Facebook Real-Time Updates'),
 						"Hi!\n\nThere's a problem with the Facebook Real-Time Updates that cannot be solved automatically. Maybe a permission issue?\n\nPlease try to re-activate it on " . $a->config["system"]["url"] . "/admin/plugins/facebook\n\nThis e-mail will only be sent once.",
 						'From: ' . t('Administrator') . '@' . $_SERVER['SERVER_NAME'] . "\n"
@@ -657,6 +665,7 @@ function facebook_cron($a,$b) {
 			}
 		} else { // !facebook_check_realtime_active()
 			del_config('facebook', 'realtime_err_mailsent');
+			del_config('facebook', 'realtime_first_err');
 		}
 	}
 	
@@ -712,7 +721,7 @@ function facebook_plugin_admin(&$a, &$o){
 	
 	$o .= '<label for="fb_appid">' . t('App-ID / API-Key') . '</label><input id="fb_appid" name="appid" type="text" value="' . escape_tags($appid ? $appid : "") . '"><br style="clear: both;">';
 	$o .= '<label for="fb_appsecret">' . t('Application secret') . '</label><input id="fb_appsecret" name="appsecret" type="text" value="' . escape_tags($appsecret ? $appsecret : "") . '"><br style="clear: both;">';
-	$o .= '<label for="fb_poll_interval">' . sprintf(t('Polling Interval (min. %1$s minutes)'), FACEBOOK_MIN_POLL_INTERVAL) . '</label><input name="poll_interval" id="fb_poll_interval" type="number" min="' . FACEBOOK_MIN_POLL_INTERVAL . '" value="' . $poll_interval . '"><br style="clear: both;">';
+	$o .= '<label for="fb_poll_interval">' . sprintf(t('Polling Interval in minutes (minimum %1$s minutes)'), FACEBOOK_MIN_POLL_INTERVAL) . '</label><input name="poll_interval" id="fb_poll_interval" type="number" min="' . FACEBOOK_MIN_POLL_INTERVAL . '" value="' . $poll_interval . '"><br style="clear: both;">';
 	$o .= '<label for="fb_sync_comments">' . t('Synchronize comments (no comments on Facebook are missed, at the cost of increased system load)') . '</label><input name="sync_comments" id="fb_sync_comments" type="checkbox" ' . ($sync_comments ? 'checked' : '') . '><br style="clear: both;">';
 	$o .= '<input type="submit" name="fb_save_keys" value="' . t('Save') . '">';
 	
@@ -731,9 +740,9 @@ function facebook_plugin_admin(&$a, &$o){
 
 /**
  * @param App $a
- * @param null|object $o
  */
-function facebook_plugin_admin_post(&$a, &$o){
+
+function facebook_plugin_admin_post(&$a){
 	check_form_security_token_redirectOnErr('/admin/plugins/facebook', 'fbsave');
 	
 	if (x($_REQUEST,'fb_save_keys')) {
