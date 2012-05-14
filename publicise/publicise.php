@@ -78,7 +78,7 @@ function publicise($a, $contact, $owner) {
         'verified' => make_int_field($owner['verified']),
         'blocked' => make_int_field(0),
         'blockwall' => make_int_field(1),
-        'hidewall' => make_int_field(1),
+        'hidewall' => make_int_field(0),
         'blocktags' => make_int_field(0),
         'notify-flags' => make_int_field($owner['notifyflags']),
         'page-flags' => make_int_field(PAGE_SOAPBOX),
@@ -189,7 +189,6 @@ function publicise_post_remote_hook(&$a, &$item) {
     }
 
     logger('Publicise: moving to wall: ' . $item['plink']);
-    $item['contact-id'] = $r2[0]['id'];
     $item['type'] = 'wall';
     $item['wall'] = 1;
 }

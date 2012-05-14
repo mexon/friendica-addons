@@ -2,7 +2,7 @@
 /**
  * Name: Retrieve Feed Content
  * Description: Follow the permalink of RSS/Atom feed items and replace the summary with the full content.
- * Version: 0.1
+ * Version: 0.2
  * Author: Matthew Exon <http://mat.exon.name>
  */
 
@@ -17,17 +17,18 @@ function retriever_install() {
         $r = q($a);
     }
 
-    if (get_config('retriever', 'dbversion') == '0.1') {
+    $r = q("SELECT `id` FROM `pconfig` WHERE `cat` LIKE 'retriever%%'");
+    if (count($r) || (get_config('retriever', 'dbversion') == '0.1')) {
         $retrievers = array();
-        $r = q("SELECT SUBSTRING(`cat`, 10) AS `contact`, `k`, `v` FROM `pconfig` WHERE `uid` = 1 AND `cat` LIKE 'retriever%%'");
+        $r = q("SELECT SUBSTRING(`cat`, 10) AS `contact`, `k`, `v` FROM `pconfig` WHERE `cat` LIKE 'retriever%%'");
         foreach ($r as $rr) {
             $retrievers[$rr['contact']][$rr['k']] = $rr['v'];
         }
         foreach ($retrievers as $k => $v) {
-            $rr = q("SELECT `uid` FROM `contact WHERE id = %d", intval($k));
+            $rr = q("SELECT `uid` FROM `contact` WHERE `id` = %d", intval($k));
             $uid = $rr[0]['uid'];
-            $v->images = 'on';
-            q("INSERT INTO `retriever_rules` (`uid`, `contact-id`, `data`) VALUES (%d, %d, '%s')",
+            $v['images'] = 'on';
+            q("INSERT INTO `retriever_rule` (`uid`, `contact-id`, `data`) VALUES (%d, %d, '%s')",
               intval($uid), intval($k), dbesc(json_encode($v)));
         }
         q("DELETE FROM `pconfig` WHERE `cat` LIKE 'retriever%%'");
@@ -129,6 +130,7 @@ function resource_completed($resource) {
 }
 
 function apply_retrospective($retriever, $num) {
+    logger('@@@ apply_retrospective: ' . $retriever['contact-id'] . ' num ' . $num);
     $r = q("SELECT * FROM `item` WHERE `contact-id` = %d ORDER BY `received` DESC LIMIT %d",
            intval($retriever['contact-id']), intval($num));
     foreach ($r as $item) {
@@ -244,7 +246,7 @@ function retrieve_images($retriever, $item, $parent_retriever_item) {
     }
     preg_match("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
     if (count($matches)) {
-        foreach ($matches[3] as $url) {
+        foreach ($matches[1] as $url) {
             $resource = add_retriever_resource($retriever, $url, "image", true);
             add_retriever_item($item, $resource, $parent_retriever_item);
         }
@@ -324,7 +326,7 @@ function retriever_contact_photo_menu($a, &$args) {
         return;
     }
     if ($args["contact"]["network"] == "feed") {
-        $args["menu"]["Retriever"] = $a->get_baseurl() . '/retriever/' . $args["contact"]['id'];
+        $args["menu"][ t("Retriever") ] = $a->get_baseurl() . '/retriever/' . $args["contact"]['id'];
     }
 }
 
