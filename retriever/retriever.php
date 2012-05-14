@@ -74,6 +74,8 @@ $retriever_schedule = array(array(1,'minute'),
 }
 
 function retrieve_resource($resource) {
+    logger('retriever_resource: ' . ($resource['num-tries'] + 1) .
+           ' attempt at resource ' . $resource['url'], LOGGER_DEBUG);
     q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1 WHERE id = %d",
       intval($resource['id']));
     $data = fetch_url($resource['url'], $resource['binary']);
@@ -86,6 +88,7 @@ function retrieve_resource($resource) {
 }
 
 function get_retriever($contact_id, $uid, $create = false) {
+    logger('get_retriever: Searching for retriever uid ' . $uid . ' contact ' . $contact_id . ($create ? ', CREATING' : ', read-only'));
     $r = q("SELECT * FROM `retriever_rule` WHERE `contact-id` = %d AND `uid` = %d",
            intval($contact_id), intval($uid));
     if ($r[0]) {
@@ -103,6 +106,7 @@ function get_retriever($contact_id, $uid, $create = false) {
 }
 
 function retriever_item_completed($retriever_item_id, $resource) {
+    logger('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url'], LOGGER_DEBUG);
     $r = q("SELECT * FROM `retriever_item` WHERE id = %d", intval($retriever_item_id));
     $retriever_item = $r[0];
     $retriever = get_retriever($retriever_item['contact-id'], $retriever_item['item-uid']);
@@ -117,6 +121,7 @@ function retriever_item_completed($retriever_item_id, $resource) {
 }
 
 function resource_completed($resource) {
+    logger('resource_completed: id ' . $resource['id'] . ' url ' . $resource['url'], LOGGER_DEBUG);
     $r = q("SELECT `id` FROM `retriever_item` WHERE `resource` = %d", $resource['id']);
     foreach ($r as $rr) {
         retriever_item_completed($rr['id'], $resource);
@@ -151,11 +156,11 @@ function retriever_on_item_insert($retriever, &$item) {
 }
 
 function add_retriever_resource($retriever, $url, $type, $binary = false) {
-    logger('add_retriever_resource: ' . $url);
+    logger('add_retriever_resource: ' . $url, LOGGER_DEBUG);
     $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
     $resource = $r[0];
     if (count($r)) {
-        logger('add_retriever_resource: Resource ' . $url . ' already requested');
+        logger('add_retriever_resource: Resource ' . $url . ' already requested', LOGGER_DEBUG);
         return $r[0];
     }
     else {
@@ -168,7 +173,7 @@ function add_retriever_resource($retriever, $url, $type, $binary = false) {
 }
 
 function add_retriever_item(&$item, $resource, $parent = null) {
-    logger('add_retriever_item: ' . $resource['url']);
+    logger('add_retriever_item: ' . $resource['url'], LOGGER_DEBUG);
 
     $r = q("SELECT id FROM `retriever_item` WHERE " .
            "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d",
@@ -196,9 +201,11 @@ function add_retriever_item(&$item, $resource, $parent = null) {
 }
 
 function retriever_apply_dom_filter($retriever, &$item, $text) {
+    logger('retriever_apply_dom_filter: applying XSLT to ' . $item['plink'], LOGGER_DEBUG);
     require_once('include/html2bbcode.php');	
 
     if (!$text) {
+        logger('retriever_apply_dom_filter: no text to work with', LOGGER_ERROR);
         return;
     }
 
@@ -218,6 +225,10 @@ function retriever_apply_dom_filter($retriever, &$item, $text) {
     $xp->importStylesheet($xmldoc);
     $transformed = $xp->transformToXML($doc);
     $item['body'] = html2bbcode($transformed);
+    if (!$item['body']) {
+        logger('retriever_apply_dom_filter: output was empty', LOGGER_ERROR);
+        return;
+    }
     q("UPDATE `item` SET `body` = '%s', `received` = now() WHERE `id` = %d",
       dbesc($item['body']), intval($item['id']));
 }
@@ -241,6 +252,8 @@ function retrieve_images($retriever, $item, $parent_retriever_item) {
 }
 
 function retriever_on_resource_completed($retriever, &$item, $resource, $retriever_item) {
+    logger('retriever_on_resource_completed: retriever ' . $retriever['id'] .
+           ' resource ' . $resource['url'], LOGGER_DEBUG);
     if ($resource['type'] == 'html') {
         retriever_apply_dom_filter($retriever, $item, $resource['data']);
         if ($retriever["data"]->images ) {
@@ -258,6 +271,8 @@ function retriever_transform_images($item, $resource) {
     $hash = photo_new_resource();
     $r = $img->store($item['uid'], $item['contact-id'], $hash, $resource['url'], 'Retrieved Images', 0);
     $new_url = get_app()->get_baseurl() . '/photo/' . $hash;
+    logger('retriever_transform_images: replacing ' . $resource['url'] . ' with ' .
+           $new_url . ' in item ' . $item['plink'], LOGGER_DEBUG);
     $item['body'] = str_replace($resource["url"], $new_url, $item['body']);
     q("UPDATE `item` SET `body` = '%s' WHERE `plink` = '%s' AND `uid` = %d AND `contact-id` = %d",
       dbesc($item['body']), dbesc($item['plink']), intval($item['uid']), intval($item['contact-id']));
@@ -315,12 +330,10 @@ function retriever_contact_photo_menu($a, &$args) {
 
 function retriever_post_remote_hook(&$a, &$item) {
     logger('retriever_post_remote_hook: ' . $item['plink'], LOGGER_DEBUG);
-
-    if ($a->args[1]) {
-        $a->page["content"] .= "<p>goes here</p>";
-        return;
-    }
+    logger('@@@ full item: ' . print_r($item['plink'], true));
 
     $retriever = get_retriever($item['contact-id'], $item["uid"], false);
-    retriever_on_item_insert($retriever, $item);
+    if ($retriever) {
+        retriever_on_item_insert($retriever, $item);
+    }
 }
