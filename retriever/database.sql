@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS `retriever_item` (
 
 CREATE TABLE IF NOT EXISTS `retriever_resource` (
        `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-       `retriever` int(11) NOT NULL,
        `type` char(255) NOT NULL,
        `binary` int(1) NOT NULL DEFAULT 0,
        `url` char(255) NOT NULL,
