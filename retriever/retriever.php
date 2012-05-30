@@ -7,6 +7,8 @@
  */
 
 function retriever_install() {
+    register_hook('plugin_settings', 'addon/retriever/retriever.php', 'retriever_plugin_settings');
+    register_hook('plugin_settings_post', 'addon/retriever/retriever.php', 'retriever_plugin_settings_post');
     register_hook('post_remote', 'addon/retriever/retriever.php', 'retriever_post_remote_hook');
     register_hook('contact_photo_menu', 'addon/retriever/retriever.php', 'retriever_contact_photo_menu');
     register_hook('cron', 'addon/retriever/retriever.php', 'retriever_cron');
@@ -17,7 +19,7 @@ function retriever_install() {
         $r = q($a);
     }
 
-    $r = q("SELECT `id` FROM `pconfig` WHERE `cat` LIKE 'retriever%%'");
+    $r = q("SELECT `id` FROM `pconfig` WHERE `cat` LIKE 'retriever_%%'");
     if (count($r) || (get_config('retriever', 'dbversion') == '0.1')) {
         $retrievers = array();
         $r = q("SELECT SUBSTRING(`cat`, 10) AS `contact`, `k`, `v` FROM `pconfig` WHERE `cat` LIKE 'retriever%%'");
@@ -33,10 +35,15 @@ function retriever_install() {
         }
         q("DELETE FROM `pconfig` WHERE `cat` LIKE 'retriever%%'");
     }
-    set_config('retriever', 'dbversion', '0.2');
+    if (get_config('retriever', 'dbversion') == '0.2') {
+        q("ALTER TABLE `retriever_resource` DROP COLUMN `retriever`");
+    }
+    set_config('retriever', 'dbversion', '0.3');
 }
 
 function retriever_uninstall() {
+    unregister_hook('plugin_settings', 'addon/retriever/retriever.php', 'retriever_plugin_settings');
+    unregister_hook('plugin_settings_post', 'addon/retriever/retriever.php', 'retriever_plugin_settings_post');
     unregister_hook('post_remote', 'addon/retriever/retriever.php', 'retriever_post_remote_hook');
     unregister_hook('plugin_settings', 'addon/retriever/retriever.php', 'retriever_plugin_settings');
     unregister_hook('plugin_settings_post', 'addon/retriever/retriever.php', 'retriever_plugin_settings_post');
@@ -130,7 +137,6 @@ function resource_completed($resource) {
 }
 
 function apply_retrospective($retriever, $num) {
-    logger('@@@ apply_retrospective: ' . $retriever['contact-id'] . ' num ' . $num);
     $r = q("SELECT * FROM `item` WHERE `contact-id` = %d ORDER BY `received` DESC LIMIT %d",
            intval($retriever['contact-id']), intval($num));
     foreach ($r as $item) {
@@ -153,11 +159,11 @@ function retriever_on_item_insert($retriever, &$item) {
         $url = $item['plink'];
     }
 
-    $resource = add_retriever_resource($retriever, $url, "html");
+    $resource = add_retriever_resource($url, "html");
     add_retriever_item($item, $resource);
 }
 
-function add_retriever_resource($retriever, $url, $type, $binary = false) {
+function add_retriever_resource($url, $type, $binary = false) {
     logger('add_retriever_resource: ' . $url, LOGGER_DEBUG);
     $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
     $resource = $r[0];
@@ -166,9 +172,9 @@ function add_retriever_resource($retriever, $url, $type, $binary = false) {
         return $r[0];
     }
     else {
-        q("INSERT INTO `retriever_resource` (`retriever`, `type`, `binary`, `url`, `created`) " .
-          "VALUES (%d, '%s', %d, '%s', now())",
-          intval($retriever["id"]), dbesc($type), intval($binary ? 1 : 0), dbesc($url));
+        q("INSERT INTO `retriever_resource` (`type`, `binary`, `url`, `created`) " .
+          "VALUES ('%s', %d, '%s', now())",
+          dbesc($type), intval($binary ? 1 : 0), dbesc($url));
         $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
         return $r[0];
     }
@@ -235,19 +241,19 @@ function retriever_apply_dom_filter($retriever, &$item, $text) {
       dbesc($item['body']), intval($item['id']));
 }
 
-function retrieve_images($retriever, $item, $parent_retriever_item) {
+function retrieve_images($item, $parent_retriever_item) {
     $matches = array();
     preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches);
     if (count($matches)) {
         foreach ($matches[3] as $url) {
-            $resource = add_retriever_resource($retriever, $url, "image", true);
+            $resource = add_retriever_resource($url, "image", true);
             add_retriever_item($item, $resource, $parent_retriever_item);
         }
     }
-    preg_match("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
+    preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
     if (count($matches)) {
         foreach ($matches[1] as $url) {
-            $resource = add_retriever_resource($retriever, $url, "image", true);
+            $resource = add_retriever_resource($url, "image", true);
             add_retriever_item($item, $resource, $parent_retriever_item);
         }
     }
@@ -259,7 +265,7 @@ function retriever_on_resource_completed($retriever, &$item, $resource, $retriev
     if ($resource['type'] == 'html') {
         retriever_apply_dom_filter($retriever, $item, $resource['data']);
         if ($retriever["data"]->images ) {
-            retrieve_images($retriever, $item, $retriever_item);
+            retrieve_images($item, $retriever_item);
         }
     }
     if ($resource['type'] == 'image') {
@@ -332,10 +338,30 @@ function retriever_contact_photo_menu($a, &$args) {
 
 function retriever_post_remote_hook(&$a, &$item) {
     logger('retriever_post_remote_hook: ' . $item['plink'], LOGGER_DEBUG);
-    logger('@@@ full item: ' . print_r($item['plink'], true));
 
     $retriever = get_retriever($item['contact-id'], $item["uid"], false);
     if ($retriever) {
         retriever_on_item_insert($retriever, $item);
+    }
+    else {
+        if (get_pconfig($item["uid"], 'retriever', 'all_photos')) {
+            retrieve_images($item, null);
+        }
+    }
+}
+
+function retriever_plugin_settings(&$a,&$s) {
+    $all_photos = get_pconfig(local_user(), 'retriever', 'all_photos');
+    $all_photos_mu = ($all_photos == 'on') ? ' checked="true"' : '';
+    $template = file_get_contents(dirname(__file__).'/settings.tpl');
+    $s .= replace_macros($template, array('$all_photos' => $all_photos_mu));
+}
+
+function retriever_plugin_settings_post($a,$post) {
+    if ($_POST['all_photos']) {
+        set_pconfig(local_user(), 'retriever', 'all_photos', $_POST['all_photos']);
+    }
+    else {
+        del_pconfig(local_user(), 'retriever', 'all_photos');
     }
 }
