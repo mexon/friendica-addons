@@ -11,6 +11,7 @@ function mailstream_install() {
     register_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
     register_hook('post_remote', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     register_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
+    register_hook('incoming_mail', 'addon/mailstream/mailstream.php', 'mailstream_incoming_mail');
 
     $schema = file_get_contents(dirname(__file__).'/database.sql');
     $arr = explode(';', $schema);
@@ -26,9 +27,16 @@ function mailstream_uninstall() {
     unregister_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
     unregister_hook('post_remote', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     unregister_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
+    unregister_hook('incoming_mail', 'addon/mailstream/mailstream.php', 'mailstream_incoming_mail');
 }
 
 function mailstream_module() {}
+
+function mailstream_incoming_mail($a, $b) {
+    logger('@@@ mailstream_incoming_mail');
+    $content = file_get_contents("php://stdin");
+    logger($content);
+}
 
 function mailstream_generate_id($a) {
 // http://www.jwz.org/doc/mid.html
