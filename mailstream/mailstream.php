@@ -48,23 +48,27 @@ function mailstream_post_remote_hook(&$a, &$item) {
 }
 
 function mailstream_do_images($a, &$item, &$attachments) {
+logger('@@@ mailstream_do_images ' . $item['plink']);
     $baseurl = $a->get_baseurl();
     $id = 1;
     $matches = array();
     preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches);
     if (count($matches)) {
         foreach ($matches[3] as $url) {
+logger('@@@ found image ' . $url);
             $attachments[$url] = array();
         }
     }
     preg_match("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
     if (count($matches)) {
         foreach ($matches[1] as $url) {
+logger('@@@ found image ' . $url);
             $attachments[$url] = array();
         }
     }
     foreach ($attachments as $url=>$cid) {
         if (strncmp($url, $baseurl, strlen($baseurl))) {
+logger('@@@ ' . $url . ' does not match ' . $baseurl);
             unset($attachments[$url]); // Not a local image, don't replace
         }
         else {
@@ -73,6 +77,7 @@ function mailstream_do_images($a, &$item, &$attachments) {
             $attachments[$url]['data'] = $r[0]['data'];
             $attachments[$url]['filename'] = $r[0]['filename'];
             $item['body'] = str_replace($url, 'cid:' . $attachments[$url]['guid'], $item['body']);
+logger('@@@ attaching ' . $url . ' with guid ' . $attachments[$url]['guid']);
         }
     }
 }
