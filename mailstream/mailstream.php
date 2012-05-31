@@ -38,7 +38,7 @@ function mailstream_generate_id($a) {
 }
 
 function mailstream_post_remote_hook(&$a, &$item) {
-    if (get_pconfig($item['uid'], 'mailstream', 'delay')) {
+    if (get_pconfig($item['uid'], 'mailstream', 'enabled')) {
         if ($item['uid'] && $item['contact-id'] && $item['plink']) {
             q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `plink`, `message-id`, `created`) " .
               "VALUES (%d, '%s', '%s', '%s', now())", intval($item['uid']),
@@ -77,6 +77,32 @@ function mailstream_do_images($a, &$item, &$attachments) {
     }
 }
 
+function mailstream_subject($item) {
+    if ($item['title']) {
+        return $item['title'];
+    }
+    $r = q("SELECT * FROM `contact` WHERE `id` = %d AND `uid` = %d",
+           intval($item['contact-id']), intval($item['uid']));
+    $contact = $r[0];
+    if ($contact['network'] === 'dfrn') {
+        return "Friendica post";
+    }
+    if ($contact['network'] === 'dspr') {
+        return "Diaspora post";
+    }
+    if ($contact['network'] === 'face') {
+        $subject = (strlen($item['body']) > 150) ? (substr($item['body'], 0, 140) . '...') : $item['body'];
+        return preg_replace('/\\s+/', ' ', $subject);
+    }
+    if ($contact['network'] === 'feed') {
+        return "Feed item";
+    }
+    if ($contact['network'] === 'mail') {
+        return "Email";
+    }
+    return "Friendica Item";
+}
+
 function mailstream_send($a, $ms_item, $item, $user) {
     require_once(dirname(__file__).'/class.phpmailer.php');
     require_once('include/bbcode.php');
@@ -85,10 +111,11 @@ function mailstream_send($a, $ms_item, $item, $user) {
     $email = get_pconfig($item['uid'], 'mailstream', 'address');
     $mail = new PHPmailer;
     try {
+        $mailer->XMailer = 'Friendica Mailstream Plugin';
         $mail->SetFrom('friendica@localhost.local', $item['author-name']);
         $mail->AddAddress($email, $user['username']);
         $mail->MessageID = $ms_item['message-id'];
-        $mail->Subject = $item['title'] ? $item['title'] : "message";
+        $mail->Subject = mailstream_subject($item);
         foreach ($attachments as $url=>$image) {
             $mail->AddStringEmbeddedImage($image['data'], $image['guid'], $image['filename']);
         }
@@ -132,12 +159,16 @@ EOF;
 }
 
 function mailstream_plugin_settings(&$a,&$s) {
+    $enabled = get_pconfig(local_user(), 'mailstream', 'enabled');
+    $enabled_mu = ($enabled == 'on') ? ' checked="true"' : '';
     $address = get_pconfig(local_user(), 'mailstream', 'address');
     $address_mu = $address ? (' value="' . $address . '"') : '';
     $delay = get_pconfig(local_user(), 'mailstream', 'delay');
     $delay_mu = ' value="' . (($delay > 0) ? $delay : 60) . '"';
     $template = file_get_contents(dirname(__file__).'/settings.tpl');
-    $s .= replace_macros($template, array('$address' => $address_mu, '$delay' => $delay_mu));
+    $s .= replace_macros($template, array('$address' => $address_mu,
+                                          '$delay' => $delay_mu,
+                                          '$enabled' => $enabled_mu));
 }
 
 function mailstream_plugin_settings_post($a,$post) {
@@ -146,5 +177,11 @@ function mailstream_plugin_settings_post($a,$post) {
     }
     if ($_POST['delay'] > 0) {
         set_pconfig(local_user(), 'mailstream', 'delay', $_POST['delay']);
+    }
+    if ($_POST['enabled']) {
+        set_pconfig(local_user(), 'mailstream', 'enabled', $_POST['enabled']);
+    }
+    else {
+        del_pconfig(local_user(), 'mailstream', 'enabled');
     }
 }
