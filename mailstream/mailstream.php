@@ -57,7 +57,7 @@ function mailstream_do_images($a, &$item, &$attachments) {
             $attachments[$url] = array();
         }
     }
-    preg_match("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
+    preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
     if (count($matches)) {
         foreach ($matches[1] as $url) {
             $attachments[$url] = array();
