@@ -32,6 +32,18 @@ function mailstream_uninstall() {
 
 function mailstream_module() {}
 
+function mailstream_plugin_admin(&$a,&$o) {
+    $frommail = get_config('mailstream', 'frommail');
+    $template = file_get_contents(dirname(__file__).'/admin.tpl');
+    $o .= replace_macros($template, array('$frommail' => array('frommail', 'From Address', $frommail, 'Email address that items from the stream will appear to be from.  This should ideally be a valid place to send replies.')));
+}
+
+function mailstream_plugin_admin_post ($a) {
+    if (x($_POST, 'frommail')) {
+        set_config('mailstream', 'frommail', $_POST['frommail']);
+    }
+}
+
 function mailstream_incoming_mail($a, $b) {
     logger('@@@ mailstream_incoming_mail');
     $content = file_get_contents("php://stdin");
@@ -121,11 +133,15 @@ function mailstream_send($a, $ms_item, $item, $user) {
     require_once('include/bbcode.php');
     $attachments = array();
     mailstream_do_images($a, $item, $attachments);
+    $frommail = get_config('mailstream', 'frommail');
+    if ($frommail == "") {
+        $frommail = 'friendica@localhost.local';
+    }
     $email = get_pconfig($item['uid'], 'mailstream', 'address');
     $mail = new PHPmailer;
     try {
         $mailer->XMailer = 'Friendica Mailstream Plugin';
-        $mail->SetFrom('friendica@localhost.local', $item['author-name']);
+        $mail->SetFrom($frommail, $item['author-name']);
         $mail->AddAddress($email, $user['username']);
         $mail->MessageID = $ms_item['message-id'];
         $mail->Subject = mailstream_subject($item);
