@@ -1,41 +1,26 @@
-<form action="scraper/detail/$scraper.guid" method="post">
   <p>
-    Address: $scraper.address
+    Session: $window.sid
   </p>
   <p>
-    Type: $scraper.type
+    Window: $window.wid
   </p>
   <p>
-    Network: $scraper.network
+    Address: $window.addr
   </p>
   <p>
-    Status: $scraper.status
+    Network: $window.network
   </p>
   <p>
-    Desired Status:
-    <select name="want-status">
-      <option {{ if $scraper.want-status==disconnected }} selected {{ endif }} value="disconnected">Disconnected</option>
-      <option {{ if $scraper.want-status==connected }} selected {{ endif }} value="connected">Connected</option>
-      <option {{ if $scraper.want-status==loggedin }} selected {{ endif }} value="loggedin">Logged In</option>
-    </select>
+    State: $window.state
   </p>
   <p>
-    Activity: $scraper.activity
+    Last Update: $window.last-seen
   </p>
-  <p>
-    Desired Activity: $scraper.want-activity
-  </p>
-  <p>
-    Last Update: $scraper.update
-  </p>
-  <input type="submit">
-</form>
-<form action="scraper/login/$scraper.guid" method="post">
-  <p>
-    Username: <input name="username">
-  </p>
-  <p>
-    Password: <input name="password">
-  </p>
-  <input type="submit">
-</form>
+{{ for $sites as $s }}
+<p>
+      <a href="scraper/spawn/$window.wid/$s.name">Spawn $s.name window</a>
+</p>
+{{ endfor }}
+<p>
+  <a href="scraper/close/$window.wid">Close this window</a>
+</p>

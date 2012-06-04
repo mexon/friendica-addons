@@ -1,22 +1,22 @@
 
-CREATE TABLE IF NOT EXISTS `scraper` (
+CREATE TABLE IF NOT EXISTS `scraper_window` (
        `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-       `guid` char(64) NOT NULL,
-       `address` char(64) NOT NULL,
+       `sid` char(255) NOT NULL,
+       `wid` char(64) NOT NULL,
+       `addr` char(64) NOT NULL,
        `uid` int(11) NOT NULL,
-       `type` char(255) NOT NULL,
        `network` char(255) NOT NULL,
-       `status` char(255) NOT NULL,
-       `want-status` char(255) NOT NULL,
-       `activity` char(255) NOT NULL,
-       `want-activity` char(255) NOT NULL,
-       `command` char(255) NOT NULL,
+       `state` char(255) NOT NULL,
        `interval` int NOT NULL,
+       `url` char(255) NOT NULL,
+       `scraped` mediumtext NOT NULL,
        `data` mediumtext NOT NULL,
-       `created` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-       `update` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+       `first-seen` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+       `last-seen` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
        PRIMARY KEY (`id`),
-       KEY(`guid`)
+       KEY `sid` (`sid`),
+       KEY `wid` (`wid`),
+       KEY `uid` (`uid`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
 CREATE TABLE IF NOT EXISTS `scraper_command` (
