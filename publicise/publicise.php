@@ -151,7 +151,7 @@ function publicise($a, $contact, $owner) {
     if (!$r) {
         logger('Publicise: create profile failed', LOGGER_ERROR);
     }
-    $r = q("UPDATE `contact` SET `uid` = %d, `reason` = 'publicise' WHERE id = %d", $newuid, $contact['id']);
+    $r = q("UPDATE `contact` SET `uid` = %d, `reason` = 'publicise', `hidden` = 1 WHERE id = %d", $newuid, $contact['id']);
     if (!$r) {
         logger('Publicise: update contact failed', LOGGER_ERROR);
     }

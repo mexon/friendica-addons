@@ -99,7 +99,7 @@ function get_retriever($contact_id, $uid, $create = false) {
     logger('get_retriever: Searching for retriever uid ' . $uid . ' contact ' . $contact_id . ($create ? ', CREATING' : ', read-only'));
     $r = q("SELECT * FROM `retriever_rule` WHERE `contact-id` = %d AND `uid` = %d",
            intval($contact_id), intval($uid));
-    if ($r[0]) {
+    if (count($r)) {
         $r[0]['data'] = json_decode($r[0]['data']);
         return $r[0];
     }
@@ -110,12 +110,15 @@ function get_retriever($contact_id, $uid, $create = false) {
                intval($contact_id), intval($uid));
         return $r[0];
     }
-
 }
 
 function retriever_item_completed($retriever_item_id, $resource) {
     logger('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url'], LOGGER_DEBUG);
     $r = q("SELECT * FROM `retriever_item` WHERE id = %d", intval($retriever_item_id));
+    if (!count($r)) {
+        logger('Unable to find retriever_item ' . $retriever_item_id);
+        return;
+    }
     $retriever_item = $r[0];
     $retriever = get_retriever($retriever_item['contact-id'], $retriever_item['item-uid']);
     $items = q("SELECT * FROM `item` WHERE `uri` = '%s' AND `uid` = %d AND `contact-id` = %d",
@@ -221,11 +224,15 @@ function retriever_apply_dom_filter($retriever, &$item, $text) {
     $doc = new DOMDocument();
     $doc->loadHTML($text);
 
+    $components = parse_url($item['plink']);
+    $rooturl = $components['scheme'] . "://" . $components['host'];
+    $dirurl = $rooturl . dirname($components['path'] . "/");
+
     $params = array('$match' => $retriever["data"]->match,
                     '$remove' => $retriever["data"]->remove,
                     '$pageurl' => $item['plink'],
-                    '$dirurl' => ($components[1] . $components[2]),
-                    '$rooturl' => $components[1]);
+                    '$dirurl' => $dirurl,
+                    '$rooturl' => $rooturl);
     $xslt = replace_macros($extracter_template, $params);
     $xmldoc = new DOMDocument();
     $xmldoc->loadXML($xslt);
@@ -237,7 +244,7 @@ function retriever_apply_dom_filter($retriever, &$item, $text) {
         logger('retriever_apply_dom_filter: output was empty', LOGGER_ERROR);
         return;
     }
-    q("UPDATE `item` SET `body` = '%s', `received` = now() WHERE `id` = %d",
+    q("UPDATE `item` SET `body` = '%s', `received` = now(), `edited` = now() WHERE `id` = %d",
       dbesc($item['body']), intval($item['id']));
 }
 
@@ -246,8 +253,10 @@ function retrieve_images($item, $parent_retriever_item) {
     preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches);
     if (count($matches)) {
         foreach ($matches[3] as $url) {
-            $resource = add_retriever_resource($url, "image", true);
-            add_retriever_item($item, $resource, $parent_retriever_item);
+            if (strpos($url, get_app()->get_baseurl()) === FALSE) {
+                $resource = add_retriever_resource($url, "image", true);
+                add_retriever_item($item, $resource, $parent_retriever_item);
+            }
         }
     }
     preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
@@ -282,7 +291,7 @@ function retriever_transform_images($item, $resource) {
     logger('retriever_transform_images: replacing ' . $resource['url'] . ' with ' .
            $new_url . ' in item ' . $item['plink'], LOGGER_DEBUG);
     $item['body'] = str_replace($resource["url"], $new_url, $item['body']);
-    q("UPDATE `item` SET `body` = '%s' WHERE `plink` = '%s' AND `uid` = %d AND `contact-id` = %d",
+    q("UPDATE `item` SET `edited` = now(), `body` = '%s' WHERE `plink` = '%s' AND `uid` = %d AND `contact-id` = %d",
       dbesc($item['body']), dbesc($item['plink']), intval($item['uid']), intval($item['contact-id']));
 }
 

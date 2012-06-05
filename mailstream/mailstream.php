@@ -11,6 +11,7 @@ function mailstream_install() {
     register_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
     register_hook('post_remote', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     register_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
+    register_hook('incoming_mail', 'addon/mailstream/mailstream.php', 'mailstream_incoming_mail');
 
     $schema = file_get_contents(dirname(__file__).'/database.sql');
     $arr = explode(';', $schema);
@@ -26,9 +27,28 @@ function mailstream_uninstall() {
     unregister_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
     unregister_hook('post_remote', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     unregister_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
+    unregister_hook('incoming_mail', 'addon/mailstream/mailstream.php', 'mailstream_incoming_mail');
 }
 
 function mailstream_module() {}
+
+function mailstream_plugin_admin(&$a,&$o) {
+    $frommail = get_config('mailstream', 'frommail');
+    $template = file_get_contents(dirname(__file__).'/admin.tpl');
+    $o .= replace_macros($template, array('$frommail' => array('frommail', 'From Address', $frommail, 'Email address that items from the stream will appear to be from.  This should ideally be a valid place to send replies.')));
+}
+
+function mailstream_plugin_admin_post ($a) {
+    if (x($_POST, 'frommail')) {
+        set_config('mailstream', 'frommail', $_POST['frommail']);
+    }
+}
+
+function mailstream_incoming_mail($a, $b) {
+    logger('@@@ mailstream_incoming_mail');
+    $content = file_get_contents("php://stdin");
+    logger($content);
+}
 
 function mailstream_generate_id($a) {
 // http://www.jwz.org/doc/mid.html
@@ -48,23 +68,27 @@ function mailstream_post_remote_hook(&$a, &$item) {
 }
 
 function mailstream_do_images($a, &$item, &$attachments) {
+logger('@@@ mailstream_do_images ' . $item['plink']);
     $baseurl = $a->get_baseurl();
     $id = 1;
     $matches = array();
     preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches);
     if (count($matches)) {
         foreach ($matches[3] as $url) {
+logger('@@@ found image ' . $url);
             $attachments[$url] = array();
         }
     }
     preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
     if (count($matches)) {
         foreach ($matches[1] as $url) {
+logger('@@@ found image ' . $url);
             $attachments[$url] = array();
         }
     }
     foreach ($attachments as $url=>$cid) {
         if (strncmp($url, $baseurl, strlen($baseurl))) {
+logger('@@@ ' . $url . ' does not match ' . $baseurl);
             unset($attachments[$url]); // Not a local image, don't replace
         }
         else {
@@ -73,6 +97,7 @@ function mailstream_do_images($a, &$item, &$attachments) {
             $attachments[$url]['data'] = $r[0]['data'];
             $attachments[$url]['filename'] = $r[0]['filename'];
             $item['body'] = str_replace($url, 'cid:' . $attachments[$url]['guid'], $item['body']);
+logger('@@@ attaching ' . $url . ' with guid ' . $attachments[$url]['guid']);
         }
     }
 }
@@ -108,11 +133,15 @@ function mailstream_send($a, $ms_item, $item, $user) {
     require_once('include/bbcode.php');
     $attachments = array();
     mailstream_do_images($a, $item, $attachments);
+    $frommail = get_config('mailstream', 'frommail');
+    if ($frommail == "") {
+        $frommail = 'friendica@localhost.local';
+    }
     $email = get_pconfig($item['uid'], 'mailstream', 'address');
     $mail = new PHPmailer;
     try {
         $mailer->XMailer = 'Friendica Mailstream Plugin';
-        $mail->SetFrom('friendica@localhost.local', $item['author-name']);
+        $mail->SetFrom($frommail, $item['author-name']);
         $mail->AddAddress($email, $user['username']);
         $mail->MessageID = $ms_item['message-id'];
         $mail->Subject = mailstream_subject($item);
