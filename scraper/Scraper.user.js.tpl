@@ -20,6 +20,8 @@ var scraper = {
 
     server_url: "$baseurl",
 
+    user: "$nick",
+
     request: function(method, url, data, callback) {
         GM_xmlhttpRequest({
             method: method,
@@ -31,12 +33,10 @@ var scraper = {
     },
 
     register: function() {
-        this.scrape;
-        this.request("POST", this.server_url + "scraper/register/" + this.id,
+        this.request("POST", this.server_url + "/scraper/register/" + this.user + "/" + this.id,
                      this.window.location.href, "register_reply");
     },
     register_reply: function(response) {
-        this.log("hello");
         var reply = JSON.parse(response);
         if (reply["error"]) {
             this.log("Error during registration: " + reply["error"]);
@@ -100,7 +100,7 @@ var scraper = {
         if (this.xslt) {
             this.scraped = this.xslt.transformToDocument(document);
             var status = this.search_scraped("//sc:status");
-            this.request("POST", this.server_url + "scraper/scraped/" + this.id, status.textContent, null);
+            this.request("POST", this.server_url + "/scraper/scraped/" + this.user + "/" + this.id, status.textContent, null);
         }
     },
     get_scraped: function(command) {
@@ -143,7 +143,7 @@ var scraper = {
     id: Math.random().toString(16).substring(2,10),
 
     request_command: function(scraper, previous_result) {
-        this.request("POST", scraper.server_url + "scraper/command/" + scraper.id,
+        this.request("POST", scraper.server_url + "/scraper/command/" + scraper.user + "/" + scraper.id,
                      previous_result, "receive_command");
     },
     receive_command: function(response) {
@@ -185,18 +185,15 @@ if (typeof require == 'function') {
             function (e, browser) {
                 scraper.request = function(method, url, data, callback) {
                     var request = new scraper.window.XMLHttpRequest();
-                    request.onload = function(x) { scraper.log("what?"); if (callback) { this.scraper[callback](x.responseText); } };
-                    this.log("@@@ one");
-//                    request.open(method, url);
-                    request.open("GET", url);
-                    this.log("@@@ two");
+                    if (callback) {
+                        request.onreadystatechange = function() {
+                            if (request.status >= 200) {
+                                scraper[callback](request.responseText);
+                            }
+                        };
+                    };
+                    request.open(method, url);
                     result = request.send(data);
-                    this.log("@@@ status is " + request.status);
-                    this.log("@@@ result is");
-                    this.log("@@@ " + result);
-                    this.log("@@@ response is");
-                    this.log("@@@ " + request.response);
-                    callback(request.response);
                 };
                 browser.window.name = "";
                 scraper.set_window(browser.window);

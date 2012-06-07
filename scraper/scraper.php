@@ -34,16 +34,20 @@ function scraper_content(&$a) {
     call_hooks('scraper_site', &$sites);
 
     logger('@@@ scraper_content ' . print_r($a->argv, true));
-    if ($a->argv[1] === 'Scraper.user.js') {
-        $template = file_get_contents(dirname(__file__).'/Scraper.user.js.tpl');
-        header("Content-type: application/javascript");
-        echo replace_macros($template, array('$baseurl' => $a->get_baseurl(), '$sites' => $sites));
-        killme();
-    }
-
     if (!local_user()) {
         $a->page['content'] .= "<p>Please log in</p>";
         return;
+    }
+
+    if ($a->argv[1] === 'Scraper.user.js') {
+        $r = q("SELECT `nickname` FROM `user` WHERE `uid` = %d", local_user());
+        $nick = $r[0]['nickname'];
+        $template = file_get_contents(dirname(__file__).'/Scraper.user.js.tpl');
+        header("Content-type: application/javascript");
+        echo replace_macros($template, array('$baseurl' => $a->get_baseurl(),
+                                             '$sites' => $sites,
+                                             '$nick' => $nick));
+        killme();
     }
     if ($a->argv[1] === "close") {
         $window = get_scraper_window($a->argv[2]);
@@ -460,18 +464,18 @@ function scraper_state_machine(&$window) {
     return $result;
 }
 
-function get_scraper_window($id) {
-    if (!local_user()) {
+function get_scraper_window($nick, $wid) {
+    $r = q("SELECT `uid` FROM `user` WHERE `nickname` = '%s'", $nick);
+    if (!count($r)) {
         return;
     }
-    $r = q("SELECT * FROM `scraper_window` WHERE `uid` = '%s' AND `wid` = '%s'",
-           dbesc(local_user()), dbesc($id));
+    $uid = $r[0]['uid'];
+    $r = q("SELECT * FROM `scraper_window` WHERE `uid` = %s AND `wid` = '%s'", intval($uid), dbesc($wid));
     if (!count($r)) {
-        logger('@@@ creating new scraper window for uid ' . local_user() . ' session id ' . session_id() . ' wid ' . $id);
         q("INSERT INTO `scraper_window` (`sid`, `wid`, `uid`, `state`, `interval`, `first-seen`)" .
-          "VALUES ('%s', '%s', %d, 'new', 0, now())", dbesc(session_id()), dbesc($id), intval(local_user()));
+          "VALUES ('%s', '%s', %d, 'new', 0, now())", dbesc(session_id()), dbesc($wid), intval($uid));
         $r = q("SELECT * FROM `scraper_window` WHERE `sid` = '%s' AND `wid` = '%s' AND `uid` = %d",
-               dbesc(session_id()), dbesc($id), intval(local_user()));
+               dbesc(session_id()), dbesc($wid), intval($uid));
     }
     $r[0]['data'] = json_decode($r[0]['data']);
     $r[0]['scraped'] = json_decode($r[0]['scraped']);
@@ -484,19 +488,17 @@ function get_scraper_window($id) {
 function save_scraper_window($window) {
     $scraped = (gettype($window['scraped']) == 'object') ? json_encode($window['scraped']) : "";
     $data = (gettype($window['data']) == 'object') ? json_encode($window['data']) : "";
-    logger('@@@ Updating scraper_window, scraped ' . $scraped . ' data ' . $data);
 
     q("UPDATE `scraper_window` SET `network` = '%s', `state`= '%s', `interval` = %d, " .
       "`url` = '%s', `scraped` = '%s', `data` = '%s', " .
-      "`addr` = '%s', `last-seen` = now(), `uid` = %d WHERE `id` = %d",
+      "`addr` = '%s', `last-seen` = now() WHERE `id` = %d",
       dbesc($window['network']), dbesc($window['state']), intval($window['interval']),
       dbesc($window['url']), dbesc($scraped),
-      dbesc($data), dbesc($_SESSION["addr"]), intval(local_user()), intval($window['id']));
+      dbesc($data), dbesc($_SESSION["addr"]), intval($window['id']));
     delete_expired_windows();
 }
 
-function scraper_get_command($id) {
-    $window = get_scraper_window($id);
+function scraper_get_command($window) {
     $command = scraper_state_machine($window);
     header("Content-type: application/json");
     logger("@@@ send command " . json_encode($command));
@@ -508,24 +510,14 @@ function scraper_get_command($id) {
 function scraper_post(&$a) {
     header("Content-type: application/json");
 
-    logger('@@@ scraper_post: ' . $a->argv[1]);
-
-    if ($a->argv[2]) {
-        $window = get_scraper_window($a->argv[2]);
+    if ($a->argv[3]) {
+        $window = get_scraper_window($a->argv[2], $a->argv[3]);
     }
     if ($a->argv[1] == "register") {
-        logger('@@@ registration for window ' . $a->argv[2]);
-        if (!$window) {
-            echo json_encode(array("error" => "not logged in"));
-            logger('@@@ not logged in, returning error');
-            killme();
-        }
         $window['url'] = file_get_contents("php://input");
-        logger('@@@ the url is ' . $window['url']);
         $window['interval'] = 30;
         call_hooks('scraper_own', &$window);
         save_scraper_window($window);
-        logger('@@@ replying with ' . json_encode(array("interval" => $window['interval'], "xslt" => $window['xslt'])));
         echo json_encode(array("interval" => $window['interval'], "xslt" => $window['xslt']));
         killme();
     }
@@ -536,11 +528,11 @@ function scraper_post(&$a) {
         killme();
     }
     if ($a->argv[1] == "command") {
-        scraper_get_command($a->argv[2]);
+        scraper_get_command($window);
         return;
     }
     if ($a->argv[1] === "detail") {
-        $window = get_scraper_window($a->argv[2]);
+        $window = get_scraper_window($a->argv[3]);
         if (!$window) {
             $a->page['content'] .= "<p>Window not found</p>";
             return;
@@ -625,104 +617,6 @@ function scraper_get_xslt_from_file($file) {
     return $xsl;
 }
 
-function scraper_finish_command($uid, $request) {
-    logger('scraper_finish_command uid ' . $uid . ' request data ' . print_r($request, true));
-    $r = q("UPDATE scraper_command SET finished = now(), result = '%s' WHERE uid = %d AND guid = '%s'",
-           dbesc(json_encode($request->data)), $uid, dbesc($request->guid));
-    $result = scraper_get_command($request);
-    $result["finished"] = $request->guid;
-    $r = q("SELECT * FROM scraper_command WHERE uid = %d AND guid = '%s'", local_user(), dbesc($request->guid));
-    if (count($r)) {
-        logger('@@@ about to call hooks scraper_finish_command');
-        call_hooks('scraper_finish_command', $r[0]);
-        logger('@@@ finished call hooks scraper_finish_command');
-    }
-    return $result;
-}
-
-/*
-function scraper_get_command($request) {
-    $query = <<<EOF
-SELECT * FROM scraper_command
- WHERE uid = %d
- AND `scraper-guid` = '%s'
- AND (valid IS NULL OR valid < now())
- AND (expires IS NULL OR expires > now())
- AND started IS NULL
- AND finished IS NULL
- ORDER BY created
- LIMIT 1
-EOF;
-    $r = q($query, local_user(), $request->scraperguid);
-    $command = $r[0];
-    if ($command) {
-        $command["data"] = json_decode($command["data"]);
-        $r = q("UPDATE scraper_command SET started = now() WHERE guid = '%s'", $command["guid"]);
-        logger('sending command ' . $command["guid"] . ' to scraper ' . $command["scraper-guid"]);
-        $result = array("command" => $command);
-    }
-    else {
-        $result = array("empty" => "empty");
-    }
-    return $result;
-}
-*/
-
-function scraper_command_exists($scraper_guid, $command) {
-    $query = <<<EOF
-SELECT * FROM `scraper_command`
- WHERE `uid` = %d
- AND `scraper-guid` = '%s'
- AND `started` IS NULL
- AND `finished` IS NULL
- AND `command` = '%s'
-EOF;
-    logger('@@@ scraper_command_exists ' . local_user() . ' ' . $scraper_guid . ' ' . $command);
-    $r = q($query, intval(local_user()), dbesc($request->scraperguid), dbesc($command));
-    logger('@@@ result ' . print_r($r, true));
-    return $r[0];
-}
-
-function scraper_add_command($uid, $scraper_guid, $command, $data, $wait=0, $expire=null) {
-    logger('@@@ scraper_add_command');
-    $scraper = get_scraper_details($uid, $scraper_guid);
-    if (!$scraper) {
-        logger('@@@ no scraper for ' . $scraper_guid);
-        return null;
-    }
-
-    $query = <<<EOF
-SELECT unix_timestamp(valid) AS time
- FROM `scraper_command`
- WHERE `uid` = %d
- AND `scraper-guid` = '%s'
- AND `command` = '%s'
- ORDER BY `valid` DESC
- LIMIT 1
-EOF;
-
-    if (!$wait) { // By default, wait a minute or two
-        $wait = rand(60, 120);
-    }
-    $r = q($query, intval($uid), dbesc($scraper_guid), dbesc($command));
-    $time = $r[0]['time'] - time();
-    if ($time > 0) {
-        $wait += $time;
-    }
-
-    $query = <<<EOF
-INSERT INTO `scraper_command`
- (`guid`, `uid`, `scraper-guid`, `command`, `data`, `created`, `valid`, `expires`)
- VALUES
- ('%s', %d, '%s', '%s', '%s', now(), now() + INTERVAL %d SECOND, %s)
-EOF;
-
-    $clause = $expire ? ("now() + interval " + $expire + " second") : "'0000-00-00 00:00:00'";
-    $r = q($query, dbesc(get_guid()), $uid, dbesc($scraper['guid']),
-           dbesc($command), dbesc(json_encode($data)), $wait, $clause);
-    return $wait;
-}
-
 function delete_expired_windows() {
     logger('@@@ deleting expired windows');
     q("DELETE FROM `scraper_window` WHERE TIMESTAMPADD(SECOND, `interval` * 3, `last-seen`) < NOW()");
@@ -737,14 +631,15 @@ function scraper_cron($a,$b) {
 function scraper_connector_settings(&$a,&$b) {
     logger('@@@ scraper_connector_settings');
     $uid = local_user();
+    $r = q("SELECT `nickname` FROM `user` WHERE `uid` = %d", local_user());
+    $nick = $r[0]['nick'];
     $windows = q("SELECT `sid`, `wid`, `addr`, `network`, `state`, `interval`, `last-seen` AS `last` " .
                  "FROM `scraper_window` WHERE `uid` = %d", intval(local_user()));
     $template = file_get_contents(dirname(__file__).'/sessions.tpl');
     $sites = array();
     call_hooks('scraper_site', &$sites);
     $b .= replace_macros($template, array('$windows' => $windows,
-                                          '$baseurl' => $a->get_baseurl(),
-                                          '$sites' => $sites));
+                                          '$gmurl' => ($a->get_baseurl() . '/scraper/Scraper.user.js')));
 }
 
 function scraper_connector_settings_post ($a,$post) {

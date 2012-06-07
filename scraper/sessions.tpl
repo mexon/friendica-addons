@@ -1,4 +1,18 @@
 <div class="settings-block">
+  <h3>Screen Scrapers</h3>
+  <p>
+    To connect to LinkedIn, you will need to use your browser as a
+    "screen scraper".  One window will be taken over by Friendica and
+    watch your LinkedIn home page for updates, sending them to the
+    server as soon as they arrive.  Occasionally it will also browse
+    through your contacts list to synchronise with the server.
+  </p>
+  <p>
+    If you want to do this, first make sure you
+    have <a href="http://www.greasespot.net/">Greasemonkey</a>
+    installed.  Then click <a href="$gmurl">this link</a> to download the
+    Greasemonkey script for the screenscraper.
+  </p>
   <form>
     <table border="1">
       <thead>
