@@ -248,22 +248,21 @@ function retriever_apply_dom_filter($retriever, &$item, $text) {
       dbesc($item['body']), intval($item['id']));
 }
 
-function retrieve_images($item, $parent_retriever_item) {
-    $matches = array();
-    preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches);
-    if (count($matches)) {
-        foreach ($matches[3] as $url) {
-            if (strpos($url, get_app()->get_baseurl()) === FALSE) {
-                $resource = add_retriever_resource($url, "image", true);
+function retrieve_images(&$item, $parent_retriever_item) {
+    $matches1 = array();
+    preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches1);
+    $matches2 = array();
+    preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches2);
+    $matches = array_merge($matches1[3], $matches2[1]);
+    foreach ($matches as $url) {
+        if (strpos($url, get_app()->get_baseurl()) === FALSE) {
+            $resource = add_retriever_resource($url, "image", true);
+            if ($resource['completed'] == '0000-00-00 00:00:00') {
                 add_retriever_item($item, $resource, $parent_retriever_item);
             }
-        }
-    }
-    preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
-    if (count($matches)) {
-        foreach ($matches[1] as $url) {
-            $resource = add_retriever_resource($url, "image", true);
-            add_retriever_item($item, $resource, $parent_retriever_item);
+            else {
+                retriever_transform_images($item, $resource);
+            }
         }
     }
 }
@@ -282,7 +281,7 @@ function retriever_on_resource_completed($retriever, &$item, $resource, $retriev
     }
 }
 
-function retriever_transform_images($item, $resource) {
+function retriever_transform_images(&$item, $resource) {
     require_once('Photo.php');	
     $img = new Photo($resource["data"]);
     $hash = photo_new_resource();
