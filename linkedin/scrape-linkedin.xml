@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<xsl:stylesheet
+    xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0"
+    xmlns:li="http://www.linkedin.com"
+    xmlns:sc="http://www.scraper.com">
+
+  <xsl:output method="xml" indent="yes"/>
+
+  <xsl:variable name="page">
+    <xsl:choose>
+      <xsl:when test="//div[@id='feed-content']">home</xsl:when>
+      <xsl:when test="//div[@id='list-panel']">cont</xsl:when>
+      <xsl:when test="//div[@id='content'][contains(@class,'resume')]">prof</xsl:when>
+      <xsl:when test="//title[contains(text(),'Signed Out')]">lout</xsl:when>
+      <xsl:when test="//div[contains(@class,'jointoday')]">lgin</xsl:when>
+      <xsl:otherwise>unknown</xsl:otherwise>
+    </xsl:choose>
+  </xsl:variable>
+
+  <xsl:template match="/">
+    <li:root xmlns:sc="http://www.scraper.com">
+      <xsl:apply-templates select="." mode="status"/>
+      <xsl:choose>
+        <xsl:when test="$page='home'"><xsl:apply-templates select="." mode="home"/></xsl:when>
+        <xsl:when test="$page='cont'"><xsl:apply-templates select="." mode="cont"/></xsl:when>
+        <xsl:when test="$page='prof'"><xsl:apply-templates select="." mode="prof"/></xsl:when>
+      </xsl:choose>
+    </li:root>
+  </xsl:template>
+
+  <!-- ============================================================
+       Status block
+       ============================================================ -->
+
+  <xsl:template match="/" mode="status">
+    <sc:status id="status">
+      <xsl:text>{"page":"</xsl:text><xsl:value-of select="$page"/>
+      <xsl:text>","notification":"</xsl:text>
+      <xsl:value-of select="//*[@class='real-time-notification']"/>
+      <xsl:text>","feeditems":[</xsl:text>
+      <xsl:for-each select="//div[@id='feed-content']/ul/li[contains(@class,'feed-item')]">
+        <xsl:text>"</xsl:text>
+        <xsl:value-of select="@data-li-update-date"/>
+        <xsl:text>",</xsl:text>
+      </xsl:for-each>
+      <xsl:text>""]}</xsl:text>
+    </sc:status>
+  </xsl:template>
+
+  <!-- there are no unique identifiers in the feed items, the best we can do is the timestamp -->
+  <xsl:template match="div" mode="feed-summary">
+  </xsl:template>
+
+  <!-- ============================================================
+       Home page
+       ============================================================ -->
+
+  <xsl:template match="/" mode="home">
+    <li:home>
+      <xsl:apply-templates select="//div[@id='feed-content']" mode="feed"/>
+    </li:home>
+  </xsl:template>
+
+  <xsl:template match="div[@class='real-time-notification']" mode="home">
+    <li:notification id='notification'>
+      <xsl:copy-of select="."/>
+    </li:notification>
+  </xsl:template>
+
+  <xsl:template match="div" mode="feed">
+    <li:feed>
+      <xsl:apply-templates select="./ul/li" mode="feed"/>
+    </li:feed>
+  </xsl:template>
+
+<xsl:template match="li" mode="feed">
+  <li:post>
+    <li:update-date>
+      <xsl:value-of select="@data-li-update-date"/>
+    </li:update-date>
+    <li:update-id>
+      <xsl:value-of select="@data-li-update-id"/>
+    </li:update-id>
+    <xsl:apply-templates select="." mode="post-contact"/>
+    <xsl:apply-templates select=".//div[@class='feed-content']"/>
+  </li:post>
+</xsl:template>
+
+<xsl:template match="li" mode="post-contact">
+  <li:contact>
+    <li:mid>
+      <xsl:value-of select="substring-before(substring-after(@class,'mid-'),' ')"/>
+    </li:mid>
+    <li:photo>
+      <xsl:value-of select="a/img[@class='feed-photo photo']/@src"/>
+    </li:photo>
+    <li:name><xsl:value-of select="a/img[@class='feed-photo photo']/@alt"/></li:name>
+  </li:contact>
+</xsl:template>
+
+<!-- <xsl:template match="div[@class='feed-content']"> -->
+<xsl:template match="div[contains(@class,'feed-content')]">
+  <li:content>
+    <xsl:apply-templates select="node()"/>
+  </li:content>
+</xsl:template>
+
+  <!-- ============================================================
+       Contacts List
+       ============================================================ -->
+
+<xsl:template match="/" mode="cont">
+  <xsl:apply-templates select="//div[@id='list-panel']" mode="cont"/>
+</xsl:template>
+
+<xsl:template match="div" mode="cont">
+  <li:contacts>
+    <xsl:apply-templates select=".//div[@id='profile-picture']" mode="cont"/>
+    <xsl:apply-templates select=".//li[@class='save-vcard']" mode="cont"/>
+    <xsl:apply-templates select="ul/li" mode="cont"/>
+  </li:contacts>
+</xsl:template>
+
+<xsl:template match="li[@class='letter-divider']" mode="cont"/>
+
+<xsl:template name="link">
+  <xsl:param name="id"/>
+  <li:id><xsl:value-of select="$id"/></li:id>
+  <li:link>
+    <xsl:text>http://www.linkedin.com/</xsl:text>
+    <xsl:choose>
+      <xsl:when test="contains($id,'CMPY_')">
+        <xsl:value-of select="substring-after($id,'CMPY_')"/>
+      </xsl:when>
+      <xsl:otherwise><xsl:value-of select="$id"/></xsl:otherwise>
+    </xsl:choose>
+  </li:link>  
+</xsl:template>
+
+<xsl:template match="li" mode="cont">
+  <li:contact>
+    <xsl:call-template name="link"><xsl:with-param name="id" select="@id"/></xsl:call-template>
+    <li:name><xsl:value-of select=".//input[@type='checkbox']/@value"/></li:name>
+    <li:photo><xsl:value-of select=".//img/@src"/></li:photo>
+  </li:contact>
+</xsl:template>
+
+  <!-- ============================================================
+       Profile
+       ============================================================ -->
+
+<xsl:template match="/" mode="prof">
+  <xsl:for-each select="//div[@id='content']">
+    <li:profile>
+      <id>
+        <xsl:value-of select="substring-after(//div[@class='masthead vcard contact']/@id,'-')"/>
+      </id>
+      <xsl:apply-templates select=".//div[@id='profile-picture']"/>
+      <xsl:apply-templates select=".//li[@class='save-vcard']"/>
+      <xsl:apply-templates select=".//span[@class='full-name']"/>
+    </li:profile>
+  </xsl:for-each>
+</xsl:template>
+
+  <!-- ============================================================
+       Generic
+       ============================================================ -->
+
+<xsl:template match="span[@class='full-name']">
+  <li:name>
+    <xsl:apply-templates select="node()"/>
+  </li:name>
+</xsl:template>
+<xsl:template match="span[@class='given-name']">
+  <li:given>
+    <xsl:value-of select="text()"/>
+  </li:given>
+</xsl:template>
+<xsl:template match="span[@class='family-name']">
+  <li:family>
+    <xsl:value-of select="text()"/>
+  </li:family>
+</xsl:template>
+
+<xsl:template match="li[@class='save-vcard']">
+  <li:vcard-link>
+    <xsl:value-of select="a/@href"/>
+  </li:vcard-link>
+</xsl:template>
+
+<xsl:template match="div[@id='profile-picture']">
+  <li:picture>
+    <xsl:value-of select=".//img/@src"/>
+  </li:picture>
+</xsl:template>
+
+<!--
+%2Fprofile%2Fview%3Fid%3D8264075%26
+-->
+
+<xsl:template match="span[contains(@class,'miniprofile-container')]">
+  <li:miniprofile>
+    <xsl:variable name="id">
+      <xsl:value-of select="substring-after(substring-before(.//a/@href,'id%3D'),'%26')"/>
+    </xsl:variable>
+    <li:id><xsl:value-of select="$id"/></li:id>
+    <li:miniprofilelink><xsl:value-of select=".//a/@href"/></li:miniprofilelink>
+    <xsl:call-template name="link"><xsl:with-param name="id" select="$id"/></xsl:call-template>
+    <li:name><xsl:value-of select="a/text()|strong/a/text()"/></li:name>
+  </li:miniprofile>
+</xsl:template>
+
+</xsl:stylesheet>

@@ -17,6 +17,24 @@
     <table border="1">
       <thead>
         <tr>
+          <th>Network</th>
+          <th>Home</th>
+          <th>User</th>
+        </tr>
+      </thead>
+      <tbody>
+{{ for $sites as $s }}
+        <tr>
+          <td>$s.name</td>
+          <td><a href="$s.home">$s.home</a></td>
+          <td><input name="user_$s.name" value="$s.user"></td>
+        </tr>
+{{ endfor }}
+      </tbody>
+    </table>
+    <table border="1">
+      <thead>
+        <tr>
           <th>Session</th>
           <th>Window</th>
           <th>Address</th>
@@ -35,7 +53,7 @@
           <td>$w.network</td>
           <td>$w.state</td>
           <td>$w.last</td>
-          <td><a href="scraper/detail/$w.wid">details</a></td>
+          <td><a href="scraper/$nick/$w.wid/detail">details</a></td>
         </tr>
 {{ endfor }}
       </tbody>

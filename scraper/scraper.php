@@ -33,15 +33,18 @@ function scraper_content(&$a) {
     $sites = array();
     call_hooks('scraper_site', &$sites);
 
-    logger('@@@ scraper_content ' . print_r($a->argv, true));
     if (!local_user()) {
         $a->page['content'] .= "<p>Please log in</p>";
         return;
     }
 
+    $r = q("SELECT `nickname` FROM `user` WHERE `uid` = %d", local_user());
+    $nick = $r[0]['nickname'];
+
     if ($a->argv[1] === 'Scraper.user.js') {
-        $r = q("SELECT `nickname` FROM `user` WHERE `uid` = %d", local_user());
-        $nick = $r[0]['nickname'];
+        foreach ($sites as &$site) {
+            $site['user'] = get_pconfig(local_user(), $site['name'], 'user');
+        }
         $template = file_get_contents(dirname(__file__).'/Scraper.user.js.tpl');
         header("Content-type: application/javascript");
         echo replace_macros($template, array('$baseurl' => $a->get_baseurl(),
@@ -49,38 +52,49 @@ function scraper_content(&$a) {
                                              '$nick' => $nick));
         killme();
     }
-    if ($a->argv[1] === "close") {
-        $window = get_scraper_window($a->argv[2]);
+    $window = get_scraper_window($a->argv[1], $a->argv[2]);
+    if ($a->argv[3] === "close") {
         $window['state'] = 'close';
         save_scraper_window($window);
         $a->page['content'] .= "<p>Window closed</p>";
         return;
     }
-    if ($a->argv[1] === "spawn") {
-        $window = get_scraper_window($a->argv[2]);
+    if ($a->argv[3] === 'state') {
+        $window['state'] = $a->argv[4];
+        save_scraper_window($window);
+        $a->page['content'] .= "<p>State set to " . $a->argv[4] . "</p>";
+        return;
+    }
+    if ($a->argv[3] === "spawn") {
         foreach ($sites as $site) {
-            if ($site['name'] == $a->argv[3]) {
+            if ($site['name'] == $a->argv[4]) {
                 $a->page['content'] .= '<p>Spawning window at ' . $site['home'] . '</p>';
                 $window['state'] = 'spawn';
                 $window['data']->spawn = $site['home'];
                 save_scraper_window($window);
-                logger('@@@ just saved spawn window ' . print_r($window, true));
                 return;
             }
         }
-        $network = $a->argv[2];
+        $network = $a->argv[4];
         $a->page['content'] .= '<p>Want to spawn ' . $network . '</p>';
         return;
     }
-    if ($a->argv[1] === "detail") {
-        $window = get_scraper_window($a->argv[2]);
+    if ($a->argv[3] === "detail") {
         if (!$window) {
             $a->page['content'] .= "<p>Window not found</p>";
             return;
         }
+        foreach ($sites as $s) {
+            if ($s['name'] === $window['network']) {
+                $site = $s;
+            }
+            $site['user'] = get_pconfig(local_user(), $site['name'], 'user');
+        }
         $template = file_get_contents(dirname(__file__).'/detail.tpl');
-        $a->page['content'] .= replace_macros($template, array('$window' => $window,
+        $a->page['content'] .= replace_macros($template, array('$nick' => $nick,
+                                                               '$window' => $window,
                                                                '$sites' => $sites,
+                                                               '$states' => $site['states'],
                                                                '$baseurl' => $a->get_baseurl()));
         return;
     }
@@ -111,7 +125,6 @@ function scraper_gen_select_statement($table, $criteria) {
         }
     }
     $statement = 'SELECT * FROM ' . $table . ' WHERE ' . implode($wheres, ' AND ');
-    logger('@@@ scraper_gen_select_statement: ' . $statement);
     return $statement;
 }
 
@@ -131,7 +144,6 @@ function scraper_gen_insert_statement($table, $fields) {
         }
     }
     $statement = 'INSERT INTO ' . $table . '(' . implode($keys,', ') . ') VALUES (' . implode($values,', ') . ')';
-    logger('@@@ scraper_gen_insert_statement: ' . $statement);
     return $statement;
 }
 
@@ -161,7 +173,6 @@ function scraper_gen_update_statement($table, $fields, $criteria) {
         }
     }
     $statement = 'UPDATE ' . $table . ' SET ' . implode($sets,', ') . ' WHERE ' . implode($wheres, ' AND ');
-    logger('@@@ scraper_gen_update_statement: ' . $statement);
     return $statement;
 }
 
@@ -178,7 +189,6 @@ function scraper_submit_feed($a, $feed, $scrape_xsl_file, $import_xsl_file) {
     $dom->loadHTML('<?xml encoding="UTF-8">' . $feed);
     $dom->encoding = "utf-8";
     $scraped = $scrape->transformToDoc($dom);
-    logger('@@@ two');
     if (!$import) {
         return array("error" => "no importer found");
     }
@@ -187,14 +197,12 @@ function scraper_submit_feed($a, $feed, $scrape_xsl_file, $import_xsl_file) {
         logger("scraper_submit_feed: couldn't find any items");
         logger("   data: " . $import->transformToXml($scraped));
     }
-    logger('@@@ three');
     logger('scraper_submit_feed: ' . print_r($imported, true));
     $results = array('items' => array(), 'contacts' => array());
 
     if ($imported->contacts) {
         foreach ($imported->contacts as $contact) {
             if ($contact && ($contact != '_empty_')) {
-                logger('@@@ submitting contact ' . $contact->url);
                 scraper_update_contact($a, $contact);
                 array_push($results['contacts'], $contact->url);
             }
@@ -203,7 +211,6 @@ function scraper_submit_feed($a, $feed, $scrape_xsl_file, $import_xsl_file) {
     if ($imported->items) {
         foreach ($imported->items as $item) {
             if ($item && ($item != '_empty_')) {
-                logger('@@@ submitting item ' . $item->plink);
                 scraper_update_item($a, $item);
                 array_push($results['items'], $item->plink);
             }
@@ -227,11 +234,9 @@ EOF;
         return $r[0]['id'];
     }
 
-    logger('@@@ unable to find contact for ' . $owner . ' trying uri ' . $item->uri);
     $r = q("SELECT `contact-id` FROM `item` WHERE `uid` = %d AND `parent-uri` = '%s'",
            intval($item->uid), $item->uri);
     if (count($r)) {
-        logger('@@@ found contact using parent-uri ' . $item->uri);
         return $r[0]['contact-id'];
     }
 }
@@ -270,21 +275,15 @@ function scraper_update_item($a, $item) {
         if ($item->body != $r[0]["body"]) {
             $item->changed = datetime_convert();
         }
-        logger("@@@ old commented is " . $existing->commented . ' new is ' . $item->commented);
         if ($item->commented && ($existing->commented > $item->commented)) {
-            logger('@@@ old commented is newer, clearing');
             $item->commented = null;
         }
-        logger('@@@ one');
         q(scraper_gen_update_statement("item", $item, $criteria));
-        logger('@@@ 2');
     }
     else {
         $item->changed = datetime_convert();
         $item->created = $item->edited;
-        logger('@@@ 3');
         q(scraper_gen_insert_statement("item", $item));
-        logger('@@@ 4');
     }
 
     $r = null;
@@ -293,25 +292,21 @@ function scraper_update_item($a, $item) {
                dbesc($item->{'parent-uri'}), intval($item->uid));
     }
     if (count($r)) {
-        logger('@@@ found parent uri from ' . $item->{'parent-uri'} . ' setting parent to ' . $r[0]["id"]);
         q("UPDATE `item` SET `parent` = %d WHERE `uri` = '%s' AND `uid` = %d",
           intval($r[0]["id"]), dbesc($item->plink), intval($item->uid));
     }
     else {
-        logger('@@@ found no parent uri for ' . $item->{'parent-uri'} . ' setting parent to self');
         q("UPDATE `item` SET `parent` = `id` WHERE `uri` = '%s' AND `uid` = %d",
           dbesc($item->plink), intval($item->uid));
     }
     q("SELECT `id` FROM `item` WHERE `uri` = '%s' AND `uid` = %d", dbesc($item->uid), intval($item->uid));
     if (count($r)) {
-        logger('@@@ new item id is ' . $r[0]["id"] . ' updating references to ' . $item->uri);
         q("UPDATE `item` SET `parent` = %d WHERE `parent-uri` = '%s'", intval($r[0]["id"]), dbesc($item->uri));
     }
 
 }
 
 function scraper_update_contact($a, $contact) {
-    logger('@@@ scraper_update_contact: ' . print_r($contact, true));
     if (!$contact->uid) {
         if (!local_user()) {
             logger("scraper_update_contact: no uid");
@@ -346,20 +341,15 @@ function scraper_update_contact($a, $contact) {
     $r = q(scraper_gen_select_statement("contact", $criteria));
 
     if (count($r)) {
-        logger('@@@ old contact, maybe updating');
         $oldrating = $r[0]["rating"];
-        logger('@@@ old rating ' . $r[0]["rating"] . ' new rating ' . $contact->rating);
         if ($contact->rating >= $r[0]["rating"]) {
-            logger('@@@ updating contact, rating is good enough');
             q(scraper_gen_update_statement("contact", $contact, $criteria));
         }
         if ($contact->photo) {
-            logger('@@@ updating contact with photo ' . $contact->photo);
             scraper_update_photo_for_contact($a, $contact, $contact->photo);
         }
     }
     else {
-        logger('@@@ new contact, lets insert');
         // If we get a contact with rel 0, it means it's random guff and they're no relation to us at all
         if ($contact->rel) {
             q(scraper_gen_insert_statement("contact", $contact));
@@ -367,17 +357,14 @@ function scraper_update_contact($a, $contact) {
                 scraper_update_photo_for_contact($a, $contact);
             }
             if ($contact->photo) {
-                logger('@@@ new contact with photo ' . $contact->photo);
                 scraper_update_photo_for_contact($a, $contact, $contact->photo);
                 return;
             }
             if ($contact->micro) {
-                logger('@@@ new contact with micro ' . $contact->micro);
                 scraper_update_photo_for_contact($a, $contact, $contact->micro);
                 return;
             }
             if ($contact->thumb) {
-                logger('@@@ new contact with thumb ' . $contact->thumb);
                 scraper_update_photo_for_contact($a, $contact, $contact->thumb);
                 return;
             }
@@ -387,21 +374,17 @@ function scraper_update_contact($a, $contact) {
 
 $state_machine = array(
     'new' => function(&$window) {
-        logger('@@@ scraper state_machine state new');
         $window['state'] = 'new:interval';
         $window['interval'] = 30;
         return array("function" => "set_interval", "interval" => $window['interval']);
     },
     'new:interval' => function(&$window) {
-        logger('@@@ scraper state_machine state new:interval response ' . print_r($data, true));
         $window['state'] = 'new:url';
         return array("function" => "get_url");
     },
     'new:url' => function(&$window) {
-        logger('@@@ scraper state_machine state new:url function, current owner ' . $window['network']);
         $window['data']->url = file_get_contents("php://input");
         if ($window['data']->previous_state) {
-            logger('@@@ previous state was ' . $window['data']->previous_state);
             $window['state'] = $window['data']->previous_state;
             unset($window['data']->previous_state);
         }
@@ -428,7 +411,6 @@ $state_machine = array(
 
 function get_state_machine($window) {
     $network = $window['network'];
-    logger('@@@ get_state_machine, network is ' . $network);
     if ($network) {
         include_once("addon/$network/$network.php");
         if (function_exists($network . '_state_machine')) {
@@ -445,22 +427,16 @@ function get_state_machine($window) {
 
 function scraper_state_machine(&$window) {
     $state_machine = get_state_machine($window);
-    logger('@@@ doing state machine for window ' . $window["wid"] . ' state ' . $window["state"]);
     if (file_get_contents("php://input") == "start") {
-        logger('@@@ setting previous state to ' . $window['state']);
         $window['data']->previous_state = $window['state'];
         $window['state'] = 'new';
     }
-    logger('@@@ one ' . $window['state']);
     $fun = $state_machine[$window['state']];
-    logger('@@@ two' . $window['state']);
     if (!$fun) {
         logger('@@@ unknown state, restarting');
     }
     $result = $fun($window);
-    logger('@@@ updating state to ' . $window['state']);
-    q("UPDATE `scraper_window` SET `state` = '%s' WHERE `id` = %d", $window['state'], $window['id']);
-    logger('@@@ state machine result ' . print_r($result, true));
+    save_scraper_window($window);
     return $result;
 }
 
@@ -501,7 +477,6 @@ function save_scraper_window($window) {
 function scraper_get_command($window) {
     $command = scraper_state_machine($window);
     header("Content-type: application/json");
-    logger("@@@ send command " . json_encode($command));
     echo json_encode($command);
     save_scraper_window($window);
     killme();
@@ -523,7 +498,6 @@ function scraper_post(&$a) {
     }
     if ($a->argv[1] == "scraped") {
         $window['scraped'] = json_decode(file_get_contents("php://input"));
-        logger('@@@ got scraped status ' . print_r($window['scraped'], true));
         save_scraper_window($window);
         killme();
     }
@@ -561,7 +535,6 @@ function scraper_update_photo_for_contact($a, &$contact, $url) {
     $r = q("SELECT `resource-id` FROM `photo` WHERE `contact-id` = %d AND `uid` = %d AND `filename` = '%s'",
            intval($contact->id), intval($contact->uid), dbesc($photo_url));
     if (count($r)) {
-        logger('@@@ already have this photo');
         return $contact->photo;
     }
 
@@ -572,7 +545,6 @@ function scraper_update_photo_for_contact($a, &$contact, $url) {
     $img_str = fetch_url($photo_url,true);
     $img = new Photo($img_str);
     if(!$img->is_valid()) {
-        logger('@@@ image is not valid');
         return;
     }
     logger('aborting photo stuff early');
@@ -618,41 +590,42 @@ function scraper_get_xslt_from_file($file) {
 }
 
 function delete_expired_windows() {
-    logger('@@@ deleting expired windows');
     q("DELETE FROM `scraper_window` WHERE TIMESTAMPADD(SECOND, `interval` * 3, `last-seen`) < NOW()");
 }
 
 function scraper_cron($a,$b) {
-    logger('@@@ scraper_cron');
     delete_expired_windows();
-    logger('@@@ scraper_cron finished');
 }
 
 function scraper_connector_settings(&$a,&$b) {
-    logger('@@@ scraper_connector_settings');
     $uid = local_user();
     $r = q("SELECT `nickname` FROM `user` WHERE `uid` = %d", local_user());
-    $nick = $r[0]['nick'];
+    $nick = $r[0]['nickname'];
     $windows = q("SELECT `sid`, `wid`, `addr`, `network`, `state`, `interval`, `last-seen` AS `last` " .
                  "FROM `scraper_window` WHERE `uid` = %d", intval(local_user()));
     $template = file_get_contents(dirname(__file__).'/sessions.tpl');
     $sites = array();
     call_hooks('scraper_site', &$sites);
+    foreach ($sites as &$site) {
+        $site['user'] = get_pconfig(local_user(), $site['name'], 'user');
+    }
     $b .= replace_macros($template, array('$windows' => $windows,
+                                          '$sites' => $sites,
+                                          '$nick' => $nick,
                                           '$gmurl' => ($a->get_baseurl() . '/scraper/Scraper.user.js')));
 }
 
 function scraper_connector_settings_post ($a,$post) {
-    logger('@@@ scraper_connector_settings_post');
-    $scraper = get_scraper_details(local_user(), $a->argv[2]);
-    if (!$scraper) {
-        $a->page['content'] .= "<p>Scraper not found</p>";
-        return;
+    $sites = array();
+    call_hooks('scraper_site', &$sites);
+    foreach ($sites as $site) {
+        if (x($_POST, 'user_' . $site['name'])) {
+            set_pconfig(local_user(), $site['name'], 'user', $_POST['user_' . $site['name']]);
+        }
     }
 }
 
 function scraper_search($criteria) {
-    logger('@@@ scraper_search');
     $clauses = array();
     foreach ($criteria as $k => $v) {
         if ($k === 'uid') {
@@ -666,12 +639,10 @@ function scraper_search($criteria) {
     if (count($clauses)) {
         $query .= " WHERE" . implode(' AND ', $clauses);
     }
-    logger('@@@ scraper_search: ' . $query);
     return q($query);
 }
 
 function scraper_command_search($criteria) {
-    logger('@@@ scraper_command_search');
     $clauses = array();
     foreach ($criteria as $k => $v) {
         if ($k === 'uid') {
@@ -685,26 +656,5 @@ function scraper_command_search($criteria) {
     if (count($clauses)) {
         $query .= " WHERE " . implode(' AND ', $clauses);
     }
-    logger('@@@ scraper_command_search: ' . $query);
     return q($query);
-}
-
-function scraper_ensure_sleep_exists($network, $sleep_for, $wait_for) {
-    logger("@@@ scraper_ensure_sleep_exists $network");
-
-    $query = <<<EOF
-select scraper.uid, scraper.guid
- from scraper left outer join scraper_command
- on (scraper.guid = scraper_command.`scraper-guid`
-     and scraper_command.command = 'sleep'
-     and (scraper_command.finished is null or scraper_command.finished = '0000-00-00 00:00:00'))
- where network = '%s'
- and scraper_command.id is null
-EOF;
-
-    $r = q($query, $network);
-    foreach ($r as $rr) {
-        logger('Adding sleep command for scraper ' . $rr['guid']);
-        scraper_add_command($rr['uid'], $rr['guid'], 'sleep', array('time' => $sleep_for), $wait_for);
-    }
 }

@@ -22,6 +22,10 @@ var scraper = {
 
     user: "$nick",
 
+    username: {
+{{ for $sites as $site }}        $site.name: "$site.user",
+{{ endfor }}    },
+
     request: function(method, url, data, callback) {
         GM_xmlhttpRequest({
             method: method,
@@ -91,10 +95,10 @@ var scraper = {
         this.request("GET", command["xslt"], null, "xslt_response");
     },
     xslt_response: function(response) {
-        this.scraper.xslt = new XSLTProcessor();
+        this.xslt = new XSLTProcessor();
         var xml = new DOMParser().parseFromString(response, "text/xml");
-        this.scraper.xslt.importStylesheet(xml);
-        this.scraper.scrape();
+        this.xslt.importStylesheet(xml);
+        this.scrape();
     },
     scrape: function() {
         if (this.xslt) {
@@ -132,7 +136,7 @@ var scraper = {
     enter_value_from_prompt: function(command) {
         $value = prompt(command["message"]);
         if ($value) {
-            this.set_value(command["path"], $value);
+            this.search_html(command["path"]).value = $value;
             return 'ok';
         }
     },
