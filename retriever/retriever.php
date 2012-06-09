@@ -192,6 +192,7 @@ function add_retriever_item(&$item, $resource, $parent = null) {
     if (count($r)) {
         logger("add_retriever_item: retriever item for " .
                $item['uid'] . ', id ' . $r[0]['id'] . " already exists, id " . $r[0]['id'], LOGGER_ERROR);
+        return;
     }
 
     q("INSERT INTO `retriever_item` (`item-uri`, `item-uid`, `contact-id`, `resource`, `parent`) " .
@@ -226,7 +227,7 @@ function retriever_apply_dom_filter($retriever, &$item, $text) {
 
     $components = parse_url($item['plink']);
     $rooturl = $components['scheme'] . "://" . $components['host'];
-    $dirurl = $rooturl . dirname($components['path'] . "/");
+    $dirurl = $rooturl . dirname($components['path']) . "/";
 
     $params = array('$match' => $retriever["data"]->match,
                     '$remove' => $retriever["data"]->remove,
