@@ -61,11 +61,12 @@ function linkedin_state_machine() {
         'enter-pass' => function(&$window) {
             $window['state'] = 'click-login';
             return array('function' => 'enter_value_from_prompt',
+                         'id' => 'linkedin_password',
                          'path' => "//*[@id='session_password-login']",
                          'message' => "Please enter your LinkedIn password.  Might as well, everyone else has it.");
         },
         'click-login' => function(&$window) {
-            $window['state'] = 'scrape-home';
+            $window['state'] = 'wait';
             return array('function' => 'click',
                          'path' => "//*[@id='btn-login']");
         },
