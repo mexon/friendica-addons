@@ -18,9 +18,14 @@
   </p>
 {{ for $sites as $s }}
 <p>
-      <a href="scraper/spawn/$window.wid/$s.name">Spawn $s.name window</a>
+      <a href="scraper/$nick/$window.wid/spawn/$s.name">Spawn $s.name window</a>
+</p>
+{{ endfor }}
+{{ for $states as $s=>$d }}
+<p>
+      <a href="scraper/$nick/$window.wid/state/$s">State $d</a>
 </p>
 {{ endfor }}
 <p>
-  <a href="scraper/close/$window.wid">Close this window</a>
+  <a href="scraper/$nick/$window.wid/close">Close this window</a>
 </p>

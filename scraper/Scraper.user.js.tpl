@@ -6,37 +6,18 @@
 {{ for $sites as $site }}// @include        $site.pattern
 {{ endfor }}// ==/UserScript==
 
+var friendica_baseurl = "$baseurl";
+var friendica_user = "$nick";
+
+function new_scraper(window, methods) {
 var scraper = {
-    set_window: function(window) {
-        this.window = window;
-        if (this.window.name == "") {
-            this.window.name = this.id;
-        }
-        else {
-            this.id = this.window.name;
-        }
-        this.log = this.window.console.log;
-    },
+    server_url: friendica_baseurl,
 
-    server_url: "$baseurl",
+    user: friendica_user,
 
-    request: function(method, url, data, callback) {
-        GM_xmlhttpRequest({
-            method: method,
-            url: url,
-            data: data,
-            onload: function(x) { if (callback) { this.scraper[callback](x.responseText); } },
-            scraper: this,
-        });
-    },
+    prompts: {},
 
-    register: function() {
-        this.scrape;
-        this.request("POST", this.server_url + "scraper/register/" + this.id,
-                     this.window.location.href, "register_reply");
-    },
     register_reply: function(response) {
-        this.log("hello");
         var reply = JSON.parse(response);
         if (reply["error"]) {
             this.log("Error during registration: " + reply["error"]);
@@ -54,29 +35,7 @@ var scraper = {
         var entries = document.evaluate(path, document, null, XPathResult.ANY_TYPE, null);
         return entries.iterateNext();
     },
-    search_scraped: function(path) {
-        if (!this.scraped) {
-            return;
-        }
-        // What the hell?  Serialize the XML, reparse it, and then do
-        // the evaluate on that?  What's the point of all that?  I
-        // have no idea, but doing it the sane way fails with
-        // something about namespaces, and even though I don't
-        // understand how or why, this fixes it.  If you've dealt with
-        // XML namespaces before, you'll recognise the symptoms.
-        // "LET'S ADD NAMESPACES TO JSON!  THEN IT'LL BE JUST AS GOOD
-        // AS XML AND WE'LL BE INVITED TO THEIR PARTIES!!1!"
 
-        var xmltext = new XMLSerializer().serializeToString(this.scraped);
-        var xml = new DOMParser().parseFromString(xmltext, "text/xml");
-        var resolver = xml.createNSResolver(xml);
-        var entries = xml.evaluate(path, xml, resolver, XPathResult.ANY_TYPE, null);
-        return entries.iterateNext();
-    },
-
-    open_window: function(command) {
-        this.window.open(command["url"]);
-    },
     close_window: function() {
         this.window.close();
     },
@@ -89,19 +48,6 @@ var scraper = {
 
     set_xslt: function(command) {
         this.request("GET", command["xslt"], null, "xslt_response");
-    },
-    xslt_response: function(response) {
-        this.scraper.xslt = new XSLTProcessor();
-        var xml = new DOMParser().parseFromString(response, "text/xml");
-        this.scraper.xslt.importStylesheet(xml);
-        this.scraper.scrape();
-    },
-    scrape: function() {
-        if (this.xslt) {
-            this.scraped = this.xslt.transformToDocument(document);
-            var status = this.search_scraped("//sc:status");
-            this.request("POST", this.server_url + "scraper/scraped/" + this.id, status.textContent, null);
-        }
     },
     get_scraped: function(command) {
         if (!this.scraped) {
@@ -130,9 +76,17 @@ var scraper = {
         this.search_html(command["path"]).value = command["value"];
     },
     enter_value_from_prompt: function(command) {
-        $value = prompt(command["message"]);
-        if ($value) {
-            this.set_value(command["path"], $value);
+        if (command['id'] && this.prompts[command['id']]) {
+            value = this.prompts[command['id']];
+        }
+        else {
+            value = prompt(command["message"]);
+            if (command['id'] && value) {
+                this.prompts[command['id']] = value;
+            }
+        }
+        if (value) {
+            this.search_html(command["path"]).value = value;
             return 'ok';
         }
     },
@@ -140,10 +94,8 @@ var scraper = {
         this.search_html(command["path"]).click();
     },
 
-    id: Math.random().toString(16).substring(2,10),
-
     request_command: function(scraper, previous_result) {
-        this.request("POST", scraper.server_url + "scraper/command/" + scraper.id,
+        this.request("POST", scraper.server_url + "/scraper/command/" + scraper.user + "/" + scraper.id,
                      previous_result, "receive_command");
     },
     receive_command: function(response) {
@@ -176,35 +128,165 @@ var scraper = {
     terminate: function() {
         clearInterval(this.request_command_interval_id);
     },
+
+    register: function() {
+        this.request("POST", this.server_url + "/scraper/register/" + this.user + "/" + this.id,
+                     this.window.location.href, "register_reply");
+    },
 };
+    methods(scraper);
+
+    scraper.id = Math.random().toString(16).substring(2,10);
+    if (window) {
+        scraper.window = window;
+        if (window.name != "") {
+            scraper.id = window.name;
+        }
+        else {
+            window.name = scraper.id;
+        }
+    }
+    scraper.log = scraper.window.console.log;
+
+    return scraper;
+}
+
+var friendica_scraper;
+
+function zombie_methods(scraper) {
+    var xslt = require('node_xslt');
+
+    scraper.request = function(method, url, data, callback) {
+        var request = new friendica_scraper.window.XMLHttpRequest();
+        var scraper = this;
+        if (callback) {
+            request.onreadystatechange = function() {
+                if (request.status >= 200) {
+                    request.onreadystatechange = function() {};
+                    scraper[callback](request.responseText);
+                }
+            };
+        };
+        request.open(method, url);
+        result = request.send(data);
+    };
+
+    scraper.open_window = function(command) {
+        var Browser = require("zombie");
+        if (Browser) {
+            Browser.visit(command["url"], { debug: true },
+                          function (e, browser) {
+                              browser.window.name = "";
+                              var scraper = new_scraper(browser.window, zombie_methods);
+                              scraper.browser = browser;
+                              process.argv.forEach(function (val, index, array) {
+                                  if (pieces = val.match(/(\w+)=(.*)/)) {
+                                      scraper.prompts[pieces[1]] = pieces[2];
+                                  }
+                              });
+                              scraper.register();
+                          });
+        }
+    };
+
+    scraper.xslt_response = function(response) {
+        this.xslt = xslt.readXsltString(response);
+        this.scrape();
+    };
+
+    scraper.scrape = function() {
+        var libxmljs = require("libxmljs");
+
+        var newdoc = xslt.readHtmlString(this.browser.document.outerHTML);
+        this.scraped = xslt.transform(this.xslt, newdoc, []);
+        this.scraped = libxmljs.parseXmlString(this.scraped);
+        var status = this.search_scraped("//sc:status");
+        this.log('@@@ status is '  + status);
+        this.request("POST", this.server_url + "/scraper/scraped/" + this.user + "/" + this.id, status.textContent, null);
+    };
+
+    scraper.search_scraped = function(path) {
+        if (!this.scraped) {
+            return;
+        }
+
+        var map = {};
+        var gen_namespace_map = function(node) {
+            if (node.namespace()) {
+                map[node.namespace().prefix()] = node.namespace().href();
+            }
+            for (child in node.childNodes()) {
+                gen_namespace_map(node.childNodes()[child]);
+            }
+        }
+        gen_namespace_map(this.scraped.root());
+        return this.scraped.find(path, map);
+    };
+}
+
+function greasemonkey_methods(scraper) {
+    scraper.request = function(method, url, data, callback) {
+        GM_xmlhttpRequest({
+            method: method,
+            url: url,
+            data: data,
+            onload: function(x) { if (callback) { this.scraper[callback](x.responseText); } },
+            scraper: this,
+        });
+    };
+
+    scraper.open_window = function(command) {
+        this.window.open(command["url"]);
+    };
+
+    scraper.xslt_response = function(response) {
+        this.xslt = new XSLTProcessor();
+        var xml = new DOMParser().parseFromString(response, "text/xml");
+        this.xslt.importStylesheet(xml);
+        this.scrape();
+    };
+
+    scraper.scrape = function() {
+        if (this.xslt) {
+            this.scraped = this.xslt.transformToDocument(document);
+            var status = this.search_scraped("//sc:status");
+            this.request("POST", this.server_url + "/scraper/scraped/" + this.user + "/" + this.id, status.textContent, null);
+        }
+    };
+
+    scraper.search_scraped = function(path) {
+        if (!this.scraped) {
+            return;
+        }
+        // What the hell?  Serialize the XML, reparse it, and then do
+        // the evaluate on that?  What's the point of all that?  I
+        // have no idea, but doing it the sane way fails with
+        // something about namespaces, and even though I don't
+        // understand how or why, this fixes it.  If you've dealt with
+        // XML namespaces before, you'll recognise the symptoms.
+        // "LET'S ADD NAMESPACES TO JSON!  THEN IT'LL BE JUST AS GOOD
+        // AS XML AND WE'LL BE INVITED TO THEIR PARTIES!!1!"
+
+        var xmltext = new XMLSerializer().serializeToString(this.scraped);
+        var xml = new DOMParser().parseFromString(xmltext, "text/xml");
+        var resolver = xml.createNSResolver(xml);
+        var entries = xml.evaluate(path, xml, resolver, XPathResult.ANY_TYPE, null);
+        return entries.iterateNext();
+    };
+}
 
 if (typeof require == 'function') {
     var Browser = require("zombie");
     if (Browser) {
-        Browser.visit(scraper.server_url, { debug: true },
-            function (e, browser) {
-                scraper.request = function(method, url, data, callback) {
-                    var request = new scraper.window.XMLHttpRequest();
-                    request.onload = function(x) { scraper.log("what?"); if (callback) { this.scraper[callback](x.responseText); } };
-                    this.log("@@@ one");
-//                    request.open(method, url);
-                    request.open("GET", url);
-                    this.log("@@@ two");
-                    result = request.send(data);
-                    this.log("@@@ status is " + request.status);
-                    this.log("@@@ result is");
-                    this.log("@@@ " + result);
-                    this.log("@@@ response is");
-                    this.log("@@@ " + request.response);
-                    callback(request.response);
-                };
-                browser.window.name = "";
-                scraper.set_window(browser.window);
-                scraper.register();
-            });
+        Browser.visit(friendica_baseurl, { debug: true },
+                      function (e, browser) {
+                          browser.window.name = "";
+                          friendica_scraper = new_scraper(browser.window, zombie_methods);
+                          friendica_scraper.register();
+                      });
     }
 }
 else {
-    scraper.set_window(self.window);
+    var scraper = new_scraper(self.window, greasemonkey_methods);
     scraper.register();
 }
