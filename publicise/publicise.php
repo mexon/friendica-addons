@@ -8,10 +8,12 @@
 
 function publicise_install() {
     register_hook('post_remote', 'addon/publicise/publicise.php', 'publicise_post_remote_hook');
+    register_hook('post_remote_end', 'addon/publicise/publicise.php', 'publicise_post_remote_end_hook');
 }
 
 function publicise_uninstall() {
     unregister_hook('post_remote', 'addon/publicise/publicise.php', 'publicise_post_remote_hook');
+    unregister_hook('post_remote_end', 'addon/publicise/publicise.php', 'publicise_post_remote_end_hook');
 }
 
 function publicise_plugin_admin(&$a,&$o) {
@@ -155,9 +157,9 @@ function publicise($a, $contact, $owner) {
     if (!$r) {
         logger('Publicise: update contact failed', LOGGER_ERROR);
     }
-    $r = q("UPDATE `item` SET `uid` = %d, `contact-id` = %d, type = 'wall', wall = 1 WHERE `contact-id` = %d",
-           $newuid, $newcontactid, $contact['id']);
-    logger('Publicise: moved items from contact ' . $contact['id'] . ' to ' . $newcontact, LOGGER_DATA);
+    $r = q("UPDATE `item` SET `uid` = %d, type = 'wall', wall = 1 WHERE `contact-id` = %d",
+           $newuid, $contact['id']);
+    logger('Publicise: moved items from contact ' . $contact['id'] . ' to uid ' . $newuid, LOGGER_DATA);
     $r = q("UPDATE `pconfig` SET `uid` = %d WHERE `uid` = %d AND `cat` = 'retriever%d'",
            $newuid, $contact['uid'], $contact['id']);
     logger('Publicise: Updated retriever config from uid ' . $contact['uid'] . ' to ' . $newuid, LOGGER_DATA);
@@ -182,13 +184,13 @@ function publicise_post_remote_hook(&$a, &$item) {
     if (!$r1) {
         return;
     }
-    $r2 = q("select id from contact where uid = %d and self = 1", $r1[0]['uid']);
-    if (!$r2) {
-        logger('Publicise: user has no "self" contact: ' . $r1[0]['uid']);
-        return;
-    }
 
     logger('Publicise: moving to wall: ' . $item['plink']);
     $item['type'] = 'wall';
     $item['wall'] = 1;
 }
+
+function publicise_post_remote_end_hook(&$a, $item) {
+    proc_run('php', "include/notifier.php", 'wall-new', $item['id']);
+}
+
