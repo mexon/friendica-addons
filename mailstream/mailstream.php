@@ -45,9 +45,52 @@ function mailstream_plugin_admin_post ($a) {
 }
 
 function mailstream_incoming_mail($a, $b) {
-    logger('@@@ mailstream_incoming_mail');
+    require_once 'Mail/mimeDecode.php';
+    require_once('include/html2bbcode.php');
+
     $content = file_get_contents("php://stdin");
-    logger($content);
+
+    $decoder = new Mail_mimeDecode($content);
+    $structure = $decoder->decode(array('include_bodies' => TRUE, 'decode_bodies' => TRUE, 'decode_headers' => TRUE));
+    $message = array();
+    if ($structure->headers['in-reply-to']) {
+        $message['in-reply-to'] = $structure->headers['in-reply-to'];
+    }
+    if ($structure->headers['subject']) {
+        $message['subject'] = $structure->headers['subject'];
+    }
+    mailstream_process_structure($structure, $message);
+    logger("@@@ mailstream_incoming_mail: " . print_r($message, true));
+}
+
+function mailstream_process_structure($structure, &$message) {
+    if (($structure->ctype_primary === 'multipart') && ($structure->ctype_secondary === 'related')) {
+        foreach ($structure->parts as $part) {
+            mailstream_process_structure($part, $message);
+        }
+    }
+    if (($structure->ctype_primary === 'multipart') && ($structure->ctype_secondary === 'alternative')) {
+        $best = null;
+        foreach ($structure->parts as $part) {
+            if ((($part->ctype_primary === 'text') && ($part->ctype_secondary === 'html')) || !$best) {
+                $best = $part;
+            }
+            if ($best->ctype_secondary === 'html') {
+                $best->body = html2bbcode($best->body);
+            }
+            $message['body'] = $best->body;
+        }
+    }
+    if ($structure->ctype_primary === 'image') {
+        if (!$message['images']) {
+            $message['images'] = array();
+        }
+        $matches = array();
+        if (preg_match('/<([^>]+)>/', $structure->headers['content-id'], $matches)) {
+            $image = array('cid' => $matches[1], 'data' => $structure->body);
+            array_push($message['images'], $image);
+        }
+    }
 }
 
 function mailstream_generate_id($a) {
