@@ -11,7 +11,8 @@ define("PRIVACY_IMAGE_CACHE_DEFAULT_TIME", 86400); // 1 Day
 require_once('include/security.php');
 
 function privacy_image_cache_install() {
-    register_hook('bbcode',       'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_bbcode_hook');
+    register_hook('prepare_body', 'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_prepare_body_hook');
+ //   register_hook('bbcode',       'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_bbcode_hook');
     register_hook('display_item', 'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_display_item_hook');
     register_hook('ping_xmlize',  'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_ping_xmlize_hook');
     register_hook('cron',         'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_cron');
@@ -19,6 +20,7 @@ function privacy_image_cache_install() {
 
 
 function privacy_image_cache_uninstall() {
+    unregister_hook('prepare_body', 'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_prepare_body_hook');
     unregister_hook('bbcode',       'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_bbcode_hook');
     unregister_hook('display_item', 'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_display_item_hook');
     unregister_hook('ping_xmlize',  'addon/privacy_image_cache/privacy_image_cache.php', 'privacy_image_cache_ping_xmlize_hook');
@@ -30,6 +32,11 @@ function privacy_image_cache_module() {}
 
 
 function privacy_image_cache_init() {
+	global $a;
+
+	if ($a->config["system"]["db_log"] != "")
+		$stamp1 = microtime(true);
+
 	if(function_exists('header_remove')) {
 		header_remove('Pragma');
 		header_remove('pragma');
@@ -39,17 +46,64 @@ function privacy_image_cache_init() {
 	// Double encoded url - happens with Diaspora
 	$urlhash2 = 'pic:' . sha1(urldecode($_REQUEST['url']));
 
+	$cache = get_config('system','itemcache');
+	if (($cache != '') and is_dir($cache)) {
+		$cachefile = $cache."/".hash("md5", $_REQUEST['url']);
+		if (file_exists($cachefile)) {
+			$img_str = file_get_contents($cachefile);
+
+			$mime = image_type_to_mime_type(exif_imagetype($cachefile));
+
+			header("Content-type: $mime");
+			header("Expires: " . gmdate("D, d M Y H:i:s", time() + (3600*24)) . " GMT");
+			header("Cache-Control: max-age=" . (3600*24));
+
+			echo $img_str;
+
+			if ($a->config["system"]["db_log"] != "") {
+				$stamp2 = microtime(true);
+				$duration = round($stamp2-$stamp1, 3);
+				if ($duration > $a->config["system"]["db_loglimit"])
+					@file_put_contents($a->config["system"]["db_log"], $duration."\t".strlen($img_str)."\t".$_REQUEST['url']."\n", FILE_APPEND);
+			}
+
+			killme();
+		}
+	}
+
+	require_once("Photo.php");
+
 	$r = q("SELECT * FROM `photo` WHERE `resource-id` in ('%s', '%s') LIMIT 1", $urlhash, $urlhash2);
 	if (count($r)) {
         	$img_str = $r[0]['data'];
 		$mime = $r[0]["desc"];
 		if ($mime == "") $mime = "image/jpeg";
+
+		// Test
+		//if ($mime == "image/jpeg") {
+		//	$img = new Photo($img_str);
+		//	if($img->is_valid()) {
+		//		$img->scaleImage(1000);
+		//		$img_str = $img->imageString();
+		//	}
+		//}
 	} else {
-		require_once("Photo.php");
+		// It shouldn't happen but it does - spaces in URL
+		$_REQUEST['url'] = str_replace(" ", "+", $_REQUEST['url']);
 
 		$img_str = fetch_url($_REQUEST['url'],true);
-		if (substr($img_str, 0, 6) == "GIF89a") {
-			$mime = "image/gif";
+
+		$tempfile = tempnam("", "cache");
+		file_put_contents($tempfile, $img_str);
+		$mime = image_type_to_mime_type(exif_imagetype($tempfile));
+		unlink($tempfile);
+
+		// If there is an error then return a blank image
+		if ((substr($a->get_curl_code(), 0, 1) == "4") or (!$img_str)) {
+			$img_str = file_get_contents("images/blank.png");
+			$mime = "image/png";
+		//} else if (substr($img_str, 0, 6) == "GIF89a") {
+		} else if ($mime != "image/jpeg") {
 			$image = @imagecreatefromstring($img_str);
 
 			if($image === FALSE) die();
@@ -64,7 +118,7 @@ function privacy_image_cache_init() {
 				dbesc(''),
 				intval(imagesy($image)),
 				intval(imagesx($image)),
-				'image/gif',
+				$mime,
 				dbesc($img_str),
 				100,
 				intval(0),
@@ -75,18 +129,29 @@ function privacy_image_cache_init() {
 			$img = new Photo($img_str);
 			if($img->is_valid()) {
 				$img->store(0, 0, $urlhash, $_REQUEST['url'], '', 100);
+				//$img->scaleImage(1000); // Test
 				$img_str = $img->imageString();
 			}
 			$mime = "image/jpeg";
 		}
 	}
 
+	// Writing in cachefile
+	if (isset($cachefile) && ($cachefile != '') and (exif_imagetype($cachefile) > 0))
+		file_put_contents($cachefile, $img_str);
 
 	header("Content-type: $mime");
 	header("Expires: " . gmdate("D, d M Y H:i:s", time() + (3600*24)) . " GMT");
 	header("Cache-Control: max-age=" . (3600*24));
 
 	echo $img_str;
+
+	if ($a->config["system"]["db_log"] != "") {
+		$stamp2 = microtime(true);
+		$duration = round($stamp2-$stamp1, 3);
+		if ($duration > $a->config["system"]["db_loglimit"])
+			@file_put_contents($a->config["system"]["db_log"], $duration."\t".strlen($img_str)."\t".$_REQUEST['url']."\n", FILE_APPEND);
+	}
 
 	killme();
 }
@@ -111,16 +176,27 @@ function privacy_image_cache_is_local_image($url) {
  */
 function privacy_image_cache_img_cb($matches) {
 	// following line changed per bug #431
-    if (privacy_image_cache_is_local_image($matches[2])) return $matches[1] . $matches[2] . $matches[3];
-    return $matches[1] . get_app()->get_baseurl() . "/privacy_image_cache/?url=" . escape_tags(addslashes(rawurlencode($matches[2]))) . $matches[3];
+	if (privacy_image_cache_is_local_image($matches[2]))
+		return $matches[1] . $matches[2] . $matches[3];
+
+	return $matches[1] . get_app()->get_baseurl() . "/privacy_image_cache/?url=" . addslashes(rawurlencode(htmlspecialchars_decode($matches[2]))) . $matches[3];
 }
 
 /**
  * @param App $a
  * @param string $o
  */
+function privacy_image_cache_prepare_body_hook(&$a, &$o) {
+	$o["html"] = preg_replace_callback("/(<img [^>]*src *= *[\"'])([^\"']+)([\"'][^>]*>)/siU", "privacy_image_cache_img_cb", $o["html"]);
+}
+
+/**
+ * @param App $a
+ * @param string $o
+ * Function disabled because the plugin moved
+ */
 function privacy_image_cache_bbcode_hook(&$a, &$o) {
-    $o = preg_replace_callback("/(<img [^>]*src *= *[\"'])([^\"']+)([\"'][^>]*>)/siU", "privacy_image_cache_img_cb", $o);
+	//$o = preg_replace_callback("/(<img [^>]*src *= *[\"'])([^\"']+)([\"'][^>]*>)/siU", "privacy_image_cache_img_cb", $o);
 }
 
 

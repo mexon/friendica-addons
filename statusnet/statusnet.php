@@ -460,9 +460,9 @@ function statusnet_post_hook(&$a,&$b) {
 			// recycle 1
 			$recycle = html_entity_decode("&#x2672; ", ENT_QUOTES, 'UTF-8');
 			$tmp = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', $recycle.'$2', $tmp);
-			// recycle 2
-			//$recycle = html_entity_decode("&#x267B; ", ENT_QUOTES, 'UTF-8');
-			//$tmp = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', 'RT @$2:', $tmp);
+			// recycle 2 (test)
+			$recycle = html_entity_decode("&#x25CC; ", ENT_QUOTES, 'UTF-8');
+			$tmp = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', $recycle.'$2', $tmp);
                 }
                 // preserve links to webpages
                 $tmp = preg_replace( '/\[url\=(https?\:\/\/[a-zA-Z0-9\:\/\-\?\&\;\.\=\_\~\#\%\$\!\+\,]+)\](\w+.*?)\[\/url\]/i', '$2 $1', $tmp);
@@ -482,9 +482,14 @@ function statusnet_post_hook(&$a,&$b) {
                 }
                 // ok, all the links we want to send out are save, now strip 
                 // away the remaining bbcode
-		$msg = strip_tags(bbcode($tmp, false, false));
+		//$msg = strip_tags(bbcode($tmp, false, false));
+		$msg = bbcode($tmp, false, false);
+		$msg = str_replace(array('<br>','<br />'),"\n",$msg);
+		$msg = strip_tags($msg);
+
 		// quotes not working - let's try this
 		$msg = html_entity_decode($msg);
+
 		if (( strlen($msg) > $max_char) && $max_char > 0) {
 			$shortlink = short_link( $b['plink'] );
 			// the new message will be shortened such that "... $shortlink"
@@ -498,10 +503,14 @@ function statusnet_post_hook(&$a,&$b) {
                         $msg = implode(' ', $e);
 			$msg .= '... ' . $shortlink;
 		}
+
+		$msg = trim($msg);
+
 		// and now dent it :-)
 		if(strlen($msg)) {
                     $result = $dent->post('statuses/update', array('status' => $msg));
-                    logger('statusnet_post send, result: ' . print_r($result, true), LOGGER_DEBUG);
+                    logger('statusnet_post send, result: ' . print_r($result, true).
+                           "\nmessage: ".$msg, LOGGER_DEBUG."\nOriginal post: ".print_r($b));
                     if ($result->error) {
                         logger('Send to StatusNet failed: "' . $result->error . '"');
                     }

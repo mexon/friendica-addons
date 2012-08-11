@@ -209,7 +209,7 @@ function twitter_settings(&$a,&$s) {
 			$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="twitter-submit" class="settings-submit" value="' . t('Submit') . '" /></div>'; 
 		}
 	}
-        $s .= '</div><div class="clear"></div></div>';
+        $s .= '</div><div class="clear"></div>';
 }
 
 
@@ -326,9 +326,9 @@ function twitter_post_hook(&$a,&$b) {
 			// recycle 1
 			$recycle = html_entity_decode("&#x2672; ", ENT_QUOTES, 'UTF-8');
 			$tmp = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', $recycle.'$2', $tmp);
-			// recycle 2
-			//$recycle = html_entity_decode("&#x267B; ", ENT_QUOTES, 'UTF-8');
-			//$tmp = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', 'RT @$2:', $tmp);
+			// recycle 2 (Test)
+			$recycle = html_entity_decode("&#x25CC; ", ENT_QUOTES, 'UTF-8');
+			$tmp = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', $recycle.'$2', $tmp);
                 }
                 $tmp = preg_replace( '/\[url\=(https?\:\/\/[a-zA-Z0-9\:\/\-\?\&\;\.\=\_\~\#\%\$\!\+\,]+)\](\w+.*?)\[\/url\]/i', '$2 $1', $tmp);
                 $tmp = preg_replace( '/\[bookmark\=(https?\:\/\/[a-zA-Z0-9\:\/\-\?\&\;\.\=\_\~\#\%\$\!\+\,]+)\](\w+.*?)\[\/bookmark\]/i', '$2 $1', $tmp);
@@ -347,7 +347,11 @@ function twitter_post_hook(&$a,&$b) {
                 }
                 // ok, all the links we want to send out are save, now strip 
                 // away the remaining bbcode
-		$msg = strip_tags(bbcode($tmp, false, false));
+		//$msg = strip_tags(bbcode($tmp, false, false));
+		$msg = bbcode($tmp, false, false);
+		$msg = str_replace(array('<br>','<br />'),"\n",$msg);
+		$msg = strip_tags($msg);
+
 		// quotes not working - let's try this
 		$msg = html_entity_decode($msg);
 		if (( strlen($msg) > $max_char) && $max_char > 0) {
@@ -363,6 +367,9 @@ function twitter_post_hook(&$a,&$b) {
                         $msg = implode(' ', $e);
 			$msg .= '... ' . $shortlink;
 		}
+
+		$msg = trim($msg);
+
 		// and now tweet it :-)
 		if(strlen($msg)) {
 			$result = $tweet->post('statuses/update', array('status' => $msg));

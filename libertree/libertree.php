@@ -153,8 +153,9 @@ function libertree_send(&$a,&$b) {
 	$ltree_api_token = get_pconfig($b['uid'],'libertree','libertree_api_token');
 	$ltree_url = get_pconfig($b['uid'],'libertree','libertree_url');
 	$ltree_blog = "$ltree_url/api/v1/posts/create/?token=$ltree_api_token";
-
-	if($ltree_url && $ltree_api_token && $ltree_blog) {
+	//$ltree_source = "Friendica";
+	$ltree_source = "[".$a->config['sitename']."](".$a->get_baseurl().")";
+	if($ltree_url && $ltree_api_token && $ltree_blog && $ltree_source) {
 
 		require_once('include/bb2diaspora.php');
 		$tag_arr = array();
@@ -171,7 +172,6 @@ function libertree_send(&$a,&$b) {
 
 		$title = $b['title'];
 		$body = $b['body'];
-
 		// Insert a newline before and after a quote
 		$body = str_ireplace("[quote", "\n\n[quote", $body);
 		$body = str_ireplace("[/quote]", "[/quote]\n\n", $body);
@@ -189,14 +189,16 @@ function libertree_send(&$a,&$b) {
                 } while ($oldbody != $body);
 
 		// convert to markdown
-		$body = bb2diaspora($body);
+		$body = bb2diaspora($body, false, false);
 
 		// Adding the title
 		if(strlen($title))
 			$body = "## ".html_entity_decode($title)."\n\n".$body;
 
+
 		$params = array(
-			'text' => $body
+			'text' => $body,
+			'source' => $ltree_source
 		//	'token' => $ltree_api_token
 		);
 
