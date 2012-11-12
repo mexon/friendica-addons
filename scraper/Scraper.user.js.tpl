@@ -31,13 +31,9 @@ var scraper = {
         }
     },
 
-    search_html: function(path) {
-        var entries = document.evaluate(path, document, null, XPathResult.ANY_TYPE, null);
-        return entries.iterateNext();
-    },
-
     close_window: function() {
         this.window.close();
+        clearInterval(this.interval_id);
     },
     go_url: function(command) {
         this.window.location.href = command["url"];
@@ -89,9 +85,6 @@ var scraper = {
             this.search_html(command["path"]).value = value;
             return 'ok';
         }
-    },
-    click: function(command) {
-        this.search_html(command["path"]).click();
     },
 
     request_command: function(scraper, previous_result) {
@@ -156,6 +149,15 @@ var friendica_scraper;
 function zombie_methods(scraper) {
     var xslt = require('node_xslt');
 
+    scraper.go_url = function(command) {
+        this.browser.visit(command["url"]);
+        this.window.location.href = command["url"];
+    },
+
+    scraper.click = function(command) {
+        this.search_html(command["path"]).click();
+    },
+
     scraper.request = function(method, url, data, callback) {
         var request = new friendica_scraper.window.XMLHttpRequest();
         var scraper = this;
@@ -200,10 +202,19 @@ function zombie_methods(scraper) {
         var newdoc = xslt.readHtmlString(this.browser.document.outerHTML);
         this.scraped = xslt.transform(this.xslt, newdoc, []);
         this.scraped = libxmljs.parseXmlString(this.scraped);
-        var status = this.search_scraped("//sc:status");
-        this.log('@@@ status is '  + status);
-        this.request("POST", this.server_url + "/scraper/scraped/" + this.user + "/" + this.id, status.textContent, null);
+        var status = this.search_scraped("//sc:status/text()");
+        this.status = JSON.parse(status);
+        this.request("POST", this.server_url + "/scraper/scraped/" + this.user + "/" + this.id, status, null);
     };
+
+    scraper.search_html = function(path) {
+        var result = this.browser.xpath(path);
+        if (result.type == 'node-set')
+        {
+            return result.value[0];
+        }
+        return result;
+    },
 
     scraper.search_scraped = function(path) {
         if (!this.scraped) {
@@ -225,6 +236,15 @@ function zombie_methods(scraper) {
 }
 
 function greasemonkey_methods(scraper) {
+
+    scraper.go_url = function(command) {
+        this.window.location.href = command["url"];
+    },
+
+    scraper.click = function(command) {
+        this.search_html(command["path"]).click();
+    },
+
     scraper.request = function(method, url, data, callback) {
         GM_xmlhttpRequest({
             method: method,
@@ -249,10 +269,16 @@ function greasemonkey_methods(scraper) {
     scraper.scrape = function() {
         if (this.xslt) {
             this.scraped = this.xslt.transformToDocument(document);
-            var status = this.search_scraped("//sc:status");
-            this.request("POST", this.server_url + "/scraper/scraped/" + this.user + "/" + this.id, status.textContent, null);
+            var status = this.search_scraped("//sc:status/text()").textContent;
+            this.status = JSON.parse(status);
+            this.request("POST", this.server_url + "/scraper/scraped/" + this.user + "/" + this.id, status, null);
         }
     };
+
+    scraper.search_html = function(path) {
+        var entries = document.evaluate(path, document, null, XPathResult.ANY_TYPE, null);
+        return entries.iterateNext();
+    },
 
     scraper.search_scraped = function(path) {
         if (!this.scraped) {
@@ -282,6 +308,7 @@ if (typeof require == 'function') {
                       function (e, browser) {
                           browser.window.name = "";
                           friendica_scraper = new_scraper(browser.window, zombie_methods);
+                          friendica_scraper.browser = browser;
                           friendica_scraper.register();
                       });
     }
