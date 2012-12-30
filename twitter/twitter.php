@@ -294,6 +294,9 @@ function twitter_shortenmsg($b) {
 	$recycle = html_entity_decode("&#x25CC; ", ENT_QUOTES, 'UTF-8');
 	$body = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', "\n", $body);
 
+	// remove the share element
+	$body = preg_replace("/\[share(.*?)\](.*?)\[\/share\]/ism","\n\n$2\n\n",$body);
+
 	// At first convert the text to html
 	$html = bbcode($body, false, false);
 
@@ -354,7 +357,7 @@ function twitter_shortenmsg($b) {
 		$msg = substr($msg, 0, -1);
 		$pos = strrpos($msg, "\n");
 		if ($pos > 0)
-			$msg = substr($msg, 0, $pos-1);
+			$msg = substr($msg, 0, $pos);
 		else if ($lastchar != "\n")
 			$msg = substr($msg, 0, -3)."...";
 	}
@@ -501,8 +504,14 @@ function twitter_plugin_admin_post(&$a){
 	info( t('Settings updated.'). EOL );
 }
 function twitter_plugin_admin(&$a, &$o){
-	$t = file_get_contents( dirname(__file__). "/admin.tpl" );
-	$o = replace_macros($t, array(
+	$t = get_markup_template( "admin.tpl", "addon/twitter/" );
+
+	$includes = array(
+		'$field_input' => 'field_input.tpl',
+	);
+	$includes = set_template_includes($a->theme['template_engine'], $includes);
+
+	$o = replace_macros($t, $includes + array(
 		'$submit' => t('Submit'),
 								// name, label, value, help, [extra values]
 		'$consumerkey' => array('consumerkey', t('Consumer key'),  get_config('twitter', 'consumerkey' ), ''),

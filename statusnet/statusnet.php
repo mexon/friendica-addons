@@ -435,6 +435,9 @@ function statusnet_shortenmsg($b, $max_char) {
 	$recycle = html_entity_decode("&#x25CC; ", ENT_QUOTES, 'UTF-8');
 	$body = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', "\n", $body);
 
+	// remove the share element
+	$body = preg_replace("/\[share(.*?)\](.*?)\[\/share\]/ism","\n\n$2\n\n",$body);
+
 	// At first convert the text to html
 	$html = bbcode($body, false, false);
 
@@ -495,7 +498,7 @@ function statusnet_shortenmsg($b, $max_char) {
 		$msg = substr($msg, 0, -1);
 		$pos = strrpos($msg, "\n");
 		if ($pos > 0)
-			$msg = substr($msg, 0, $pos-1);
+			$msg = substr($msg, 0, $pos);
 		else if ($lastchar != "\n")
 			$msg = substr($msg, 0, -3)."...";
 	}
@@ -505,7 +508,7 @@ function statusnet_shortenmsg($b, $max_char) {
 	while (strpos($msg, "  ") !== false)
 		$msg = str_replace("  ", " ", $msg);
 
-	return(trim($msg." ".$msglink));
+	return(array("msg"=>trim($msg." ".$msglink), "image"=>$image));
 }
 
 function statusnet_post_hook(&$a,&$b) {
@@ -538,6 +541,7 @@ function statusnet_post_hook(&$a,&$b) {
                 // information during shortening of potential links but do not
                 // shorten all the links in a 200000 character long essay.
 
+		$tempfile = "";
 		$intelligent_shortening = get_config('statusnet','intelligent_shortening');
 		if (!$intelligent_shortening) {
 	                if (! $b['title']=='') {
@@ -612,18 +616,32 @@ function statusnet_post_hook(&$a,&$b) {
 			}
 
 			$msg = trim($msg);
-		} else
-			$msg = statusnet_shortenmsg($b, $max_char);
+			$postdata = array('status' => $msg);
+		} else {
+			$msgarr = statusnet_shortenmsg($b, $max_char);
+			$msg = $msgarr["msg"];
+			$image = $msgarr["image"];
+			if ($image != "") {
+				$imagedata = file_get_contents($image);
+				$tempfile = tempnam(get_config("system","temppath"), "upload");
+				file_put_contents($tempfile, $imagedata);
+				$postdata = array("status"=>$msg, "media"=>"@".$tempfile);
+			} else
+				$postdata = array("status"=>$msg);
+		}
 
 		// and now dent it :-)
 		if(strlen($msg)) {
-                    $result = $dent->post('statuses/update', array('status' => $msg));
+                    //$result = $dent->post('statuses/update', array('status' => $msg));
+                    $result = $dent->post('statuses/update', $postdata);
                     logger('statusnet_post send, result: ' . print_r($result, true).
-                           "\nmessage: ".$msg, LOGGER_DEBUG."\nOriginal post: ".print_r($b));
+                           "\nmessage: ".$msg, LOGGER_DEBUG."\nOriginal post: ".print_r($b, true)."\nPost Data: ".print_r($postdata, true));
                     if ($result->error) {
                         logger('Send to StatusNet failed: "' . $result->error . '"');
                     }
                 }
+		if ($tempfile != "")
+			unlink($tempfile);
 	}
 }
 
@@ -680,7 +698,7 @@ function statusnet_plugin_admin(&$a, &$o){
 	);
 
 	
-	$t = file_get_contents( dirname(__file__). "/admin.tpl" );
+	$t = get_markup_template( "admin.tpl", "addon/statusnet/" );
 	$o = replace_macros($t, array(
 		'$submit' => t('Submit'),
 							
