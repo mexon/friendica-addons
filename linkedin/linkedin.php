@@ -58,6 +58,10 @@ function linkedin_state_machine() {
             $window['state'] = 'wait';
             return array("function" => "close_window");
         },
+        'login' => function(&$window) {
+            $window['state'] = 'scrape-home';
+            return null;
+        },
         'enter-pass' => function(&$window) {
             $window['state'] = 'click-login';
             return array('function' => 'enter_value_from_prompt',
@@ -75,7 +79,7 @@ function linkedin_state_machine() {
                 $window['state'] = 'enter-pass';
                 return array("function" => "enter_value",
                              "path" => "//*[@id='session_key-login']",
-                             "value" => get_pconfig(local_user(), 'linkedin', 'user'));
+                             "value" => get_pconfig($window['uid'], 'linkedin', 'user'));
             }
             if ($window['scraped']->page != 'home') {
                 return array("function" => "go_url", "url" => "http://www.linkedin.com/");
