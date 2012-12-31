@@ -79,6 +79,15 @@ $retriever_schedule = array(array(1,'minute'),
     foreach ($r as $rr) {
         retrieve_resource($rr);
     }
+
+    retriever_tidy();
+}
+
+function retriever_tidy() {
+    logger('@@@ retriever_tidy begin');
+    $r = q("DELETE FROM retriever_resource WHERE completed > '0000-00-00 00:00:00' AND completed < DATE_SUB(NOW(), INTERVAL 1 WEEK)");
+    logger('@@@ deleted ' . mysql_affected_rows() . ' retriever_resources');
+    logger('@@@ retriever_tidy end');
 }
 
 function retrieve_resource($resource) {
