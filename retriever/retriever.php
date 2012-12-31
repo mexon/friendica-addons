@@ -241,6 +241,11 @@ function retriever_apply_dom_filter($retriever, &$item, $text) {
     $xp->importStylesheet($xmldoc);
     $transformed = $xp->transformToXML($doc);
     $item['body'] = html2bbcode($transformed);
+    $item['body'] .= "\n\n[i][color= #999999][url=";
+    $item['body'] .=  $item['plink'];
+    $item['body'] .= "]retrieved[/url] ";
+    $item['body'] .= date("Y-m-d");
+    $item['body'] .= "[/color][/i]";
     if (!$item['body']) {
         logger('retriever_apply_dom_filter: output was empty', LOGGER_ERROR);
         return;
