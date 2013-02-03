@@ -331,10 +331,14 @@ function mailstream_send($a, $ms_item, $item, $user) {
         $template = file_get_contents(dirname(__file__).'/mail.tpl');
         $item['body'] = bbcode($item['body']);
         $mail->Body = replace_macros($template, array('$item' => $item));
-        $mail->Send();
+        if (!$mail->Send()) {
+            throw new Exception($mail->ErrorInfo);
+        }
         q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
     } catch (phpmailerException $e) {
-        logger('PHPMailer exception: ' . $e->errorMessage()); //Pretty error messages from PHPMailer
+        logger('mailstream_send PHPMailer exception sending message ' . $ms_item['message-id'] . ': ' . $e->errorMessage()); //Pretty error messages from PHPMailer
+    } catch (Exception $e) {
+        logger('mailstream_send exception sending message ' . $ms_item['message-id'] . ': ' . $e->getMessage());
     }
 }
 
