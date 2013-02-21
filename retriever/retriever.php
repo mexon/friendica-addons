@@ -92,14 +92,14 @@ function retriever_tidy() {
     $count = 0;
     foreach ($r as $rr) {
         $count++;
-        q('DELETE FROM retriever_resource WHERE id = ' . $r['id']);
+        q('DELETE FROM retriever_resource WHERE id = %d', intval($rr['id']));
     }
 
     $r = q("SELECT retriever_item.id FROM retriever_item LEFT OUTER JOIN retriever_resource ON (retriever_item.resource = retriever_resource.id) WHERE retriever_resource.id is null");
     $count = 0;
     foreach ($r as $rr) {
         $count++;
-        q('DELETE FROM retriever_item WHERE id = ' . $r['id']);
+        q('DELETE FROM retriever_item WHERE id = %d', intval($rr['id']));
     }
 }
 
