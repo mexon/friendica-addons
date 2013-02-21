@@ -323,8 +323,12 @@ function mailstream_send($a, $ms_item, $item, $user) {
         $mail->AddAddress($email, $user['username']);
         $mail->MessageID = $ms_item['message-id'];
         $mail->Subject = mailstream_subject($item);
+        $encoding = 'base64';
+        $type = 'application/octet-stream';
+        /* fixme@@@ */
+        /* image/gif image/jpeg image/png image/svg+xml */
         foreach ($attachments as $url=>$image) {
-            $mail->AddStringEmbeddedImage($image['data'], $image['guid'], $image['filename']);
+            $mail->AddStringEmbeddedImage($image['data'], $image['guid'], $image['filename'], $encoding, $type);
         }
         $mail->IsHTML(true);
         $mail->CharSet = 'utf-8';

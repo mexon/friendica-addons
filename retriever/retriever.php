@@ -38,7 +38,11 @@ function retriever_install() {
     if (get_config('retriever', 'dbversion') == '0.2') {
         q("ALTER TABLE `retriever_resource` DROP COLUMN `retriever`");
     }
-    set_config('retriever', 'dbversion', '0.3');
+    if (get_config('retriever', 'dbversion') == '0.3') {
+        q("ALTER TABLE `retriever_item` MODIFY COLUMN `item-uri` varchar(800) CHARACTER SET ascii NOT NULL");
+        q("ALTER TABLE `retriever_resource` MODIFY COLUMN `url` varchar(800) CHARACTER SET ascii NOT NULL");
+    }
+    set_config('retriever', 'dbversion', '0.4');
 }
 
 function retriever_uninstall() {
@@ -90,7 +94,6 @@ function retriever_tidy() {
         $count++;
         q('DELETE FROM retriever_resource WHERE id = ' . $r['id']);
     }
-    logger('@@@ retriever_tidy deleted ' . $count . ' retriever_resource rows');
 
     $r = q("SELECT retriever_item.id FROM retriever_item LEFT OUTER JOIN retriever_resource ON (retriever_item.resource = retriever_resource.id) WHERE retriever_resource.id is null");
     $count = 0;
@@ -98,7 +101,99 @@ function retriever_tidy() {
         $count++;
         q('DELETE FROM retriever_item WHERE id = ' . $r['id']);
     }
-    logger('@@@ retriever_tidy deleted ' . $count . ' retriever_item rows');
+}
+
+function retriever_fetch_url($url,$binary = false, &$content_type, &$redirects = 0, $timeout = 0, $accept_content=Null) {
+
+	$a = get_app();
+
+	$ch = @curl_init($url);
+	if(($redirects > 8) || (! $ch)) 
+		return false;
+
+	@curl_setopt($ch, CURLOPT_HEADER, true);
+
+	@curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+	@curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+
+	if (!is_null($accept_content)){
+		curl_setopt($ch,CURLOPT_HTTPHEADER, array (
+			"Accept: " . $accept_content
+		));
+	}
+
+	@curl_setopt($ch, CURLOPT_RETURNTRANSFER,true);
+	//@curl_setopt($ch, CURLOPT_USERAGENT, "Friendica");
+	@curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (compatible; Friendica)");
+
+
+	if(intval($timeout)) {
+		@curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+	}
+	else {
+		$curl_time = intval(get_config('system','curl_timeout'));
+		@curl_setopt($ch, CURLOPT_TIMEOUT, (($curl_time !== false) ? $curl_time : 60));
+	}
+	// by default we will allow self-signed certs
+	// but you can override this
+
+	$check_cert = get_config('system','verifyssl');
+	@curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, (($check_cert) ? true : false));
+
+	$prx = get_config('system','proxy');
+	if(strlen($prx)) {
+		@curl_setopt($ch, CURLOPT_HTTPPROXYTUNNEL, 1);
+		@curl_setopt($ch, CURLOPT_PROXY, $prx);
+		$prxusr = @get_config('system','proxyuser');
+		if(strlen($prxusr))
+			@curl_setopt($ch, CURLOPT_PROXYUSERPWD, $prxusr);
+	}
+	if($binary)
+		@curl_setopt($ch, CURLOPT_BINARYTRANSFER,1);
+
+	$a->set_curl_code(0);
+
+	// don't let curl abort the entire application
+	// if it throws any errors.
+
+	$s = @curl_exec($ch);
+
+	$base = $s;
+	$curl_info = @curl_getinfo($ch);
+	$http_code = $curl_info['http_code'];
+        $content_type = $curl_info['content_type'];
+
+//	logger('fetch_url:' . $http_code . ' data: ' . $s);
+	$header = '';
+
+	// Pull out multiple headers, e.g. proxy and continuation headers
+	// allow for HTTP/2.x without fixing code
+
+	while(preg_match('/^HTTP\/[1-2].+? [1-5][0-9][0-9]/',$base)) {
+		$chunk = substr($base,0,strpos($base,"\r\n\r\n")+4);
+		$header .= $chunk;
+		$base = substr($base,strlen($chunk));
+	}
+
+	if($http_code == 301 || $http_code == 302 || $http_code == 303 || $http_code == 307) {
+		$matches = array();
+		preg_match('/(Location:|URI:)(.*?)\n/', $header, $matches);
+		$newurl = trim(array_pop($matches));
+		if(strpos($newurl,'/') === 0)
+			$newurl = $url . $newurl;
+		$url_parsed = @parse_url($newurl);
+		if (isset($url_parsed)) {
+			$redirects++;
+			return fetch_url($newurl,$binary,$redirects,$timeout);
+		}
+	}
+
+	$a->set_curl_code($http_code);
+
+	$body = substr($s,strlen($header));
+	$a->set_curl_headers($header);
+	@curl_close($ch);
+	return($body);
 }
 
 function retrieve_resource($resource) {
@@ -106,11 +201,11 @@ function retrieve_resource($resource) {
            ' attempt at resource ' . $resource['url'], LOGGER_DEBUG);
     q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1 WHERE id = %d",
       intval($resource['id']));
-    $data = fetch_url($resource['url'], $resource['binary']);
+    $data = retriever_fetch_url($resource['url'], $resource['binary'], $resource['type']);
     if ($data) {
         $resource['data'] = $data;
-        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s' WHERE id = %d",
-          dbesc($data), intval($resource['id']));
+        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s' WHERE id = %d",
+          dbesc($data), dbesc($resource['type']), intval($resource['id']));
         resource_completed($resource);
     }
 }
@@ -182,11 +277,11 @@ function retriever_on_item_insert($retriever, &$item) {
         $url = $item['plink'];
     }
 
-    $resource = add_retriever_resource($url, "html");
+    $resource = add_retriever_resource($url);
     add_retriever_item($item, $resource);
 }
 
-function add_retriever_resource($url, $type, $binary = false) {
+function add_retriever_resource($url, $binary = false) {
     logger('add_retriever_resource: ' . $url, LOGGER_DEBUG);
     $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
     $resource = $r[0];
@@ -195,9 +290,9 @@ function add_retriever_resource($url, $type, $binary = false) {
         return $r[0];
     }
     else {
-        q("INSERT INTO `retriever_resource` (`type`, `binary`, `url`, `created`) " .
-          "VALUES ('%s', %d, '%s', now())",
-          dbesc($type), intval($binary ? 1 : 0), dbesc($url));
+        q("INSERT INTO `retriever_resource` (`binary`, `url`, `created`) " .
+          "VALUES (%d, '%s', now())",
+          intval($binary ? 1 : 0), dbesc($url));
         $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
         return $r[0];
     }
@@ -232,18 +327,23 @@ function add_retriever_item(&$item, $resource, $parent = null) {
     }
 }
 
-function retriever_apply_dom_filter($retriever, &$item, $text) {
+function retriever_apply_dom_filter($retriever, &$item, $resource) {
     logger('retriever_apply_dom_filter: applying XSLT to ' . $item['plink'], LOGGER_DEBUG);
     require_once('include/html2bbcode.php');	
 
-    if (!$text) {
+    if (!$resource['data']) {
         logger('retriever_apply_dom_filter: no text to work with', LOGGER_ERROR);
         return;
     }
 
     $extracter_template = file_get_contents(dirname(__file__).'/extract.tpl');
     $doc = new DOMDocument();
-    $doc->loadHTML($text);
+    if (strpos($resource['type'], 'html')) {
+        $doc->loadHTML($resource['data']);
+    }
+    else {
+        $doc->loadXML($resource['data']);
+    }
 
     $components = parse_url($item['plink']);
     $rooturl = $components['scheme'] . "://" . $components['host'];
@@ -277,7 +377,7 @@ function retrieve_images(&$item, $parent_retriever_item) {
     $matches = array_merge($matches1[3], $matches2[1]);
     foreach ($matches as $url) {
         if (strpos($url, get_app()->get_baseurl()) === FALSE) {
-            $resource = add_retriever_resource($url, "image", true);
+            $resource = add_retriever_resource($url, true);
             if ($resource['completed'] == '0000-00-00 00:00:00') {
                 add_retriever_item($item, $resource, $parent_retriever_item);
             }
@@ -291,13 +391,14 @@ function retrieve_images(&$item, $parent_retriever_item) {
 function retriever_on_resource_completed($retriever, &$item, $resource, $retriever_item) {
     logger('retriever_on_resource_completed: retriever ' . $retriever['id'] .
            ' resource ' . $resource['url'], LOGGER_DEBUG);
-    if ($resource['type'] == 'html') {
-        retriever_apply_dom_filter($retriever, $item, $resource['data']);
+    if (strpos($resource['type'], 'html') ||
+        strpos($resource['type'], 'xml')) {
+        retriever_apply_dom_filter($retriever, $item, $resource);
         if ($retriever["data"]->images ) {
             retrieve_images($item, $retriever_item);
         }
     }
-    if ($resource['type'] == 'image') {
+    if (strpos($resource['type'], 'image')) {
         retriever_transform_images($item, $resource, $retriever_item);
     }
 }
@@ -343,6 +444,7 @@ function retriever_content($a) {
 
         $template = file_get_contents(dirname(__file__).'/rule-config.tpl');
         $a->page['content'] .= replace_macros($template, array(
+            '$posts' => array('one', 'two', 'three'),
             '$title' => t('Retrieve Feed Content'),
             '$submit' => t('Submit'),
             '$id' => ($retriever["id"] ? $retriever["id"] : "create"),
