@@ -84,6 +84,7 @@ function publicise($a, $contact, $owner) {
         'blocktags' => make_int_field(0),
         'notify-flags' => make_int_field($owner['notifyflags']),
         'page-flags' => make_int_field(PAGE_SOAPBOX),
+        'expire' => make_int_field(30), /* @@@ FIXME make configurable */
         );
     logger('Publicise: created user ' . print_r($newuser, true), LOGGER_DATA);
     $r = q("INSERT INTO `user` (`" 

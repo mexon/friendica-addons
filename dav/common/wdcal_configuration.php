@@ -5,6 +5,7 @@ abstract class wdcal_local
 
 	const LOCAL_US = 0;
 	const LOCAL_DE = 1;
+	const LOCAL_CN = 2;
 
 	/**
 	 * @static
@@ -14,6 +15,7 @@ abstract class wdcal_local
 		return array(
 			self::LOCAL_US => "wdcal_local_us",
 			self::LOCAL_DE => "wdcal_local_de",
+			self::LOCAL_CN => "wdcal_local_cn",
 		);
 	}
 
@@ -318,6 +320,85 @@ class wdcal_local_de extends  wdcal_local {
 	 */
 	function dateformat_datepicker_php($ts = 0) {
 		return date("d.m.Y", $ts);
+	}
+}
+
+class wdcal_local_de extends  wdcal_local {
+
+	/**
+	 * @return string
+	 */
+	static function getName() {
+		return t("Chinese Time Format (YYYY.mm.dd)");
+	}
+
+	/**
+	 * @static
+	 * @return int
+	 */
+	static function getID() {
+		return wdcal_local::LOCAL_CN;
+	}
+
+	/**
+	 * @param string $str
+	 * @return array
+	 */
+	function date_parseLocal($str)
+	{
+		return date_parse_from_format("Y.m.d H:i", $str);
+	}
+
+	/**
+	 * @param int $ts
+	 * @return string
+	 */
+	function date_timestamp2local($ts)
+	{
+		return date("Y.m.d H:i", $ts);
+	}
+
+	/**
+	 * @return int
+	 */
+	function getFirstDayOfWeek() {
+		return 1;
+	}
+
+	/**
+	 * @return string
+	 */
+	function dateformat_js_dm1() {
+		return "W, M.d";
+	}
+
+	/**
+	 * @return string
+	 */
+	function dateformat_js_dm2() {
+		return "d. L";
+	}
+
+	/**
+	 * @return string
+	 */
+	function dateformat_js_dm3() {
+		return "yyyy.L.d";
+	}
+
+	/**
+	 * @return string
+	 */
+	function dateformat_datepicker_js() {
+		return "yy.mm.dd";
+	}
+
+	/**
+	 * @param int $ts
+	 * @return string
+	 */
+	function dateformat_datepicker_php($ts = 0) {
+		return date("Y.m.d", $ts);
 	}
 }
 
