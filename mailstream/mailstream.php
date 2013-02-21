@@ -335,10 +335,14 @@ function mailstream_send($a, $ms_item, $item, $user) {
         $template = file_get_contents(dirname(__file__).'/mail.tpl');
         $item['body'] = bbcode($item['body']);
         $mail->Body = replace_macros($template, array('$item' => $item));
-        $mail->Send();
+        if (!$mail->Send()) {
+            throw new Exception($mail->ErrorInfo);
+        }
         q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
     } catch (phpmailerException $e) {
-        logger('PHPMailer exception: ' . $e->errorMessage()); //Pretty error messages from PHPMailer
+        logger('mailstream_send PHPMailer exception sending message ' . $ms_item['message-id'] . ': ' . $e->errorMessage()); //Pretty error messages from PHPMailer
+    } catch (Exception $e) {
+        logger('mailstream_send exception sending message ' . $ms_item['message-id'] . ': ' . $e->getMessage());
     }
 }
 
@@ -354,6 +358,7 @@ SELECT `mailstream_item`.*
  LIMIT 100
 EOF;
     $ms_items = q($query);
+    logger('mailstream_cron processing ' . count($ms_items) . ' items');
     foreach ($ms_items as $ms_item) {
         $items = q("SELECT * FROM `item` WHERE `uid` = %d AND `plink` = '%s' AND `contact-id` = %d",
                    intval($ms_item['uid']), dbesc($ms_item['plink']), intval($ms_item['contact-id']));
@@ -365,6 +370,7 @@ EOF;
         }
         else {
             logger('mailstream_cron: Unable to find item ' . $ms_item['plink']);
+            q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
         }
     }
 }

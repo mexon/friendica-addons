@@ -192,6 +192,11 @@ function publicise_post_remote_hook(&$a, &$item) {
 }
 
 function publicise_post_remote_end_hook(&$a, $item) {
-    proc_run('php', "include/notifier.php", 'wall-new', $item['id']);
+    $r1 = q("select uid from contact where id = %d and reason = 'publicise'", $item['contact-id']);
+    if (!$r1) {
+        return;
+    }
+
+    //proc_run('php', "include/notifier.php", 'wall-new', $item['id']);
 }
 

@@ -245,7 +245,7 @@ function retriever_item_completed($retriever_item_id, $resource) {
                intval($retriever_item['contact-id']));
 
     foreach ($items as $item) {
-        retriever_on_resource_completed($retriever, $item, $resource, $retriever_item);
+        $changed = retriever_on_resource_completed($retriever, $item, $resource, $retriever_item);
     }
 }
 
@@ -364,15 +364,22 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $xp->importStylesheet($xmldoc);
     $transformed = $xp->transformToXML($doc);
     $item['body'] = html2bbcode($transformed);
+    $item['body'] .= "\n\n[i][color= #999999][url=";
+    $item['body'] .=  $item['plink'];
+    $item['body'] .= "]retrieved[/url] ";
+    $item['body'] .= date("Y-m-d");
+    $item['body'] .= "[/color][/i]";
     if (!$item['body']) {
         logger('retriever_apply_dom_filter: output was empty', LOGGER_ERROR);
         return;
     }
     q("UPDATE `item` SET `body` = '%s', `received` = now(), `edited` = now() WHERE `id` = %d",
       dbesc($item['body']), intval($item['id']));
+    return TRUE;
 }
 
 function retrieve_images(&$item, $parent_retriever_item) {
+    $changed = FALSE;
     $matches1 = array();
     preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches1);
     $matches2 = array();
@@ -385,38 +392,52 @@ function retrieve_images(&$item, $parent_retriever_item) {
                 add_retriever_item($item, $resource, $parent_retriever_item);
             }
             else {
-                retriever_transform_images($item, $resource);
+                $changed = retriever_transform_images($item, $resource) || $changed;
             }
         }
     }
+    return $changed;
 }
 
 function retriever_on_resource_completed($retriever, &$item, $resource, $retriever_item) {
     logger('retriever_on_resource_completed: retriever ' . $retriever['id'] .
-           ' resource ' . $resource['url'], LOGGER_DEBUG);
+           ' resource ' . $resource['url'] . ' plink ' . $item['plink'], LOGGER_DEBUG);
+    $changed = FALSE;
     if (strpos($resource['type'], 'html') ||
         strpos($resource['type'], 'xml')) {
-        retriever_apply_dom_filter($retriever, $item, $resource);
+        $changed = retriever_apply_dom_filter($retriever, $item, $resource['data']);
         if ($retriever["data"]->images ) {
-            retrieve_images($item, $retriever_item);
+            $changed = retrieve_images($item, $retriever_item) || $changed;
         }
     }
     if (strpos($resource['type'], 'image')) {
-        retriever_transform_images($item, $resource, $retriever_item);
+        $changed = retriever_transform_images($item, $resource, $retriever_item) || $changed;
     }
+    return $changed;
 }
 
 function retriever_transform_images(&$item, $resource) {
     require_once('include/Photo.php');	
+
+    if (!$resource["data"]) {
+        logger('retriever_transform_images: no data available for ' . $resource['url']);
+        return;
+    }
+
     $img = new Photo($resource["data"], $resource["type"]);
     $hash = photo_new_resource();
     $r = $img->store($item['uid'], $item['contact-id'], $hash, $resource['url'], 'Retrieved Images', 0);
     $new_url = get_app()->get_baseurl() . '/photo/' . $hash;
     logger('retriever_transform_images: replacing ' . $resource['url'] . ' with ' .
            $new_url . ' in item ' . $item['plink'], LOGGER_DEBUG);
-    $item['body'] = str_replace($resource["url"], $new_url, $item['body']);
+    $transformed = str_replace($resource["url"], $new_url, $item['body']);
+    if ($transformed === $item['body']) {
+        return FALSE;
+    }
+    $item['body'] = $transformed;
     q("UPDATE `item` SET `edited` = now(), `body` = '%s' WHERE `plink` = '%s' AND `uid` = %d AND `contact-id` = %d",
       dbesc($item['body']), dbesc($item['plink']), intval($item['uid']), intval($item['contact-id']));
+    return TRUE;
 }
 
 function retriever_content($a) {
