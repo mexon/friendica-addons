@@ -245,7 +245,7 @@ function retriever_item_completed($retriever_item_id, $resource) {
                intval($retriever_item['contact-id']));
 
     foreach ($items as $item) {
-        $changed = retriever_on_resource_completed($retriever, $item, $resource, $retriever_item);
+        retriever_on_resource_completed($retriever, $item, $resource, $retriever_item);
     }
 }
 
@@ -405,7 +405,7 @@ function retriever_on_resource_completed($retriever, &$item, $resource, $retriev
     $changed = FALSE;
     if (strpos($resource['type'], 'html') ||
         strpos($resource['type'], 'xml')) {
-        $changed = retriever_apply_dom_filter($retriever, $item, $resource['data']);
+        $changed = retriever_apply_dom_filter($retriever, $item, $resource);
         if ($retriever["data"]->images ) {
             $changed = retrieve_images($item, $retriever_item) || $changed;
         }
