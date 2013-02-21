@@ -188,6 +188,7 @@ function publicise_post_remote_hook(&$a, &$item) {
     logger('Publicise: moving to wall: ' . $item['plink']);
     $item['type'] = 'wall';
     $item['wall'] = 1;
+    $item['private'] = 0;
 }
 
 function publicise_post_remote_end_hook(&$a, $item) {
