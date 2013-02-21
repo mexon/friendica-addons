@@ -204,7 +204,7 @@ function retrieve_resource($resource) {
     $data = retriever_fetch_url($resource['url'], $resource['binary'], $resource['type']);
     if ($data) {
         $resource['data'] = $data;
-        if (preg_match("/[A-Za-z0-9+]+\/[A-Za-z0-9+]+/", $thing, $matches)) {
+        if (preg_match("/[A-Za-z0-9+]+\/[A-Za-z0-9+]+/", $resource['type'], $matches)) {
             $resource['type'] = $matches[0];
         }
         q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s' WHERE id = %d",
