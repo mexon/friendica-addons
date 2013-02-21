@@ -32,7 +32,7 @@ function libertree_jot_nets(&$a,&$b) {
     if(intval($ltree_post) == 1) {
         $ltree_defpost = get_pconfig(local_user(),'libertree','post_by_default');
         $selected = ((intval($ltree_defpost) == 1) ? ' checked="checked" ' : '');
-        $b .= '<div class="profile-jot-net"><input type="checkbox" name="libertree_enable"' . $selected . 'value="1" /> '
+        $b .= '<div class="profile-jot-net"><input type="checkbox" name="libertree_enable"' . $selected . ' value="1" /> '
             . t('Post to libertree') . '</div>';
     }
 }
@@ -118,7 +118,7 @@ function libertree_post_local(&$a,&$b) {
 	if($b['private'] || $b['parent'])
 		return;
 
-    $ltree_post   = intval(get_pconfig(local_user(),'libertree','post'));
+	$ltree_post   = intval(get_pconfig(local_user(),'libertree','post'));
 
 	$ltree_enable = (($ltree_post && x($_REQUEST,'libertree_enable')) ? intval($_REQUEST['libertree_enable']) : 0);
 
@@ -153,8 +153,9 @@ function libertree_send(&$a,&$b) {
 	$ltree_api_token = get_pconfig($b['uid'],'libertree','libertree_api_token');
 	$ltree_url = get_pconfig($b['uid'],'libertree','libertree_url');
 	$ltree_blog = "$ltree_url/api/v1/posts/create/?token=$ltree_api_token";
-
-	if($ltree_url && $ltree_api_token && $ltree_blog) {
+	//$ltree_source = "Friendica";
+	$ltree_source = "[".$a->config['sitename']."](".$a->get_baseurl().")";
+	if($ltree_url && $ltree_api_token && $ltree_blog && $ltree_source) {
 
 		require_once('include/bb2diaspora.php');
 		$tag_arr = array();
@@ -167,16 +168,42 @@ function libertree_send(&$a,&$b) {
 			}
 		}
 		if(count($tag_arr))
-			$tags = implode(',',$tag_arr);		
+			$tags = implode(',',$tag_arr);
+
+		$title = $b['title'];
+		$body = $b['body'];
+		// Insert a newline before and after a quote
+		$body = str_ireplace("[quote", "\n\n[quote", $body);
+		$body = str_ireplace("[/quote]", "[/quote]\n\n", $body);
+
+		// Removal of tags and mentions
+		// #-tags
+		$body = preg_replace('/#\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', '#$2', $body);
+ 		// @-mentions
+		$body = preg_replace('/@\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', '@$2', $body);
+
+		// remove multiple newlines
+		do {
+			$oldbody = $body;
+                        $body = str_replace("\n\n\n", "\n\n", $body);
+                } while ($oldbody != $body);
+
+		// convert to markdown
+		$body = bb2diaspora($body, false, false);
+
+		// Adding the title
+		if(strlen($title))
+			$body = "## ".html_entity_decode($title)."\n\n".$body;
 
 
 		$params = array(
-			'text' => bb2diaspora($b['body'])
+			'text' => $body,
+			'source' => $ltree_source
 		//	'token' => $ltree_api_token
 		);
 
 		$result = post_url($ltree_blog,$params);
-		logger('libertree: ' . $result);	
+		logger('libertree: ' . $result);
 
 	}
 }
