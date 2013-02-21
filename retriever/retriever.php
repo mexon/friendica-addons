@@ -204,6 +204,9 @@ function retrieve_resource($resource) {
     $data = retriever_fetch_url($resource['url'], $resource['binary'], $resource['type']);
     if ($data) {
         $resource['data'] = $data;
+        if (preg_match("/[A-Za-z0-9+]+\/[A-Za-z0-9+]+/", $thing, $matches)) {
+            $resource['type'] = $matches[0];
+        }
         q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s' WHERE id = %d",
           dbesc($data), dbesc($resource['type']), intval($resource['id']));
         resource_completed($resource);
@@ -404,8 +407,8 @@ function retriever_on_resource_completed($retriever, &$item, $resource, $retriev
 }
 
 function retriever_transform_images(&$item, $resource) {
-    require_once('Photo.php');	
-    $img = new Photo($resource["data"]);
+    require_once('include/Photo.php');	
+    $img = new Photo($resource["data"], $resource["type"]);
     $hash = photo_new_resource();
     $r = $img->store($item['uid'], $item['contact-id'], $hash, $resource['url'], 'Retrieved Images', 0);
     $new_url = get_app()->get_baseurl() . '/photo/' . $hash;
