@@ -341,7 +341,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
 
     $extracter_template = file_get_contents(dirname(__file__).'/extract.tpl');
     $doc = new DOMDocument();
-    if (strpos($resource['type'], 'html')) {
+    if (strpos($resource['type'], 'html') !== false) {
         $doc->loadHTML($resource['data']);
     }
     else {
@@ -403,14 +403,14 @@ function retriever_on_resource_completed($retriever, &$item, $resource, $retriev
     logger('retriever_on_resource_completed: retriever ' . $retriever['id'] .
            ' resource ' . $resource['url'] . ' plink ' . $item['plink'], LOGGER_DEBUG);
     $changed = FALSE;
-    if (strpos($resource['type'], 'html') ||
-        strpos($resource['type'], 'xml')) {
+    if ((strpos($resource['type'], 'html') !== false) ||
+        (strpos($resource['type'], 'xml') !== false)) {
         $changed = retriever_apply_dom_filter($retriever, $item, $resource);
         if ($retriever["data"]->images ) {
             $changed = retrieve_images($item, $retriever_item) || $changed;
         }
     }
-    if (strpos($resource['type'], 'image')) {
+    if (strpos($resource['type'], 'image') !== false) {
         $changed = retriever_transform_images($item, $resource, $retriever_item) || $changed;
     }
     return $changed;
