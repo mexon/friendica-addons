@@ -272,9 +272,10 @@ function mailstream_do_images($a, &$item, &$attachments) {
         }
         else {
             $attachments[$url]['guid'] = substr($url, strlen($baseurl) + strlen('/photo/'));
-            $r = q("SELECT `data`, `filename` FROM `photo` WHERE `resource-id` = '%s'", dbesc($attachments[$url]['guid']));
+            $r = q("SELECT `data`, `filename`, `type` FROM `photo` WHERE `resource-id` = '%s'", dbesc($attachments[$url]['guid']));
             $attachments[$url]['data'] = $r[0]['data'];
             $attachments[$url]['filename'] = $r[0]['filename'];
+            $attachments[$url]['type'] = $r[0]['type'];
             $item['body'] = str_replace($url, 'cid:' . $attachments[$url]['guid'], $item['body']);
         }
     }
@@ -324,11 +325,8 @@ function mailstream_send($a, $ms_item, $item, $user) {
         $mail->MessageID = $ms_item['message-id'];
         $mail->Subject = mailstream_subject($item);
         $encoding = 'base64';
-        $type = 'application/octet-stream';
-        /* fixme@@@ */
-        /* image/gif image/jpeg image/png image/svg+xml */
         foreach ($attachments as $url=>$image) {
-            $mail->AddStringEmbeddedImage($image['data'], $image['guid'], $image['filename'], $encoding, $type);
+            $mail->AddStringEmbeddedImage($image['data'], $image['guid'], $image['filename'], $encoding, $image['type']);
         }
         $mail->IsHTML(true);
         $mail->CharSet = 'utf-8';
