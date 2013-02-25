@@ -379,7 +379,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
 }
 
 function retrieve_images(&$item, $parent_retriever_item) {
-    $changed = FALSE;
+    $waiting = FALSE;
     $matches1 = array();
     preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches1);
     $matches2 = array();
@@ -390,13 +390,14 @@ function retrieve_images(&$item, $parent_retriever_item) {
             $resource = add_retriever_resource($url, true);
             if ($resource['completed'] == '0000-00-00 00:00:00') {
                 add_retriever_item($item, $resource, $parent_retriever_item);
+                $waiting = TRUE;
             }
             else {
-                $changed = retriever_transform_images($item, $resource) || $changed;
+                retriever_transform_images($item, $resource);
             }
         }
     }
-    return $changed;
+    return $waiting;
 }
 
 function retriever_on_resource_completed($retriever, &$item, $resource, $retriever_item) {
@@ -407,37 +408,89 @@ function retriever_on_resource_completed($retriever, &$item, $resource, $retriev
         (strpos($resource['type'], 'xml') !== false)) {
         $changed = retriever_apply_dom_filter($retriever, $item, $resource);
         if ($retriever["data"]->images ) {
-            $changed = retrieve_images($item, $retriever_item) || $changed;
+            retrieve_images($item, $retriever_item);
         }
     }
     if (strpos($resource['type'], 'image') !== false) {
         $changed = retriever_transform_images($item, $resource, $retriever_item) || $changed;
     }
-    return $changed;
+}
+
+function retriever_store_photo($item, &$resource) {
+    $hash = photo_new_resource();
+
+    if (class_exists('Imagick')) {
+        try {
+            $image = new Imagick();
+            $image->readImageBlob($resource['data']);
+            $resource['width'] = $image->getImageWidth();
+            $resource['height'] = $image->getImageHeight();
+        }
+        catch (Exception $e) {
+            logger("ImageMagick couldn't process image " . $resource['id'] . " " . $resource['url']);
+            return;
+        }
+    }
+    else {
+        $image = @imagecreatefromstring($resource['data']);
+        if ($image === FALSE) {
+            logger("Couldn't process image " . $resource['id'] . " " . $resource['url']);
+            return;
+        }
+        $resource['width']  = imagesx($image);
+        $resource['height'] = imagesy($image);
+        imagedestroy($image);
+    }
+
+    $r = q("INSERT INTO `photo`
+                ( `uid`, `contact-id`, `guid`, `resource-id`, `created`, `edited`, `filename`, `type`, `album`, `height`, `width`, `datasize`, `data` )
+                VALUES ( %d, %d, '%s', '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d, '%s' )",
+           intval($item['item-uid']),
+           intval($item['contact-id']),
+           dbesc(get_guid()),
+           dbesc($hash),
+           dbesc(datetime_convert()),
+           dbesc(datetime_convert()),
+           dbesc(basename($resource['url'])),
+           dbesc($resource['type']),
+           dbesc('Retrieved Images'),
+           intval($resource['height']),
+           intval($resource['width']),
+           intval(strlen($resource['data'])),
+           dbesc($resource['data'])
+        );
+
+    return $hash;
 }
 
 function retriever_transform_images(&$item, $resource) {
     require_once('include/Photo.php');	
 
     if (!$resource["data"]) {
-        logger('retriever_transform_images: no data available for ' . $resource['url']);
-        return;
+        logger('retriever_transform_images: no data available for '
+               . $resource['id'] . ' ' . $resource['url']);
+        return false;
     }
 
-    $img = new Photo($resource["data"], $resource["type"]);
-    $hash = photo_new_resource();
-    $r = $img->store($item['uid'], $item['contact-id'], $hash, $resource['url'], 'Retrieved Images', 0);
+    $hash = retriever_store_photo($item, $resource);
+    if ($hash === false) {
+        logger('retriever_transform_images: unable to store photo '
+               . $resource['id'] . ' ' . $resource['url']);
+        return false;
+    }
+
     $new_url = get_app()->get_baseurl() . '/photo/' . $hash;
     logger('retriever_transform_images: replacing ' . $resource['url'] . ' with ' .
            $new_url . ' in item ' . $item['plink'], LOGGER_DEBUG);
     $transformed = str_replace($resource["url"], $new_url, $item['body']);
     if ($transformed === $item['body']) {
-        return FALSE;
+        return true;
     }
+
     $item['body'] = $transformed;
     q("UPDATE `item` SET `edited` = now(), `body` = '%s' WHERE `plink` = '%s' AND `uid` = %d AND `contact-id` = %d",
       dbesc($item['body']), dbesc($item['plink']), intval($item['uid']), intval($item['contact-id']));
-    return TRUE;
+    return true;
 }
 
 function retriever_content($a) {
