@@ -42,7 +42,10 @@ function retriever_install() {
         q("ALTER TABLE `retriever_item` MODIFY COLUMN `item-uri` varchar(800) CHARACTER SET ascii NOT NULL");
         q("ALTER TABLE `retriever_resource` MODIFY COLUMN `url` varchar(800) CHARACTER SET ascii NOT NULL");
     }
-    set_config('retriever', 'dbversion', '0.4');
+    if (get_config('retriever', 'dbversion') == '0.4') {
+        q("ALTER TABLE `retriever_item` ADD COLUMN `finished` tinyint(1) unsigned NOT NULL DEFAULT '0'");
+    }
+    set_config('retriever', 'dbversion', '0.5');
 }
 
 function retriever_uninstall() {
@@ -198,7 +201,7 @@ function retriever_fetch_url($url,$binary = false, &$content_type, &$redirects =
 
 function retrieve_resource($resource) {
     logger('retriever_resource: ' . ($resource['num-tries'] + 1) .
-           ' attempt at resource ' . $resource['url'], LOGGER_DEBUG);
+           ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
     q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1 WHERE id = %d",
       intval($resource['id']));
     $data = retriever_fetch_url($resource['url'], $resource['binary'], $resource['type']);
@@ -209,7 +212,7 @@ function retrieve_resource($resource) {
         }
         q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s' WHERE id = %d",
           dbesc($data), dbesc($resource['type']), intval($resource['id']));
-        resource_completed($resource);
+        retriever_resource_completed($resource);
     }
 }
 
@@ -243,14 +246,21 @@ function retriever_item_completed($retriever_item_id, $resource) {
                dbesc($retriever_item['item-uri']),
                intval($retriever_item['item-uid']),
                intval($retriever_item['contact-id']));
+    if (count($items) != 1) {
+        logger('retriever_item_completed: unexpected number of results ' .
+               count($items) . ' when searching for item uri ' .
+               $retriever_item['item-uri'] . ' uid ' . $retriever_item['item-uid'] .
+               ' cid ' . $retriever_item['contact-id']);
+        return;
+    }
 
-    foreach ($items as $item) {
-        retriever_on_resource_completed($retriever, $item, $resource, $retriever_item);
+    if (!retriever_apply_completed_resource_to_item($retriever, $items[0], $resource, $retriever_item)) {
+        retriever_mark_item_completed($retriever_item);
     }
 }
 
-function resource_completed($resource) {
-    logger('resource_completed: id ' . $resource['id'] . ' url ' . $resource['url'], LOGGER_DEBUG);
+function retriever_resource_completed($resource) {
+    logger('retriever_resource_completed: id ' . $resource['id'] . ' url ' . $resource['url'], LOGGER_DEBUG);
     $r = q("SELECT `id` FROM `retriever_item` WHERE `resource` = %d", $resource['id']);
     foreach ($r as $rr) {
         retriever_item_completed($rr['id'], $resource);
@@ -404,20 +414,51 @@ function retrieve_images(&$item, $parent_retriever_item) {
     return $waiting;
 }
 
-function retriever_on_resource_completed($retriever, &$item, $resource, $retriever_item) {
-    logger('retriever_on_resource_completed: retriever ' . $retriever['id'] .
+function retriever_mark_item_completed(&$item)
+{
+    $item['finished'] = 1;
+    q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d",
+      intval($item['id']));
+
+    if ($item['id'] == $item['parent']) {
+        logger('retriever_mark_item_completed, item ' . $item['id'] . ' and all children now fully downloaded');
+        /* @@@ todo: unblock item */
+        return;
+    }
+
+    $r = q("SELECT `id` FROM retriever_item WHERE `parent` = %d AND `finished` = 0",
+           intval($item['parent']));
+    if (count($r) === 0) {
+        $r2 = q("SELECT * FROM retriever_item WHERE `id` = %d",
+                intval($item['parent']));
+        foreach ($r2 as $parent) {
+            retriever_mark_item_completed($parent);
+        }
+    }
+}
+
+function retriever_apply_completed_resource_to_item($retriever, &$item, $resource, $retriever_item) {
+    logger('retriever_apply_completed_resource_to_item: retriever ' . $retriever['id'] .
            ' resource ' . $resource['url'] . ' plink ' . $item['plink'], LOGGER_DEBUG);
-    $changed = FALSE;
     if ((strpos($resource['type'], 'html') !== false) ||
         (strpos($resource['type'], 'xml') !== false)) {
-        $changed = retriever_apply_dom_filter($retriever, $item, $resource);
+        if (!retriever_apply_dom_filter($retriever, $item, $resource)) {
+            logger('retriever_apply_completed_resource_to_item: dom filter failed');
+            return false;
+        }
         if ($retriever["data"]->images ) {
-            retrieve_images($item, $retriever_item);
+            if (retrieve_images($item, $retriever_item)) {
+                return true;
+            }
         }
     }
     if (strpos($resource['type'], 'image') !== false) {
-        $changed = retriever_transform_images($item, $resource, $retriever_item) || $changed;
+        if (!retriever_transform_images($item, $resource, $retriever_item)) {
+            logger('retriever_apply_completed_resource_to_item: transform images failed');
+        }
+        return false;
     }
+    return false;
 }
 
 function retriever_store_photo($item, &$resource) {
