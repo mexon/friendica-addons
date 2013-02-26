@@ -339,6 +339,8 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         return;
     }
 
+logger('@@@ retriever_apply_dom_filter for item ' . $item['id'] . ' ' . $item['plink']);                                                                                           
+logger('@@@ content is ' . $resource['data']);
     $extracter_template = file_get_contents(dirname(__file__).'/extract.tpl');
     $doc = new DOMDocument();
     if (strpos($resource['type'], 'html') !== false) {
@@ -363,6 +365,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $xp = new XsltProcessor();
     $xp->importStylesheet($xmldoc);
     $transformed = $xp->transformToXML($doc);
+logger('@@@ transformed is ' . $transformed);
     $item['body'] = html2bbcode($transformed);
     $item['body'] .= "\n\n[i][color= #999999][url=";
     $item['body'] .=  $item['plink'];
@@ -373,6 +376,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         logger('retriever_apply_dom_filter: output was empty', LOGGER_ERROR);
         return;
     }
+logger('@@@ new body is ' . $item['body']);
     q("UPDATE `item` SET `body` = '%s', `received` = now(), `edited` = now() WHERE `id` = %d",
       dbesc($item['body']), intval($item['id']));
     return TRUE;
@@ -484,9 +488,11 @@ function retriever_transform_images(&$item, $resource) {
            $new_url . ' in item ' . $item['plink'], LOGGER_DEBUG);
     $transformed = str_replace($resource["url"], $new_url, $item['body']);
     if ($transformed === $item['body']) {
+logger('@@@ replacement didnt change anything');
         return true;
     }
 
+logger("@@@ before:\n" . $item['body'] . "\nafter:\n" . $transformed);
     $item['body'] = $transformed;
     q("UPDATE `item` SET `edited` = now(), `body` = '%s' WHERE `plink` = '%s' AND `uid` = %d AND `contact-id` = %d",
       dbesc($item['body']), dbesc($item['plink']), intval($item['uid']), intval($item['contact-id']));
@@ -536,11 +542,12 @@ function retriever_content($a) {
 }
 
 function retriever_contact_photo_menu($a, &$args) {
+logger('@@@ retriever_contact_photo_menu contact ' . $args['contact']['id']);
     if (!$args) {
         return;
     }
     if ($args["contact"]["network"] == "feed") {
-        $args["menu"][ t("Retriever") ] = $a->get_baseurl() . '/retriever/' . $args["contact"]['id'];
+        $args["menu"][ 'retriever' ] = array(t('Retriever'), $a->get_baseurl() . '/retriever/' . $args["contact"]['id']);
     }
 }
 
