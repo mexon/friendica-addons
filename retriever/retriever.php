@@ -42,7 +42,10 @@ function retriever_install() {
         q("ALTER TABLE `retriever_item` MODIFY COLUMN `item-uri` varchar(800) CHARACTER SET ascii NOT NULL");
         q("ALTER TABLE `retriever_resource` MODIFY COLUMN `url` varchar(800) CHARACTER SET ascii NOT NULL");
     }
-    set_config('retriever', 'dbversion', '0.4');
+    if (get_config('retriever', 'dbversion') == '0.4') {
+        q("ALTER TABLE `retriever_item` ADD COLUMN `finished` tinyint(1) unsigned NOT NULL DEFAULT '0'");
+    }
+    set_config('retriever', 'dbversion', '0.5');
 }
 
 function retriever_uninstall() {
