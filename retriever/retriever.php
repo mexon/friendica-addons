@@ -483,6 +483,11 @@ function retriever_store_photo($item, &$resource) {
         imagedestroy($image);
     }
 
+    $url_components = parse_url($resource['url']);
+    $filename = basename($url_components['path']);
+    if (!strlen($filename)) {
+        $filename = 'image';
+    }
     $r = q("INSERT INTO `photo`
                 ( `uid`, `contact-id`, `guid`, `resource-id`, `created`, `edited`, `filename`, `type`, `album`, `height`, `width`, `datasize`, `data` )
                 VALUES ( %d, %d, '%s', '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d, '%s' )",
@@ -492,7 +497,7 @@ function retriever_store_photo($item, &$resource) {
            dbesc($hash),
            dbesc(datetime_convert()),
            dbesc(datetime_convert()),
-           dbesc(basename($resource['url'])),
+           dbesc($filename),
            dbesc($resource['type']),
            dbesc('Retrieved Images'),
            intval($resource['height']),
