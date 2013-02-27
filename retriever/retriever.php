@@ -341,7 +341,7 @@ function add_retriever_item(&$item, $resource, $parent = null) {
 }
 
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
-    logger('retriever_apply_dom_filter: applying XSLT to ' . $item['plink'], LOGGER_DEBUG);
+    logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['plink'], LOGGER_DEBUG);
     require_once('include/html2bbcode.php');	
 
     if (!$resource['data']) {
@@ -349,8 +349,6 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         return;
     }
 
-logger('@@@ retriever_apply_dom_filter for item ' . $item['id'] . ' ' . $item['plink']);                                                                                           
-logger('@@@ content is ' . $resource['data']);
     $extracter_template = file_get_contents(dirname(__file__).'/extract.tpl');
     $doc = new DOMDocument();
     if (strpos($resource['type'], 'html') !== false) {
@@ -375,18 +373,16 @@ logger('@@@ content is ' . $resource['data']);
     $xp = new XsltProcessor();
     $xp->importStylesheet($xmldoc);
     $transformed = $xp->transformToXML($doc);
-logger('@@@ transformed is ' . $transformed);
     $item['body'] = html2bbcode($transformed);
+    if (!strlen($item['body'])) {
+        logger('retriever_apply_dom_filter: output was empty', LOGGER_ERROR);
+        return;
+    }
     $item['body'] .= "\n\n[i][color= #999999][url=";
     $item['body'] .=  $item['plink'];
     $item['body'] .= "]retrieved[/url] ";
     $item['body'] .= date("Y-m-d");
     $item['body'] .= "[/color][/i]";
-    if (!$item['body']) {
-        logger('retriever_apply_dom_filter: output was empty', LOGGER_ERROR);
-        return;
-    }
-logger('@@@ new body is ' . $item['body']);
     q("UPDATE `item` SET `body` = '%s', `received` = now(), `edited` = now() WHERE `id` = %d",
       dbesc($item['body']), intval($item['id']));
     return TRUE;
