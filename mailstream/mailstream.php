@@ -243,6 +243,9 @@ function mailstream_generate_id($a) {
 function mailstream_post_remote_hook(&$a, &$item) {
     if (get_pconfig($item['uid'], 'mailstream', 'enabled')) {
         if ($item['uid'] && $item['contact-id'] && $item['plink']) {
+            if ($item['parent'] != $item['id']) {
+                logger('@@@ should set reply to here');
+            }
             q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `plink`, `message-id`, `created`) " .
               "VALUES (%d, '%s', '%s', '%s', now())", intval($item['uid']),
               intval($item['contact-id']), dbesc($item['plink']), dbesc(mailstream_generate_id($a)));
@@ -337,6 +340,7 @@ function mailstream_send($a, $ms_item, $item, $user) {
             throw new Exception($mail->ErrorInfo);
         }
         q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
+        logger('mailstream_send sent message ' . $mail->MessageID . ' ' . $mail->Subject);
     } catch (phpmailerException $e) {
         logger('mailstream_send PHPMailer exception sending message ' . $ms_item['message-id'] . ': ' . $e->errorMessage()); //Pretty error messages from PHPMailer
     } catch (Exception $e) {
