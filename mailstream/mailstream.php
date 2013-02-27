@@ -375,6 +375,7 @@ EOF;
             q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
         }
     }
+    mailstream_tidy();
 }
 
 function mailstream_plugin_settings(&$a,&$s) {
@@ -402,5 +403,15 @@ function mailstream_plugin_settings_post($a,$post) {
     }
     else {
         del_pconfig(local_user(), 'mailstream', 'enabled');
+    }
+}
+
+function mailstream_tidy() {
+    logger('@@@ mailstream_tidy');
+    $r = q("SELECT id FROM mailstream_item WHERE completed > '0000-00-00 00:00:00' AND completed < DATE_SUB(NOW(), INTERVAL 1 WEEK)");
+    logger('@@@ mailstream_tidy found ' . count($r) . ' items to delete');
+    return;
+    foreach ($r as $rr) {
+        q('DELETE FROM mailstream_item WHERE id = %d', intval($rr['id']));
     }
 }
