@@ -380,7 +380,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $item['body'] .= date("Y-m-d");
     $item['body'] .= "[/color][/i]";
     if (!$item['body']) {
-        logger('retriever_apply_dom_filter: output was empty', LOGGER_ERROR);
+        logger('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty', LOGGER_ERROR);
         return;
     }
     q("UPDATE `item` SET `body` = '%s', `received` = now(), `edited` = now() WHERE `id` = %d",
