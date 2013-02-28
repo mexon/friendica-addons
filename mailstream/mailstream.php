@@ -407,11 +407,9 @@ function mailstream_plugin_settings_post($a,$post) {
 }
 
 function mailstream_tidy() {
-    logger('@@@ mailstream_tidy');
     $r = q("SELECT id FROM mailstream_item WHERE completed > '0000-00-00 00:00:00' AND completed < DATE_SUB(NOW(), INTERVAL 1 WEEK)");
-    logger('@@@ mailstream_tidy found ' . count($r) . ' items to delete');
-    return;
     foreach ($r as $rr) {
         q('DELETE FROM mailstream_item WHERE id = %d', intval($rr['id']));
     }
+    logger('mailstream_tidy: deleted ' . count($r) . ' old items');
 }
