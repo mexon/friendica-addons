@@ -166,7 +166,6 @@ function retriever_fetch_url($url,$binary = false, &$content_type, &$redirects =
 	$http_code = $curl_info['http_code'];
         $content_type = $curl_info['content_type'];
 
-//	logger('fetch_url:' . $http_code . ' data: ' . $s);
 	$header = '';
 
 	// Pull out multiple headers, e.g. proxy and continuation headers
@@ -178,6 +177,7 @@ function retriever_fetch_url($url,$binary = false, &$content_type, &$redirects =
 		$base = substr($base,strlen($chunk));
 	}
 
+        logger('retriever_fetch_url: got code ' . $http_code . ' fetching ' . $url);
 	if($http_code == 301 || $http_code == 302 || $http_code == 303 || $http_code == 307) {
 		$matches = array();
 		preg_match('/(Location:|URI:)(.*?)\n/', $header, $matches);
@@ -187,7 +187,7 @@ function retriever_fetch_url($url,$binary = false, &$content_type, &$redirects =
 		$url_parsed = @parse_url($newurl);
 		if (isset($url_parsed)) {
 			$redirects++;
-			return fetch_url($newurl,$binary,$redirects,$timeout);
+			return retriever_fetch_url($newurl,$binary,$content_type,$redirects,$timeout);
 		}
 	}
 
