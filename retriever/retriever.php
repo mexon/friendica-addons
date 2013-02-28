@@ -375,7 +375,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $transformed = $xp->transformToXML($doc);
     $item['body'] = html2bbcode($transformed);
     if (!strlen($item['body'])) {
-        logger('retriever_apply_dom_filter: output was empty', LOGGER_ERROR);
+        logger('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty', LOGGER_ERROR);
         return;
     }
     $item['body'] .= "\n\n[i][color= #999999][url=";

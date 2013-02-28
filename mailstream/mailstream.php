@@ -233,10 +233,12 @@ function mailstream_create_item($a, $message) {
 	proc_run('php', "include/notifier.php", 'wall-new', $message['id']);
 }
 
-function mailstream_generate_id($a) {
+function mailstream_generate_id($a, $item) {
 // http://www.jwz.org/doc/mid.html
     $host = $a->get_hostname();
     $resource = hash('md5',uniqid(mt_rand(),true)); // NOT especially safe from the birthday paradox
+    $alt_resource = hash('md5', $item['uri']);
+    logger('@@@ mailstream_generate_id for item ' . $item['id'] . ' old hash ' . $resource . ' new hash ' . $alt_resource);
     return "<" . $resource . "@" . $host . ">";
 }
 
@@ -248,7 +250,7 @@ function mailstream_post_remote_hook(&$a, &$item) {
             }
             q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `plink`, `message-id`, `created`) " .
               "VALUES (%d, '%s', '%s', '%s', now())", intval($item['uid']),
-              intval($item['contact-id']), dbesc($item['plink']), dbesc(mailstream_generate_id($a)));
+              intval($item['contact-id']), dbesc($item['plink']), dbesc(mailstream_generate_id($a, $item)));
         }
     }
 }
