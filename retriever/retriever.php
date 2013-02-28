@@ -468,20 +468,22 @@ function retriever_store_photo($item, &$resource) {
             $resource['height'] = $image->getImageHeight();
         }
         catch (Exception $e) {
-            logger("ImageMagick couldn't process image " . $resource['id'] . " " . $resource['url']);
-            return;
+            logger("ImageMagick couldn't process image " . $resource['id'] . " " . $resource['url'] . ' length ' . strlen($resource['data']) . ': ' . $e->getMessage());
+            return false;
         }
     }
-    else {
+    if (!array_key_exists('width', $resource)) {
+        logger('@@@ using non image magick processing');
         $image = @imagecreatefromstring($resource['data']);
-        if ($image === FALSE) {
+        if ($image === false) {
             logger("Couldn't process image " . $resource['id'] . " " . $resource['url']);
-            return;
+            return false;
         }
         $resource['width']  = imagesx($image);
         $resource['height'] = imagesy($image);
         imagedestroy($image);
     }
+    logger('@@@ image ' . $resource['id'] . ' ' . $resource['url'] . ' dimensions ' . $resource['width'] . 'x' . $resource['height']);
 
     $url_components = parse_url($resource['url']);
     $filename = basename($url_components['path']);
