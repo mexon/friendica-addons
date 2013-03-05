@@ -82,7 +82,7 @@ $retriever_schedule = array(array(1,'minute'),
     // 100 is a nice sane number.  Maybe this should be configurable.
     // Feel free to write me a bug about that, explaining in detail
     // how important it is to you.
-    $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT 100",
+    $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT 1000",
            dbesc(implode($schedule_clauses, ' OR ')));
     foreach ($r as $rr) {
         retrieve_resource($rr);
@@ -256,7 +256,10 @@ function retriever_item_completed($retriever_item_id, $resource) {
     }
 
     retriever_apply_completed_resource_to_item($retriever, $items[0], $resource);
-    retriever_check_item_completed($retriever_item);
+
+    q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d",
+      intval($retriever_item['id']));
+    retriever_check_item_completed($items[0]);
 }
 
 function retriever_resource_completed($resource) {
@@ -407,30 +410,19 @@ function retrieve_images(&$item) {
 
 function retriever_check_item_completed(&$item)
 {
-    $item['finished'] = 1;
-    q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d",
-      intval($item['id']));
-
-    $r = q('SELECT finished, count(*) FROM retriever_item WHERE `item-uri` = "%s" ' .
-           'AND `item-uid` = %d AND `contact-id` = %d GROUP BY `finished`',
-           dbesc($item['item-uri']), intval($item['item-uid']),
+    $r = q('SELECT count(*) FROM retriever_item WHERE `item-uri` = "%s" ' .
+           'AND `item-uid` = %d AND `contact-id` = %d AND `finished` = 0',
+           dbesc($item['uri']), intval($item['uid']),
            intval($item['contact-id']));
-    $finished = 0;
-    $waiting = 0;
-    foreach ($r as $count) {
-        if ($count['finished']) {
-            $finished = $count['count(*)'];
-        }
-        else {
-            $waiting = $count['count(*)'];
-        }
-    }
-    logger('retriever_check_item_completed: item ' . $item['item-uri'] . ' '
-           . $item['item-uid'] . ' '. $item['contact-id'] . ' finished '
-           . $finished . ' remaining ' . $waiting
-           . ' resources after completing resource ' . $item['resource']);
-    if (!$waiting) {
-        logger('@@@ todo retriever_check_item_completed should unblock now');
+    $waiting = $r[0]['count(*)'];
+    logger('retriever_check_item_completed: item ' . $item['uri'] . ' ' . $item['uid']
+           . ' '. $item['contact-id'] . ' waiting for ' . $waiting . ' resources');
+    $old_visible = $item['visible'];
+    $item['visible'] = $waiting ? 0 : 1;
+    if (($item['id'] > 0) && ($old_visible != $item['visible'])) {
+        logger('retriever_check_item_completed: changing visible flag to ' . $item['visible']);
+        q('UPDATE `item` SET `visible` = %d WHERE `id` = %d',
+          intval($item['visible']), intval($item['id']));
     }
 }
 
@@ -597,6 +589,7 @@ function retriever_post_remote_hook(&$a, &$item) {
             retrieve_images($item, null);
         }
     }
+    retriever_check_item_completed($item);
 }
 
 function retriever_plugin_settings(&$a,&$s) {
