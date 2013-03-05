@@ -436,7 +436,7 @@ function retriever_check_item_completed(&$item)
 
 function retriever_apply_completed_resource_to_item($retriever, &$item, $resource) {
     logger('retriever_apply_completed_resource_to_item: retriever ' .
-           ($retriever ? retriever['id'] : 'none') .
+           ($retriever ? $retriever['id'] : 'none') .
            ' resource ' . $resource['url'] . ' plink ' . $item['plink'], LOGGER_DEBUG);
     if (strpos($resource['type'], 'image') !== false) {
         retriever_transform_images($item, $resource);
