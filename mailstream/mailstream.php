@@ -233,12 +233,10 @@ function mailstream_create_item($a, $message) {
 	proc_run('php', "include/notifier.php", 'wall-new', $message['id']);
 }
 
-function mailstream_generate_id($a, $item) {
+function mailstream_generate_id($a, $uri) {
 // http://www.jwz.org/doc/mid.html
     $host = $a->get_hostname();
-    $resource = hash('md5',uniqid(mt_rand(),true)); // NOT especially safe from the birthday paradox
-    $alt_resource = hash('md5', $item['uri']);
-    logger('@@@ mailstream_generate_id for item ' . $item['id'] . ' old hash ' . $resource . ' new hash ' . $alt_resource);
+    $resource = hash('md5', $uri);
     return "<" . $resource . "@" . $host . ">";
 }
 
@@ -250,7 +248,24 @@ function mailstream_post_remote_hook(&$a, &$item) {
             }
             q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `plink`, `message-id`, `created`) " .
               "VALUES (%d, '%s', '%s', '%s', now())", intval($item['uid']),
-              intval($item['contact-id']), dbesc($item['plink']), dbesc(mailstream_generate_id($a, $item)));
+              intval($item['contact-id']), dbesc($item['plink']), dbesc(mailstream_generate_id($a, $item['uri'])));
+            $r = q('SELECT * FROM `mailstream_item` WHERE `uid` = %d AND `contact-id` = %d AND `plink` = "%s"', intval($item['uid']), intval($item['contact-id']), dbesc($item['plink']));
+            if (count($r) != 1) {
+                logger('mailstream_post_remote_hook: Unexpected number of items returned from mailstream_item');
+                return;
+            }
+            $ms_item = $r[0];
+            logger('mailstream_post_remote_hook: created mailstream_item '
+                   . $ms_item['id'] . ' for item ' . $item['uri'] . ' '
+                   . $item['uid'] . $item['contact-id']);
+            $r = q('SELECT * FROM `user` WHERE `uid` = %d', intval($item['uid']));
+            if (count($r) != 1) {
+                logger('mailstream_post_remote_hook: Unexpected number of users returned');
+                return;
+            }
+            $user = $r[0];
+            logger('@@@ sending immediately');
+            mailstream_send($a, $ms_item, $item, $user);
         }
     }
 }
@@ -329,6 +344,9 @@ function mailstream_send($a, $ms_item, $item, $user) {
         $mail->AddAddress($email, $user['username']);
         $mail->MessageID = $ms_item['message-id'];
         $mail->Subject = mailstream_subject($item);
+        if ($item['thr-parent'] != $item['uri']) {
+            $mail->addCustomHeader('In-Reply-To: ' . mailstream_generate_id($a, $item['thr-parent']));
+        }
         $encoding = 'base64';
         foreach ($attachments as $url=>$image) {
             $mail->AddStringEmbeddedImage($image['data'], $image['guid'], $image['filename'], $encoding, $image['type']);
@@ -386,7 +404,7 @@ function mailstream_plugin_settings(&$a,&$s) {
     $address = get_pconfig(local_user(), 'mailstream', 'address');
     $address_mu = $address ? (' value="' . $address . '"') : '';
     $delay = get_pconfig(local_user(), 'mailstream', 'delay');
-    $delay_mu = ' value="' . (($delay > 0) ? $delay : 60) . '"';
+    $delay_mu = ' value="' . $delay . '"';
     $template = file_get_contents(dirname(__file__).'/settings.tpl');
     $s .= replace_macros($template, array('$address' => $address_mu,
                                           '$delay' => $delay_mu,
@@ -409,7 +427,7 @@ function mailstream_plugin_settings_post($a,$post) {
 }
 
 function mailstream_tidy() {
-    $r = q("SELECT id FROM mailstream_item WHERE completed > '0000-00-00 00:00:00' AND completed < DATE_SUB(NOW(), INTERVAL 1 WEEK)");
+    $r = q("SELECT id FROM mailstream_item WHERE completed > '0000-00-00 00:00:00' AND completed < DATE_SUB(NOW(), INTERVAL 1 YEAR)");
     foreach ($r as $rr) {
         q('DELETE FROM mailstream_item WHERE id = %d', intval($rr['id']));
     }
