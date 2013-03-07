@@ -62,13 +62,13 @@ function retriever_uninstall() {
 function retriever_module() {}
 
 function retriever_cron($a, $b) {
-$retriever_schedule = array(array(1,'minute'),
-                            array(10,'minute'),
-                            array(1,'hour'),
-                            array(1,'day'),
-                            array(2,'day'),
-                            array(1,'week'),
-                            array(1,'month'));
+    $retriever_schedule = array(array(1,'minute'),
+                                array(10,'minute'),
+                                array(1,'hour'),
+                                array(1,'day'),
+                                array(2,'day'),
+                                array(1,'week'),
+                                array(1,'month'));
 
     $schedule_clauses = array();
     for ($i = 0; $i < count($retriever_schedule); $i++) {
@@ -82,7 +82,7 @@ $retriever_schedule = array(array(1,'minute'),
     // 100 is a nice sane number.  Maybe this should be configurable.
     // Feel free to write me a bug about that, explaining in detail
     // how important it is to you.
-    $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT 1000",
+    $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT 100",
            dbesc(implode($schedule_clauses, ' OR ')));
     foreach ($r as $rr) {
         retrieve_resource($rr);
@@ -315,7 +315,7 @@ function add_retriever_resource($url, $binary = false) {
 }
 
 function add_retriever_item(&$item, $resource) {
-    logger('add_retriever_item: ' . $resource['url'], LOGGER_DEBUG);
+    logger('add_retriever_item: ' . $resource['url'] . ' for ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
 
     $r = q("SELECT id FROM `retriever_item` WHERE " .
            "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d",
@@ -337,9 +337,7 @@ function add_retriever_item(&$item, $resource) {
                $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'],
                LOGGER_ERROR);
     }
-    if ($resource["completed"] != "0000-00-00 00:00:00") {
-        retriever_item_completed($r[0]['id'], $resource);
-    }
+    logger('add_retriever_item: created retriever_item ' . $r[0]['id'] . ' for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
 }
 
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
@@ -395,6 +393,7 @@ function retrieve_images(&$item) {
     $matches2 = array();
     preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches2);
     $matches = array_merge($matches1[3], $matches2[1]);
+    logger('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
     foreach ($matches as $url) {
         if (strpos($url, get_app()->get_baseurl()) === FALSE) {
             $resource = add_retriever_resource($url, true);
@@ -578,7 +577,7 @@ function retriever_contact_photo_menu($a, &$args) {
 }
 
 function retriever_post_remote_hook(&$a, &$item) {
-    logger('retriever_post_remote_hook: ' . $item['plink'], LOGGER_DEBUG);
+    logger('retriever_post_remote_hook: ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
 
     $retriever = get_retriever($item['contact-id'], $item["uid"], false);
     if ($retriever) {
