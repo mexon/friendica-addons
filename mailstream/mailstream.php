@@ -328,6 +328,10 @@ function mailstream_subject($item) {
 }
 
 function mailstream_send($a, $ms_item, $item, $user) {
+    if (!$item['visible']) {
+        logger('@@@ item is not visible, not doing send');
+        return;
+    }
     require_once(dirname(__file__).'/class.phpmailer.php');
     require_once('include/bbcode.php');
     $attachments = array();
