@@ -26,6 +26,7 @@ function mailstream_install() {
 function mailstream_uninstall() {
     unregister_hook('plugin_settings', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings');
     unregister_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
+    unregister_hook('post_remote', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     unregister_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     unregister_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
     unregister_hook('incoming_mail', 'addon/mailstream/mailstream.php', 'mailstream_incoming_mail');
@@ -257,7 +258,7 @@ function mailstream_post_remote_hook(&$a, &$item) {
             $ms_item = $r[0];
             logger('mailstream_post_remote_hook: created mailstream_item '
                    . $ms_item['id'] . ' for item ' . $item['uri'] . ' '
-                   . $item['uid'] . $item['contact-id']);
+                   . $item['uid'] . ' ' . $item['contact-id']);
             $r = q('SELECT * FROM `user` WHERE `uid` = %d', intval($item['uid']));
             if (count($r) != 1) {
                 logger('mailstream_post_remote_hook: Unexpected number of users returned');
