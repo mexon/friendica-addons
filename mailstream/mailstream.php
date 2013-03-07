@@ -10,7 +10,7 @@ set_include_path("/Users/mat/system/pear/share/pear");
 function mailstream_install() {
     register_hook('plugin_settings', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings');
     register_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
-    register_hook('post_remote', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
+    register_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     register_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
     register_hook('incoming_mail', 'addon/mailstream/mailstream.php', 'mailstream_incoming_mail');
 
@@ -26,7 +26,7 @@ function mailstream_install() {
 function mailstream_uninstall() {
     unregister_hook('plugin_settings', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings');
     unregister_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
-    unregister_hook('post_remote', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
+    unregister_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     unregister_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
     unregister_hook('incoming_mail', 'addon/mailstream/mailstream.php', 'mailstream_incoming_mail');
 }
