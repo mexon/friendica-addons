@@ -20,8 +20,13 @@ function mailstream_install() {
         $r = q($a);
     }
 
-//@@@ todo: remove delay settings from pconfig and rename plink to item-uri
-    set_config('mailstream', 'dbversion', '0.1');
+    if (get_config('mailstream', 'dbversion') == '0.1') {
+        q('ALTER TABLE `mailstream_item` DROP INDEX `uid`');
+        q('ALTER TABLE `mailstream_item` DROP INDEX `contact-id`');
+        q('ALTER TABLE `mailstream_item` DROP INDEX `plink`');
+        q('ALTER TABLE `mailstream_item` CHANGE `plink` `uri` char(255) NOT NULL');
+    }
+    set_config('mailstream', 'dbversion', '0.2');
 }
 
 function mailstream_uninstall() {
@@ -245,10 +250,10 @@ function mailstream_generate_id($a, $uri) {
 function mailstream_post_remote_hook(&$a, &$item) {
     if (get_pconfig($item['uid'], 'mailstream', 'enabled')) {
         if ($item['uid'] && $item['contact-id'] && $item['uri']) {
-            q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `plink`, `message-id`, `created`) " .
+            q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `uri`, `message-id`, `created`) " .
               "VALUES (%d, '%s', '%s', '%s', now())", intval($item['uid']),
               intval($item['contact-id']), dbesc($item['uri']), dbesc(mailstream_generate_id($a, $item['uri'])));
-            $r = q('SELECT * FROM `mailstream_item` WHERE `uid` = %d AND `contact-id` = %d AND `plink` = "%s"', intval($item['uid']), intval($item['contact-id']), dbesc($item['uri']));
+            $r = q('SELECT * FROM `mailstream_item` WHERE `uid` = %d AND `contact-id` = %d AND `uri` = "%s"', intval($item['uid']), intval($item['contact-id']), dbesc($item['uri']));
             if (count($r) != 1) {
                 logger('mailstream_post_remote_hook: Unexpected number of items returned from mailstream_item');
                 return;
@@ -302,6 +307,21 @@ function mailstream_do_images($a, &$item, &$attachments) {
 function mailstream_subject($item) {
     if ($item['title']) {
         return $item['title'];
+    }
+    if ($item['thr-parent']) {
+        $parent = $item['thr-parent'];
+        while ($parent) {
+            logger('@@@ mailstream_subject: no subject yet for ' . $item['uid'] . ' trying parent ' . $parent);
+            $r = q("SELECT `thr-parent`, `title` FROM `item` WHERE `uid` = '%s'", dbesc($parent));
+            if (!count($r)) {
+                break;
+            }
+            if ($r[0]['title']) {
+                logger('@@@ mailstream_subject: found subject ' . $r[0]['title']);
+                return 'Re: ' . $r[0]['title'];
+            }
+            $parent = $r[0]['thr-parent'];
+        }
     }
     $r = q("SELECT * FROM `contact` WHERE `id` = %d AND `uid` = %d",
            intval($item['contact-id']), intval($item['uid']));
@@ -374,7 +394,7 @@ function mailstream_cron($a, $b) {
     logger('mailstream_cron processing ' . count($ms_items) . ' items');
     foreach ($ms_items as $ms_item) {
         $items = q("SELECT * FROM `item` WHERE `uid` = %d AND `uri` = '%s' AND `contact-id` = %d",
-                   intval($ms_item['uid']), dbesc($ms_item['plink']), intval($ms_item['contact-id']));
+                   intval($ms_item['uid']), dbesc($ms_item['uri']), intval($ms_item['contact-id']));
         $item = $items[0];
         $users = q("SELECT * FROM `user` WHERE `uid` = %d", intval($ms_item['uid']));
         $user = $users[0];
@@ -382,7 +402,7 @@ function mailstream_cron($a, $b) {
             mailstream_send($a, $ms_item, $item, $user);
         }
         else {
-            logger('mailstream_cron: Unable to find item ' . $ms_item['plink']);
+            logger('mailstream_cron: Unable to find item ' . $ms_item['uri']);
             q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
         }
     }
