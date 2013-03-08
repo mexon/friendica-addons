@@ -20,6 +20,7 @@ function mailstream_install() {
         $r = q($a);
     }
 
+//@@@ todo: remove delay settings from pconfig and rename plink to item-uri
     set_config('mailstream', 'dbversion', '0.1');
 }
 
@@ -244,9 +245,6 @@ function mailstream_generate_id($a, $uri) {
 function mailstream_post_remote_hook(&$a, &$item) {
     if (get_pconfig($item['uid'], 'mailstream', 'enabled')) {
         if ($item['uid'] && $item['contact-id'] && $item['plink']) {
-            if ($item['parent'] != $item['id']) {
-                logger('@@@ should set reply to here');
-            }
             q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `plink`, `message-id`, `created`) " .
               "VALUES (%d, '%s', '%s', '%s', now())", intval($item['uid']),
               intval($item['contact-id']), dbesc($item['plink']), dbesc(mailstream_generate_id($a, $item['uri'])));
@@ -265,7 +263,6 @@ function mailstream_post_remote_hook(&$a, &$item) {
                 return;
             }
             $user = $r[0];
-            logger('@@@ sending immediately');
             mailstream_send($a, $ms_item, $item, $user);
         }
     }
@@ -330,7 +327,6 @@ function mailstream_subject($item) {
 
 function mailstream_send($a, $ms_item, $item, $user) {
     if (!$item['visible']) {
-        logger('@@@ item is not visible, not doing send');
         return;
     }
     require_once(dirname(__file__).'/class.phpmailer.php');
@@ -374,17 +370,7 @@ function mailstream_send($a, $ms_item, $item, $user) {
 }
 
 function mailstream_cron($a, $b) {
-    $query = <<<EOF
-SELECT `mailstream_item`.*
- FROM `mailstream_item`, `pconfig`
- WHERE `mailstream_item`.`uid` = `pconfig`.`uid`
- AND `pconfig`.`cat` = 'mailstream'
- AND `pconfig`.`k` = 'delay'
- AND `completed` = '0000-00-00 00:00:00'
- AND timestampadd(MINUTE, convert(`pconfig`.`v`, DECIMAL), `created`) < now()
- LIMIT 100
-EOF;
-    $ms_items = q($query);
+    $ms_items = q("SELECT * FROM `mailstream_item` WHERE `completed` = '0000-00-00 00:00:00' LIMIT 100");
     logger('mailstream_cron processing ' . count($ms_items) . ' items');
     foreach ($ms_items as $ms_item) {
         $items = q("SELECT * FROM `item` WHERE `uid` = %d AND `plink` = '%s' AND `contact-id` = %d",
@@ -408,20 +394,14 @@ function mailstream_plugin_settings(&$a,&$s) {
     $enabled_mu = ($enabled == 'on') ? ' checked="true"' : '';
     $address = get_pconfig(local_user(), 'mailstream', 'address');
     $address_mu = $address ? (' value="' . $address . '"') : '';
-    $delay = get_pconfig(local_user(), 'mailstream', 'delay');
-    $delay_mu = ' value="' . $delay . '"';
     $template = file_get_contents(dirname(__file__).'/settings.tpl');
     $s .= replace_macros($template, array('$address' => $address_mu,
-                                          '$delay' => $delay_mu,
                                           '$enabled' => $enabled_mu));
 }
 
 function mailstream_plugin_settings_post($a,$post) {
     if ($_POST['address'] != "") {
         set_pconfig(local_user(), 'mailstream', 'address', $_POST['address']);
-    }
-    if ($_POST['delay'] > 0) {
-        set_pconfig(local_user(), 'mailstream', 'delay', $_POST['delay']);
     }
     if ($_POST['enabled']) {
         set_pconfig(local_user(), 'mailstream', 'enabled', $_POST['enabled']);
