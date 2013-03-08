@@ -419,9 +419,10 @@ function retriever_check_item_completed(&$item)
     $old_visible = $item['visible'];
     $item['visible'] = $waiting ? 0 : 1;
     if (($item['id'] > 0) && ($old_visible != $item['visible'])) {
-        logger('retriever_check_item_completed: changing visible flag to ' . $item['visible']);
+        logger('retriever_check_item_completed: changing visible flag to ' . $item['visible'] . ' and invoking notifier ("edit_post", ' . $item['id'] . ')');
         q('UPDATE `item` SET `visible` = %d WHERE `id` = %d',
           intval($item['visible']), intval($item['id']));
+        proc_run('php', "include/notifier.php", 'edit_post', $item['id']);
     }
 }
 
