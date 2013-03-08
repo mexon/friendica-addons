@@ -26,7 +26,10 @@ function mailstream_install() {
         q('ALTER TABLE `mailstream_item` DROP INDEX `plink`');
         q('ALTER TABLE `mailstream_item` CHANGE `plink` `uri` char(255) NOT NULL');
     }
-    set_config('mailstream', 'dbversion', '0.2');
+    if (get_config('mailstream', 'dbversion') == '0.2') {
+        q('DELETE FROM `pconfig` WHERE `cat` = "mailstream" AND `k` = "delay"');
+    }
+    set_config('mailstream', 'dbversion', '0.3');
 }
 
 function mailstream_uninstall() {
@@ -311,8 +314,8 @@ function mailstream_subject($item) {
     if ($item['thr-parent']) {
         $parent = $item['thr-parent'];
         while ($parent) {
-            logger('@@@ mailstream_subject: no subject yet for ' . $item['uid'] . ' trying parent ' . $parent);
-            $r = q("SELECT `thr-parent`, `title` FROM `item` WHERE `uid` = '%s'", dbesc($parent));
+            logger('@@@ mailstream_subject: no subject yet for ' . $item['uri'] . ' trying parent ' . $parent);
+            $r = q("SELECT `thr-parent`, `title` FROM `item` WHERE `uri` = '%s'", dbesc($parent));
             if (!count($r)) {
                 break;
             }
