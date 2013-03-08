@@ -244,11 +244,11 @@ function mailstream_generate_id($a, $uri) {
 
 function mailstream_post_remote_hook(&$a, &$item) {
     if (get_pconfig($item['uid'], 'mailstream', 'enabled')) {
-        if ($item['uid'] && $item['contact-id'] && $item['plink']) {
+        if ($item['uid'] && $item['contact-id'] && $item['uri']) {
             q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `plink`, `message-id`, `created`) " .
               "VALUES (%d, '%s', '%s', '%s', now())", intval($item['uid']),
-              intval($item['contact-id']), dbesc($item['plink']), dbesc(mailstream_generate_id($a, $item['uri'])));
-            $r = q('SELECT * FROM `mailstream_item` WHERE `uid` = %d AND `contact-id` = %d AND `plink` = "%s"', intval($item['uid']), intval($item['contact-id']), dbesc($item['plink']));
+              intval($item['contact-id']), dbesc($item['uri']), dbesc(mailstream_generate_id($a, $item['uri'])));
+            $r = q('SELECT * FROM `mailstream_item` WHERE `uid` = %d AND `contact-id` = %d AND `plink` = "%s"', intval($item['uid']), intval($item['contact-id']), dbesc($item['uri']));
             if (count($r) != 1) {
                 logger('mailstream_post_remote_hook: Unexpected number of items returned from mailstream_item');
                 return;
@@ -373,7 +373,7 @@ function mailstream_cron($a, $b) {
     $ms_items = q("SELECT * FROM `mailstream_item` WHERE `completed` = '0000-00-00 00:00:00' LIMIT 100");
     logger('mailstream_cron processing ' . count($ms_items) . ' items');
     foreach ($ms_items as $ms_item) {
-        $items = q("SELECT * FROM `item` WHERE `uid` = %d AND `plink` = '%s' AND `contact-id` = %d",
+        $items = q("SELECT * FROM `item` WHERE `uid` = %d AND `uri` = '%s' AND `contact-id` = %d",
                    intval($ms_item['uid']), dbesc($ms_item['plink']), intval($ms_item['contact-id']));
         $item = $items[0];
         $users = q("SELECT * FROM `user` WHERE `uid` = %d", intval($ms_item['uid']));
