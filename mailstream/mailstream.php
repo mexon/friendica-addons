@@ -311,7 +311,7 @@ function mailstream_subject($item) {
     if ($item['title']) {
         return $item['title'];
     }
-    if ($item['thr-parent']) {
+    if ($item['thr-parent'] && ($item['thr-parent'] != $item['uri'])) {
         $parent = $item['thr-parent'];
         while ($parent) {
             logger('@@@ mailstream_subject: no subject yet for ' . $item['uri'] . ' trying parent ' . $parent);
