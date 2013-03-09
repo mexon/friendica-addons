@@ -311,7 +311,7 @@ function mailstream_subject($item) {
     if ($item['title']) {
         return $item['title'];
     }
-    if ($item['thr-parent']) {
+    if ($item['thr-parent'] && ($item['thr-parent'] != $item['uri'])) {
         $parent = $item['thr-parent'];
         while ($parent) {
             $r = q("SELECT `thr-parent`, `title` FROM `item` WHERE `uri` = '%s'", dbesc($parent));
