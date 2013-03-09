@@ -46,7 +46,11 @@ function mailstream_module() {}
 function mailstream_plugin_admin(&$a,&$o) {
     $frommail = get_config('mailstream', 'frommail');
     $template = file_get_contents(dirname(__file__).'/admin.tpl');
-    $o .= replace_macros($template, array('$frommail' => array('frommail', 'From Address', $frommail, 'Email address that items from the stream will appear to be from.  This should ideally be a valid place to send replies.')));
+    $config = array('frommail',
+                    t('From Address'),
+                    $frommail,
+                    t('Email address that stream items will appear to be from.'));
+    $o .= replace_macros($template, array('$frommail' => $config));
 }
 
 function mailstream_plugin_admin_post ($a) {
@@ -244,7 +248,7 @@ function mailstream_create_item($a, $message) {
 }
 
 function mailstream_generate_id($a, $uri) {
-// http://www.jwz.org/doc/mid.html
+    // http://www.jwz.org/doc/mid.html
     $host = $a->get_hostname();
     $resource = hash('md5', $uri);
     return "<" . $resource . "@" . $host . ">";
@@ -319,7 +323,7 @@ function mailstream_subject($item) {
                 break;
             }
             if ($r[0]['title']) {
-                return 'Re: ' . $r[0]['title'];
+                return t('Re:') . ' ' . $r[0]['title'];
             }
             $parent = $r[0]['thr-parent'];
         }
@@ -328,22 +332,22 @@ function mailstream_subject($item) {
            intval($item['contact-id']), intval($item['uid']));
     $contact = $r[0];
     if ($contact['network'] === 'dfrn') {
-        return "Friendica post";
+        return t("Friendica post");
     }
     if ($contact['network'] === 'dspr') {
-        return "Diaspora post";
+        return t("Diaspora post");
     }
     if ($contact['network'] === 'face') {
         $subject = (strlen($item['body']) > 150) ? (substr($item['body'], 0, 140) . '...') : $item['body'];
         return preg_replace('/\\s+/', ' ', $subject);
     }
     if ($contact['network'] === 'feed') {
-        return "Feed item";
+        return t("Feed item");
     }
     if ($contact['network'] === 'mail') {
-        return "Email";
+        return t("Email");
     }
-    return "Friendica Item";
+    return t("Friendica Item");
 }
 
 function mailstream_send($a, $ms_item, $item, $user) {
@@ -415,12 +419,14 @@ function mailstream_cron($a, $b) {
 
 function mailstream_plugin_settings(&$a,&$s) {
     $enabled = get_pconfig(local_user(), 'mailstream', 'enabled');
-    $enabled_mu = ($enabled == 'on') ? ' checked="true"' : '';
+    $enabled_mu = ($enabled === 'on') ? ' checked="true"' : '';
     $address = get_pconfig(local_user(), 'mailstream', 'address');
     $address_mu = $address ? (' value="' . $address . '"') : '';
     $template = file_get_contents(dirname(__file__).'/settings.tpl');
     $s .= replace_macros($template, array('$address' => $address_mu,
-                                          '$enabled' => $enabled_mu));
+                                          '$address_caption' => t('Address:'),
+                                          '$enabled' => $enabled_mu,
+                                          '$enabled_caption' => t('Enabled:')));
 }
 
 function mailstream_plugin_settings_post($a,$post) {
