@@ -181,7 +181,7 @@ function mailstream_create_item($a, $message) {
 
     call_hooks('post_local', $message);
     if(x($datarray,'cancel')) {
-        logger('mod_item: post cancelled by plugin.');
+        logger('mod_item: post cancelled by plugin.', LOGGER_DEBUG);
         return;
     }
 
@@ -258,16 +258,16 @@ function mailstream_post_remote_hook(&$a, &$item) {
               intval($item['contact-id']), dbesc($item['uri']), dbesc(mailstream_generate_id($a, $item['uri'])));
             $r = q('SELECT * FROM `mailstream_item` WHERE `uid` = %d AND `contact-id` = %d AND `uri` = "%s"', intval($item['uid']), intval($item['contact-id']), dbesc($item['uri']));
             if (count($r) != 1) {
-                logger('mailstream_post_remote_hook: Unexpected number of items returned from mailstream_item');
+                logger('mailstream_post_remote_hook: Unexpected number of items returned from mailstream_item', LOGGER_ERROR);
                 return;
             }
             $ms_item = $r[0];
             logger('mailstream_post_remote_hook: created mailstream_item '
                    . $ms_item['id'] . ' for item ' . $item['uri'] . ' '
-                   . $item['uid'] . ' ' . $item['contact-id']);
+                   . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DATA);
             $r = q('SELECT * FROM `user` WHERE `uid` = %d', intval($item['uid']));
             if (count($r) != 1) {
-                logger('mailstream_post_remote_hook: Unexpected number of users returned');
+                logger('mailstream_post_remote_hook: Unexpected number of users returned', LOGGER_ERROR);
                 return;
             }
             $user = $r[0];
@@ -314,13 +314,11 @@ function mailstream_subject($item) {
     if ($item['thr-parent']) {
         $parent = $item['thr-parent'];
         while ($parent) {
-            logger('@@@ mailstream_subject: no subject yet for ' . $item['uri'] . ' trying parent ' . $parent);
             $r = q("SELECT `thr-parent`, `title` FROM `item` WHERE `uri` = '%s'", dbesc($parent));
             if (!count($r)) {
                 break;
             }
             if ($r[0]['title']) {
-                logger('@@@ mailstream_subject: found subject ' . $r[0]['title']);
                 return 'Re: ' . $r[0]['title'];
             }
             $parent = $r[0]['thr-parent'];
@@ -383,18 +381,21 @@ function mailstream_send($a, $ms_item, $item, $user) {
         if (!$mail->Send()) {
             throw new Exception($mail->ErrorInfo);
         }
-        q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
-        logger('mailstream_send sent message ' . $mail->MessageID . ' ' . $mail->Subject);
+        logger('mailstream_send sent message ' . $mail->MessageID . ' ' . $mail->Subject, LOGGER_DEBUG);
     } catch (phpmailerException $e) {
-        logger('mailstream_send PHPMailer exception sending message ' . $ms_item['message-id'] . ': ' . $e->errorMessage()); //Pretty error messages from PHPMailer
+        logger('mailstream_send PHPMailer exception sending message ' . $ms_item['message-id'] . ': ' . $e->errorMessage(), LOGGER_ERROR);
     } catch (Exception $e) {
-        logger('mailstream_send exception sending message ' . $ms_item['message-id'] . ': ' . $e->getMessage());
+        logger('mailstream_send exception sending message ' . $ms_item['message-id'] . ': ' . $e->getMessage(), LOGGER_ERROR);
     }
+    // In case of failure, still set the item to completed.  Otherwise
+    // we'll just try to send it over and over again and it'll fail
+    // every time.
+    q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
 }
 
 function mailstream_cron($a, $b) {
     $ms_items = q("SELECT * FROM `mailstream_item` WHERE `completed` = '0000-00-00 00:00:00' LIMIT 100");
-    logger('mailstream_cron processing ' . count($ms_items) . ' items');
+    logger('mailstream_cron processing ' . count($ms_items) . ' items', LOGGER_DEBUG);
     foreach ($ms_items as $ms_item) {
         $items = q("SELECT * FROM `item` WHERE `uid` = %d AND `uri` = '%s' AND `contact-id` = %d",
                    intval($ms_item['uid']), dbesc($ms_item['uri']), intval($ms_item['contact-id']));
@@ -405,7 +406,7 @@ function mailstream_cron($a, $b) {
             mailstream_send($a, $ms_item, $item, $user);
         }
         else {
-            logger('mailstream_cron: Unable to find item ' . $ms_item['uri']);
+            logger('mailstream_cron: Unable to find item ' . $ms_item['uri'], LOGGER_ERROR);
             q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
         }
     }
@@ -439,5 +440,5 @@ function mailstream_tidy() {
     foreach ($r as $rr) {
         q('DELETE FROM mailstream_item WHERE id = %d', intval($rr['id']));
     }
-    logger('mailstream_tidy: deleted ' . count($r) . ' old items');
+    logger('mailstream_tidy: deleted ' . count($r) . ' old items', LOGGER_DEBUG);
 }
