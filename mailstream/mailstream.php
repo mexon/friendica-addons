@@ -176,7 +176,7 @@ function mailstream_send($a, $ms_item, $item, $user) {
     $email = get_pconfig($item['uid'], 'mailstream', 'address');
     $mail = new PHPmailer;
     try {
-        $mailer->XMailer = 'Friendica Mailstream Plugin';
+        $mail->XMailer = 'Friendica Mailstream Plugin';
         $mail->SetFrom($frommail, $item['author-name']);
         $mail->AddAddress($email, $user['username']);
         $mail->MessageID = $ms_item['message-id'];
