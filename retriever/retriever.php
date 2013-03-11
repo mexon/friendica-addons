@@ -352,7 +352,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $extracter_template = file_get_contents(dirname(__file__).'/extract.tpl');
     $doc = new DOMDocument();
     if (strpos($resource['type'], 'html') !== false) {
-        $doc->loadHTML($resource['data']);
+        @$doc->loadHTML($resource['data']);
     }
     else {
         $doc->loadXML($resource['data']);
