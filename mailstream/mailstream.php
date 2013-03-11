@@ -126,19 +126,21 @@ function mailstream_subject($item) {
     if ($item['title']) {
         return $item['title'];
     }
-    if ($item['thr-parent'] && ($item['thr-parent'] != $item['uri'])) {
-        $parent = $item['thr-parent'];
-        // Don't look more than 100 levels deep for a subject, in case of loops
-        for ($i = 0; ($i < 100) && $parent; $i++) {
-            $r = q("SELECT `thr-parent`, `title` FROM `item` WHERE `uri` = '%s'", dbesc($parent));
-            if (!count($r)) {
-                break;
-            }
-            if ($r[0]['title']) {
-                return t('Re:') . ' ' . $r[0]['title'];
-            }
-            $parent = $r[0]['thr-parent'];
+    $parent = $item['thr-parent'];
+    // Don't look more than 100 levels deep for a subject, in case of loops
+    for ($i = 0; ($i < 100) && $parent; $i++) {
+        while ($parent) {
+        $r = q("SELECT `thr-parent`, `title` FROM `item` WHERE `uri` = '%s'", dbesc($parent));
+        if (!count($r)) {
+            break;
         }
+        if ($r[0]['thr-parent'] === $parent) {
+            break;
+        }
+        if ($r[0]['title']) {
+            return t('Re:') . ' ' . $r[0]['title'];
+        }
+        $parent = $r[0]['thr-parent'];
     }
     $r = q("SELECT * FROM `contact` WHERE `id` = %d AND `uid` = %d",
            intval($item['contact-id']), intval($item['uid']));
@@ -177,7 +179,7 @@ function mailstream_send($a, $ms_item, $item, $user) {
     $email = get_pconfig($item['uid'], 'mailstream', 'address');
     $mail = new PHPmailer;
     try {
-        $mailer->XMailer = 'Friendica Mailstream Plugin';
+        $mail->XMailer = 'Friendica Mailstream Plugin';
         $mail->SetFrom($frommail, $item['author-name']);
         $mail->AddAddress($email, $user['username']);
         $mail->MessageID = $ms_item['message-id'];
