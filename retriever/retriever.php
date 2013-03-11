@@ -61,9 +61,17 @@ function retriever_uninstall() {
 
 function retriever_module() {}
 
+function retriever_cron($a, $b) {
+    // 100 is a nice sane number.  Maybe this should be configurable.
+    // Feel free to write me a bug about that, explaining in detail
+    // how important it is to you.
+    retriever_retrieve_items(100);
+    retriever_tidy();
+}
+
 $retriever_item_count = 0;
 
-function retriever_cron($a, $b) {
+function retriever_retrieve_items($max_items) {
     global $retriever_item_count;
 
     $retriever_schedule = array(array(1,'minute'),
@@ -83,27 +91,26 @@ function retriever_cron($a, $b) {
                    ', ' . intval($num) . ', `last-try`) < now())');
     }
 
-    // 100 is a nice sane number.  Maybe this should be configurable.
-    // Feel free to write me a bug about that, explaining in detail
-    // how important it is to you.
-    $retrieve_max_items = 100;
-    $retrieve_items = $retrieve_max_items - $retriever_item_count;
+    $retrieve_items = $max_items - $retriever_item_count;
     do {
+        logger("@@@ retriever_retrieve_items: about to try retrieving $retrieve_items items");
         $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
                dbesc(implode($schedule_clauses, ' OR ')),
                intval($retrieve_items));
+        logger("@@@ retriever_retrieve_items: found " . count($r) . ' items');
         if (count($r) == 0) {
-            break;
+            logger('@@@ no more items to retrieve');
+            return;
         }
         foreach ($r as $rr) {
             retrieve_resource($rr);
             $retriever_item_count++;
+            logger('@@@ retriever_retrieve_items: increasing item count, now ' . $retriever_item_count);
         }
-        $retrieve_items = $retrieve_max_items - $retriever_item_count;
+        $retrieve_items = $max_items - $retriever_item_count;
+        logger('@@@ retriever_retrieve_items: total items ' . $retriever_item_count . ' next loop should be ' . $retrieve_items);
     }
     while ($retrieve_items > 0);
-
-    retriever_tidy();
 }
 
 function retriever_tidy() {
@@ -367,7 +374,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $extracter_template = file_get_contents(dirname(__file__).'/extract.tpl');
     $doc = new DOMDocument();
     if (strpos($resource['type'], 'html') !== false) {
-        $doc->loadHTML($resource['data']);
+        @$doc->loadHTML($resource['data']);
     }
     else {
         $doc->loadXML($resource['data']);
