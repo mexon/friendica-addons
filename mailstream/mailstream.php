@@ -66,7 +66,7 @@ function mailstream_generate_id($a, $uri) {
 }
 
 function mailstream_post_remote_hook(&$a, &$item) {
-    if (get_pconfig($item['uid'], 'mailstream', 'enabled')) {
+    if (get_pconfig($item['uid'], 'mailstream', 'enabled') === 'on') {
         if ($item['uid'] && $item['contact-id'] && $item['uri']) {
             q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `uri`, `message-id`, `created`) " .
               "VALUES (%d, '%s', '%s', '%s', now())", intval($item['uid']),
@@ -185,6 +185,8 @@ function mailstream_send($a, $ms_item, $item, $user) {
         if ($item['thr-parent'] != $item['uri']) {
             $mail->addCustomHeader('In-Reply-To: ' . mailstream_generate_id($a, $item['thr-parent']));
         }
+        $mail->addCustomHeader('X-Friendica-Mailstream-URI: ' . $item['uri']);
+        $mail->addCustomHeader('X-Friendica-Mailstream-Plink: ' . $item['plink']);
         $encoding = 'base64';
         foreach ($attachments as $url=>$image) {
             $mail->AddStringEmbeddedImage($image['data'], $image['guid'], $image['filename'], $encoding, $image['type']);

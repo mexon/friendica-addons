@@ -61,7 +61,11 @@ function retriever_uninstall() {
 
 function retriever_module() {}
 
+$retriever_item_count = 0;
+
 function retriever_cron($a, $b) {
+    global $retriever_item_count;
+
     $retriever_schedule = array(array(1,'minute'),
                                 array(10,'minute'),
                                 array(1,'hour'),
@@ -82,11 +86,22 @@ function retriever_cron($a, $b) {
     // 100 is a nice sane number.  Maybe this should be configurable.
     // Feel free to write me a bug about that, explaining in detail
     // how important it is to you.
-    $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT 100",
-           dbesc(implode($schedule_clauses, ' OR ')));
-    foreach ($r as $rr) {
-        retrieve_resource($rr);
+    $retrieve_max_items = 100;
+    $retrieve_items = $retrieve_max_items - $retriever_item_count;
+    do {
+        $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
+               dbesc(implode($schedule_clauses, ' OR ')),
+               intval($retrieve_items));
+        if (count($r) == 0) {
+            break;
+        }
+        foreach ($r as $rr) {
+            retrieve_resource($rr);
+            $retriever_item_count++;
+        }
+        $retrieve_items = $retrieve_max_items - $retriever_item_count;
     }
+    while ($retrieve_items > 0);
 
     retriever_tidy();
 }
