@@ -129,7 +129,6 @@ function mailstream_subject($item) {
     $parent = $item['thr-parent'];
     // Don't look more than 100 levels deep for a subject, in case of loops
     for ($i = 0; ($i < 100) && $parent; $i++) {
-        while ($parent) {
         $r = q("SELECT `thr-parent`, `title` FROM `item` WHERE `uri` = '%s'", dbesc($parent));
         if (!count($r)) {
             break;
