@@ -65,7 +65,7 @@ function retriever_cron($a, $b) {
     // 100 is a nice sane number.  Maybe this should be configurable.
     // Feel free to write me a bug about that, explaining in detail
     // how important it is to you.
-    retriever_retrieve_items(100);
+    retriever_retrieve_items(1000);
     retriever_tidy();
 }
 
@@ -99,7 +99,7 @@ function retriever_retrieve_items($max_items) {
                intval($retrieve_items));
         logger("@@@ retriever_retrieve_items: found " . count($r) . ' items');
         if (count($r) == 0) {
-            logger('@@@ no more items to retrieve');
+            logger('@@@ retriever_retrieve_items: no more items to retrieve');
             return;
         }
         foreach ($r as $rr) {
@@ -182,7 +182,7 @@ function retriever_fetch_url($url,$binary = false, &$content_type, &$redirects =
 	// don't let curl abort the entire application
 	// if it throws any errors.
 
-	$s = @curl_exec($ch);
+	$s = curl_exec($ch);
 
 	$base = $s;
 	$curl_info = @curl_getinfo($ch);
@@ -390,6 +390,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $xmldoc = new DOMDocument();
     $xmldoc->loadXML($xslt);
     $xp = new XsltProcessor();
+    logger('@@@ about to import stylesheet "' . $xslt . '"');
     $xp->importStylesheet($xmldoc);
     $transformed = $xp->transformToXML($doc);
     $item['body'] = html2bbcode($transformed);
