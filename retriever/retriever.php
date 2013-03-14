@@ -440,7 +440,7 @@ function retriever_check_item_completed(&$item)
     $item['visible'] = $waiting ? 0 : 1;
     if (($item['id'] > 0) && ($old_visible != $item['visible'])) {
         logger('retriever_check_item_completed: changing visible flag to ' . $item['visible'] . ' and invoking notifier ("edit_post", ' . $item['id'] . ')');
-        q("UPDATE `item` SET `visible` = %d `edited` = '%s' WHERE `id` = %d",
+        q("UPDATE `item` SET `visible` = %d, `edited` = '%s' WHERE `id` = %d",
           intval($item['visible']),
           dbesc(datetime_convert('UTC', 'UTC')),
           intval($item['id']));
