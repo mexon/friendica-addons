@@ -5,7 +5,6 @@
  * Version: 0.1
  * Author: Matthew Exon <http://mat.exon.name>
  */
-set_include_path("/Users/mat/system/pear/share/pear");
 
 function mailstream_install() {
     register_hook('plugin_settings', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings');
