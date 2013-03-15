@@ -15,8 +15,9 @@ CREATE TABLE IF NOT EXISTS `retriever_item` (
        `contact-id` int(10) unsigned NOT NULL DEFAULT '0',
        `resource` int(11) NOT NULL,
        `parent` int(11) NOT NULL,
+       `finished` tinyint(1) unsigned NOT NULL DEFAULT '0',
        KEY `resource` (`resource`),
-       KEY `all` (`item-uri`, `item-uid`, `contact-id`, `resource`),
+       KEY `all` (`item-uri`, `item-uid`, `contact-id`),
        PRIMARY KEY (`id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 
@@ -25,11 +26,10 @@ CREATE TABLE IF NOT EXISTS `retriever_resource` (
        `type` char(255) NOT NULL,
        `binary` int(1) NOT NULL DEFAULT 0,
        `url` varchar(800) CHARACTER SET ascii NOT NULL,
-       `created` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-       `completed` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
-       `last-try` datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
+       `created` timestamp NOT NULL DEFAULT now(),
+       `completed` timestamp NULL DEFAULT NULL,
+       `last-try` timestamp NULL DEFAULT NULL,
        `num-tries` int(11) NOT NULL DEFAULT 0,
        `data` mediumtext NOT NULL,
-       PRIMARY KEY (`id`),
-       KEY (`retriever`)
+       PRIMARY KEY (`id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8

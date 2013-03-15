@@ -45,8 +45,14 @@ function retriever_install() {
     if (get_config('retriever', 'dbversion') == '0.4') {
         q("ALTER TABLE `retriever_item` ADD COLUMN `finished` tinyint(1) unsigned NOT NULL DEFAULT '0'");
     }
-    //@@@ keys have changed!  check this.
-    set_config('retriever', 'dbversion', '0.5');
+    if (get_config('retriever', 'dbversion') == '0.5') {
+        q('ALTER TABLE `retriever_resource` CHANGE `created` `created` timestamp NOT NULL DEFAULT now()');
+        q('ALTER TABLE `retriever_resource` CHANGE `completed` `completed` timestamp NULL DEFAULT NULL');
+        q('ALTER TABLE `retriever_resource` CHANGE `last-try` `last-try` timestamp NULL DEFAULT NULL');
+        q('ALTER TABLE `retriever_item` DROP KEY `all`');
+        q('ALTER TABLE `retriever_item` ADD KEY `all` (`item-uri`, `item-uid`, `contact-id`)');
+    }
+    set_config('retriever', 'dbversion', '0.6');
 }
 
 function retriever_uninstall() {
@@ -114,7 +120,7 @@ function retriever_retrieve_items($max_items) {
 }
 
 function retriever_tidy() {
-    $r = q("SELECT id FROM retriever_resource WHERE completed > '0000-00-00 00:00:00' AND completed < DATE_SUB(NOW(), INTERVAL 1 WEEK)");
+    $r = q("SELECT id FROM retriever_resource WHERE completed IS NOT NULL AND completed < DATE_SUB(now(), INTERVAL 1 WEEK)");
     $count = 0;
     foreach ($r as $rr) {
         $count++;
@@ -325,9 +331,8 @@ function add_retriever_resource($url, $binary = false) {
         return $r[0];
     }
     else {
-        q("INSERT INTO `retriever_resource` (`binary`, `url`, `created`) " .
-          "VALUES (%d, '%s', now())",
-          intval($binary ? 1 : 0), dbesc($url));
+        q("INSERT INTO `retriever_resource` (`binary`, `url`) " .
+          "VALUES (%d, '%s')", intval($binary ? 1 : 0), dbesc($url));
         $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
         return $r[0];
     }
@@ -417,7 +422,7 @@ function retrieve_images(&$item) {
     foreach ($matches as $url) {
         if (strpos($url, get_app()->get_baseurl()) === FALSE) {
             $resource = add_retriever_resource($url, true);
-            if ($resource['completed'] == '0000-00-00 00:00:00') {
+            if (!$resource['completed']) {
                 add_retriever_item($item, $resource);
             }
             else {
