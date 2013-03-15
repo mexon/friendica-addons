@@ -99,22 +99,17 @@ function retriever_retrieve_items($max_items) {
 
     $retrieve_items = $max_items - $retriever_item_count;
     do {
-        logger("@@@ retriever_retrieve_items: about to try retrieving $retrieve_items items");
         $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
                dbesc(implode($schedule_clauses, ' OR ')),
                intval($retrieve_items));
-        logger("@@@ retriever_retrieve_items: found " . count($r) . ' items');
         if (count($r) == 0) {
-            logger('@@@ retriever_retrieve_items: no more items to retrieve');
             return;
         }
         foreach ($r as $rr) {
             retrieve_resource($rr);
             $retriever_item_count++;
-            logger('@@@ retriever_retrieve_items: increasing item count, now ' . $retriever_item_count);
         }
         $retrieve_items = $max_items - $retriever_item_count;
-        logger('@@@ retriever_retrieve_items: total items ' . $retriever_item_count . ' next loop should be ' . $retrieve_items);
     }
     while ($retrieve_items > 0);
 }
@@ -229,7 +224,7 @@ function retriever_fetch_url($url,$binary = false, &$content_type, &$redirects =
 }
 
 function retrieve_resource($resource) {
-    logger('retriever_resource: ' . ($resource['num-tries'] + 1) .
+    logger('retrieve_resource: ' . ($resource['num-tries'] + 1) .
            ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
     q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1 WHERE id = %d",
       intval($resource['id']));
@@ -398,7 +393,6 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $xmldoc = new DOMDocument();
     $xmldoc->loadXML($xslt);
     $xp = new XsltProcessor();
-    logger('@@@ about to import stylesheet "' . $xslt . '"');
     $xp->importStylesheet($xmldoc);
     $transformed = $xp->transformToXML($doc);
     $item['body'] = html2bbcode($transformed);
