@@ -28,7 +28,11 @@ function mailstream_install() {
     if (get_config('mailstream', 'dbversion') == '0.2') {
         q('DELETE FROM `pconfig` WHERE `cat` = "mailstream" AND `k` = "delay"');
     }
-    set_config('mailstream', 'dbversion', '0.3');
+    if (get_config('mailstream', 'dbversion') == '0.3') {
+        q('ALTER TABLE `mailstream_item` CHANGE `created` `created` timestamp NOT NULL DEFAULT now()');
+        q('ALTER TABLE `mailstream_item` CHANGE `completed` `completed` timestamp NULL DEFAULT NULL');
+    }
+    set_config('mailstream', 'dbversion', '0.4');
 }
 
 function mailstream_uninstall() {
@@ -68,8 +72,8 @@ function mailstream_generate_id($a, $uri) {
 function mailstream_post_remote_hook(&$a, &$item) {
     if (get_pconfig($item['uid'], 'mailstream', 'enabled') === 'on') {
         if ($item['uid'] && $item['contact-id'] && $item['uri']) {
-            q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `uri`, `message-id`, `created`) " .
-              "VALUES (%d, '%s', '%s', '%s', now())", intval($item['uid']),
+            q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `uri`, `message-id`) " .
+              "VALUES (%d, '%s', '%s', '%s')", intval($item['uid']),
               intval($item['contact-id']), dbesc($item['uri']), dbesc(mailstream_generate_id($a, $item['uri'])));
             $r = q('SELECT * FROM `mailstream_item` WHERE `uid` = %d AND `contact-id` = %d AND `uri` = "%s"', intval($item['uid']), intval($item['contact-id']), dbesc($item['uri']));
             if (count($r) != 1) {
@@ -213,7 +217,7 @@ function mailstream_send($a, $ms_item, $item, $user) {
 }
 
 function mailstream_cron($a, $b) {
-    $ms_items = q("SELECT * FROM `mailstream_item` WHERE `completed` = '0000-00-00 00:00:00' LIMIT 100");
+    $ms_items = q("SELECT * FROM `mailstream_item` WHERE `completed` IS NULL LIMIT 100");
     logger('mailstream_cron processing ' . count($ms_items) . ' items', LOGGER_DEBUG);
     foreach ($ms_items as $ms_item) {
         $items = q("SELECT * FROM `item` WHERE `uid` = %d AND `uri` = '%s' AND `contact-id` = %d",
@@ -257,7 +261,7 @@ function mailstream_plugin_settings_post($a,$post) {
 }
 
 function mailstream_tidy() {
-    $r = q("SELECT id FROM mailstream_item WHERE completed > '0000-00-00 00:00:00' AND completed < DATE_SUB(NOW(), INTERVAL 1 YEAR)");
+    $r = q("SELECT id FROM mailstream_item WHERE completed IS NOT NULL AND completed < DATE_SUB(NOW(), INTERVAL 1 YEAR)");
     foreach ($r as $rr) {
         q('DELETE FROM mailstream_item WHERE id = %d', intval($rr['id']));
     }
