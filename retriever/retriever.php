@@ -201,7 +201,7 @@ function retriever_fetch_url($url,$binary = false, &$content_type, &$redirects =
 		$base = substr($base,strlen($chunk));
 	}
 
-        logger('retriever_fetch_url: got code ' . $http_code . ' fetching ' . $url);
+        logger('retriever_fetch_url: got code ' . $http_code . ' fetching ' . $url, LOGGER_DEBUG);
 	if($http_code == 301 || $http_code == 302 || $http_code == 303 || $http_code == 307) {
 		$matches = array();
 		preg_match('/(Location:|URI:)(.*?)\n/', $header, $matches);
@@ -238,7 +238,6 @@ function retrieve_resource($resource) {
 }
 
 function get_retriever($contact_id, $uid, $create = false) {
-    logger('get_retriever: Searching for retriever uid ' . $uid . ' contact ' . $contact_id . ($create ? ', CREATING' : ', read-only'));
     $r = q("SELECT * FROM `retriever_rule` WHERE `contact-id` = %d AND `uid` = %d",
            intval($contact_id), intval($uid));
     if (count($r)) {
@@ -258,7 +257,7 @@ function retriever_item_completed($retriever_item_id, $resource) {
     logger('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url'], LOGGER_DEBUG);
     $r = q("SELECT * FROM `retriever_item` WHERE id = %d", intval($retriever_item_id));
     if (!count($r)) {
-        logger('Unable to find retriever_item ' . $retriever_item_id);
+        logger('retriever_item_completed: unable to find retriever_item ' . $retriever_item_id, LOGGER_NORMAL);
         return;
     }
     $retriever_item = $r[0];
@@ -271,7 +270,7 @@ function retriever_item_completed($retriever_item_id, $resource) {
         logger('retriever_item_completed: unexpected number of results ' .
                count($items) . ' when searching for item uri ' .
                $retriever_item['item-uri'] . ' uid ' . $retriever_item['item-uid'] .
-               ' cid ' . $retriever_item['contact-id']);
+               ' cid ' . $retriever_item['contact-id'], LOGGER_NORMAL);
         return;
     }
 
@@ -300,7 +299,7 @@ function apply_retrospective($retriever, $num) {
 
 function retriever_on_item_insert($retriever, &$item) {
     if (!$retriever || !$retriever['id']) {
-        logger('retriever_on_item_insert: No retriever supplied', LOGGER_ERROR);
+        logger('retriever_on_item_insert: No retriever supplied', LOGGER_NORMAL);
         return;
     }
     if ($retriever["data"]->enable == "on") {
@@ -341,7 +340,7 @@ function add_retriever_item(&$item, $resource) {
            dbesc($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource['id']));
     if (count($r)) {
         logger("add_retriever_item: retriever item for " .
-               $item['uid'] . ', id ' . $r[0]['id'] . " already exists, id " . $r[0]['id'], LOGGER_ERROR);
+               $item['uid'] . ', id ' . $r[0]['id'] . " already exists, id " . $r[0]['id'], LOGGER_NORMAL);
         return;
     }
 
@@ -354,9 +353,9 @@ function add_retriever_item(&$item, $resource) {
     if (!count($r)) {
         logger("add_retriever_item: couldn't create retriever item for " .
                $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'],
-               LOGGER_ERROR);
+               LOGGER_NORMAL);
     }
-    logger('add_retriever_item: created retriever_item ' . $r[0]['id'] . ' for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
+    logger('add_retriever_item: created retriever_item ' . $r[0]['id'] . ' for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
 }
 
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
@@ -367,7 +366,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         return;
     }
     if (!$resource['data']) {
-        logger('retriever_apply_dom_filter: no text to work with', LOGGER_ERROR);
+        logger('retriever_apply_dom_filter: no text to work with', LOGGER_NORMAL);
         return;
     }
 
@@ -397,7 +396,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $transformed = $xp->transformToXML($doc);
     $item['body'] = html2bbcode($transformed);
     if (!strlen($item['body'])) {
-        logger('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty', LOGGER_ERROR);
+        logger('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty', LOGGER_NORMAL);
         return;
     }
     $item['body'] .= "\n\n[i][color= #999999][url=";
@@ -415,7 +414,7 @@ function retrieve_images(&$item) {
     $matches2 = array();
     preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches2);
     $matches = array_merge($matches1[3], $matches2[1]);
-    logger('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
+    logger('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
     foreach ($matches as $url) {
         if (strpos($url, get_app()->get_baseurl()) === FALSE) {
             $resource = add_retriever_resource($url, true);
@@ -437,11 +436,11 @@ function retriever_check_item_completed(&$item)
            intval($item['contact-id']));
     $waiting = $r[0]['count(*)'];
     logger('retriever_check_item_completed: item ' . $item['uri'] . ' ' . $item['uid']
-           . ' '. $item['contact-id'] . ' waiting for ' . $waiting . ' resources');
+           . ' '. $item['contact-id'] . ' waiting for ' . $waiting . ' resources', LOGGER_DEBUG);
     $old_visible = $item['visible'];
     $item['visible'] = $waiting ? 0 : 1;
     if (($item['id'] > 0) && ($old_visible != $item['visible'])) {
-        logger('retriever_check_item_completed: changing visible flag to ' . $item['visible'] . ' and invoking notifier ("edit_post", ' . $item['id'] . ')');
+        logger('retriever_check_item_completed: changing visible flag to ' . $item['visible'] . ' and invoking notifier ("edit_post", ' . $item['id'] . ')', LOGGER_DEBUG);
         q("UPDATE `item` SET `visible` = %d, `edited` = '%s' WHERE `id` = %d",
           intval($item['visible']),
           dbesc(datetime_convert('UTC', 'UTC')),
@@ -480,14 +479,14 @@ function retriever_store_photo($item, &$resource) {
             $resource['height'] = $image->getImageHeight();
         }
         catch (Exception $e) {
-            logger("ImageMagick couldn't process image " . $resource['id'] . " " . $resource['url'] . ' length ' . strlen($resource['data']) . ': ' . $e->getMessage());
+            logger("ImageMagick couldn't process image " . $resource['id'] . " " . $resource['url'] . ' length ' . strlen($resource['data']) . ': ' . $e->getMessage(), LOGGER_DEBUG);
             return false;
         }
     }
     if (!array_key_exists('width', $resource)) {
         $image = @imagecreatefromstring($resource['data']);
         if ($image === false) {
-            logger("Couldn't process image " . $resource['id'] . " " . $resource['url']);
+            logger("Couldn't process image " . $resource['id'] . " " . $resource['url'], LOGGER_DEBUG);
             return false;
         }
         $resource['width']  = imagesx($image);
@@ -526,14 +525,14 @@ function retriever_transform_images(&$item, $resource) {
 
     if (!$resource["data"]) {
         logger('retriever_transform_images: no data available for '
-               . $resource['id'] . ' ' . $resource['url']);
+               . $resource['id'] . ' ' . $resource['url'], LOGGER_NORMAL);
         return;
     }
 
     $hash = retriever_store_photo($item, $resource);
     if ($hash === false) {
         logger('retriever_transform_images: unable to store photo '
-               . $resource['id'] . ' ' . $resource['url']);
+               . $resource['id'] . ' ' . $resource['url'], LOGGER_NORMAL);
         return;
     }
 
