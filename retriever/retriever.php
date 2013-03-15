@@ -368,6 +368,9 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['plink'], LOGGER_DEBUG);
     require_once('include/html2bbcode.php');	
 
+    if (!$retriever['data']->match) {
+        return;
+    }
     if (!$resource['data']) {
         logger('retriever_apply_dom_filter: no text to work with', LOGGER_ERROR);
         return;
