@@ -48,11 +48,19 @@ function linkedin_state_machine() {
         'wait' => function(&$window) {
             if (!$window['scraped']->page) {
             }
+            if ($window['scraped']->page === 'unknown') {
+                $window['state'] = 'extra-scrape';
+                return null;
+            }
             // By default, if we're on the home page, scrape it
             if ($window['scraped']->page === 'home') {
                 $window['state'] = 'scrape-home';
             }
             return null;
+        },
+        'extra-scrape' => function(&$window) {
+            $window['state'] = 'wait';
+            return array("function" => "scrape");
         },
         'close' => function(&$window) {
             $window['state'] = 'wait';

@@ -38,14 +38,15 @@
       <xsl:text>{</xsl:text>
 
       <xsl:if test="//div[@class='alert error']">
-        <xsl:text>"alert-error":"</xsl:text>
+        <xsl:text>"alerterror":"</xsl:text>
         <xsl:for-each select="//div[@class='alert error']//text()">
           <xsl:value-of select="."/>
         </xsl:for-each>
         <xsl:text>",</xsl:text>
       </xsl:if>
 
-      <xsl:text>"page":"</xsl:text><xsl:value-of select="$page"/>
+      <xsl:text>"title":"</xsl:text><xsl:value-of select="//title/text()"/>
+      <xsl:text>","page":"</xsl:text><xsl:value-of select="$page"/>
       <xsl:text>","notification":"</xsl:text>
       <xsl:value-of select="//*[@class='real-time-notification']"/>
       <xsl:text>","feeditems":[</xsl:text>

@@ -30,6 +30,7 @@ function scraper_uninstall() {
 function scraper_module() {}
 
 function scraper_content(&$a) {
+    logger("@@@ scraper_content is " . $a->argv[1]);
     $sites = array();
     call_hooks('scraper_site', &$sites);
 
@@ -46,10 +47,12 @@ function scraper_content(&$a) {
             $site['user'] = get_pconfig(local_user(), $site['name'], 'user');
         }
         $template = file_get_contents(dirname(__file__).'/Scraper.user.js.tpl');
-        header("Content-type: application/javascript");
+        header("Content-type: text/javascript; charset=utf-8");
         echo replace_macros($template, array('$baseurl' => $a->get_baseurl(),
                                              '$sites' => $sites,
                                              '$nick' => $nick));
+        echo "hello world 2";
+        logger('@@@ about do killme');
         killme();
     }
     $window = get_scraper_window($a->argv[1], $a->argv[2]);
@@ -433,7 +436,9 @@ function scraper_state_machine(&$window) {
     }
     $fun = $state_machine[$window['state']];
     if (!$fun) {
-        logger('@@@ unknown state, restarting');
+        $window['state'] = 'wait';
+        save_scraper_window($window);
+        return null;
     }
     $result = $fun($window);
     save_scraper_window($window);
@@ -475,8 +480,10 @@ function save_scraper_window($window) {
 }
 
 function scraper_get_command($window) {
+    $oldstate = $window['state'];
     $command = scraper_state_machine($window);
     header("Content-type: application/json");
+    logger('@@@ state machine: ' . $oldstate . ' => ' . $window['state'] . ', command ' . json_encode($command));
     echo json_encode($command);
     save_scraper_window($window);
     killme();
@@ -489,6 +496,7 @@ function scraper_post(&$a) {
         $window = get_scraper_window($a->argv[2], $a->argv[3]);
     }
     if ($a->argv[1] == "register") {
+        logger("@@@ scraper_post: register thing received");
         $window['url'] = file_get_contents("php://input");
         $window['interval'] = 30;
         call_hooks('scraper_own', &$window);
@@ -497,11 +505,16 @@ function scraper_post(&$a) {
         killme();
     }
     if ($a->argv[1] == "scraped") {
+        logger('@@@ got scraped raw stuff ' . file_get_contents("php://input"));
         $window['scraped'] = json_decode(file_get_contents("php://input"));
+        if (!$window['scraped']) {
+            logger('@@@ scraped raw stuff does not compute');
+        }
         save_scraper_window($window);
         killme();
     }
     if ($a->argv[1] == "command") {
+        logger("@@@ scraper_post: command thing received");
         scraper_get_command($window);
         return;
     }
@@ -538,7 +551,7 @@ function scraper_update_photo_for_contact($a, &$contact, $url) {
         return $contact->photo;
     }
 
-    require_once("Photo.php");
+    require_once("include/Photo.php");
 
     $resource_id = photo_new_resource();
 			
@@ -591,6 +604,7 @@ function scraper_get_xslt_from_file($file) {
 
 function delete_expired_windows() {
     q("DELETE FROM `scraper_window` WHERE TIMESTAMPADD(SECOND, `interval` * 3, `last-seen`) < NOW()");
+    q("DELETE FROM `scraper_window` WHERE `last-seen` IS NULL AND TIMESTAMPADD(MINUTE, 3, `first-seen`) < NOW()");
 }
 
 function scraper_cron($a,$b) {
@@ -601,7 +615,7 @@ function scraper_connector_settings(&$a,&$b) {
     $uid = local_user();
     $r = q("SELECT `nickname` FROM `user` WHERE `uid` = %d", local_user());
     $nick = $r[0]['nickname'];
-    $windows = q("SELECT `sid`, `wid`, `addr`, `network`, `state`, `interval`, `last-seen` AS `last` " .
+    $windows = q("SELECT `sid`, `wid`, `addr`, `network`, `state`, `interval`, `last-seen` AS `last`, `first-seen` AS `first` " .
                  "FROM `scraper_window` WHERE `uid` = %d", intval(local_user()));
     $template = file_get_contents(dirname(__file__).'/sessions.tpl');
     $sites = array();

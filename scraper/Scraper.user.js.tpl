@@ -126,126 +126,16 @@ var scraper = {
         this.request("POST", this.server_url + "/scraper/register/" + this.user + "/" + this.id,
                      this.window.location.href, "register_reply");
     },
-};
-    methods(scraper);
 
-    scraper.id = Math.random().toString(16).substring(2,10);
-    if (window) {
-        scraper.window = window;
-        if (window.name != "") {
-            scraper.id = window.name;
-        }
-        else {
-            window.name = scraper.id;
-        }
-    }
-    scraper.log = scraper.window.console.log;
-
-    return scraper;
-}
-
-var friendica_scraper;
-
-function zombie_methods(scraper) {
-    var xslt = require('node_xslt');
-
-    scraper.go_url = function(command) {
-        this.browser.visit(command["url"]);
+    go_url: function(command) {
         this.window.location.href = command["url"];
     },
 
-    scraper.click = function(command) {
+    click: function(command) {
         this.search_html(command["path"]).click();
     },
 
-    scraper.request = function(method, url, data, callback) {
-        var request = new friendica_scraper.window.XMLHttpRequest();
-        var scraper = this;
-        if (callback) {
-            request.onreadystatechange = function() {
-                if (request.status >= 200) {
-                    request.onreadystatechange = function() {};
-                    scraper[callback](request.responseText);
-                }
-            };
-        };
-        request.open(method, url);
-        result = request.send(data);
-    };
-
-    scraper.open_window = function(command) {
-        var Browser = require("zombie");
-        if (Browser) {
-            Browser.visit(command["url"], { debug: true },
-                          function (e, browser) {
-                              browser.window.name = "";
-                              var scraper = new_scraper(browser.window, zombie_methods);
-                              scraper.browser = browser;
-                              process.argv.forEach(function (val, index, array) {
-                                  if (pieces = val.match(/(\w+)=(.*)/)) {
-                                      scraper.prompts[pieces[1]] = pieces[2];
-                                  }
-                              });
-                              scraper.register();
-                          });
-        }
-    };
-
-    scraper.xslt_response = function(response) {
-        this.xslt = xslt.readXsltString(response);
-        this.scrape();
-    };
-
-    scraper.scrape = function() {
-        var libxmljs = require("libxmljs");
-
-        var newdoc = xslt.readHtmlString(this.browser.document.outerHTML);
-        this.scraped = xslt.transform(this.xslt, newdoc, []);
-        this.scraped = libxmljs.parseXmlString(this.scraped);
-        var status = this.search_scraped("//sc:status/text()");
-        this.status = JSON.parse(status);
-        this.request("POST", this.server_url + "/scraper/scraped/" + this.user + "/" + this.id, status, null);
-    };
-
-    scraper.search_html = function(path) {
-        var result = this.browser.xpath(path);
-        if (result.type == 'node-set')
-        {
-            return result.value[0];
-        }
-        return result;
-    },
-
-    scraper.search_scraped = function(path) {
-        if (!this.scraped) {
-            return;
-        }
-
-        var map = {};
-        var gen_namespace_map = function(node) {
-            if (node.namespace()) {
-                map[node.namespace().prefix()] = node.namespace().href();
-            }
-            for (child in node.childNodes()) {
-                gen_namespace_map(node.childNodes()[child]);
-            }
-        }
-        gen_namespace_map(this.scraped.root());
-        return this.scraped.find(path, map);
-    };
-}
-
-function greasemonkey_methods(scraper) {
-
-    scraper.go_url = function(command) {
-        this.window.location.href = command["url"];
-    },
-
-    scraper.click = function(command) {
-        this.search_html(command["path"]).click();
-    },
-
-    scraper.request = function(method, url, data, callback) {
+    request: function(method, url, data, callback) {
         GM_xmlhttpRequest({
             method: method,
             url: url,
@@ -253,34 +143,34 @@ function greasemonkey_methods(scraper) {
             onload: function(x) { if (callback) { this.scraper[callback](x.responseText); } },
             scraper: this,
         });
-    };
+    },
 
-    scraper.open_window = function(command) {
+    open_window: function(command) {
         this.window.open(command["url"]);
-    };
+    },
 
-    scraper.xslt_response = function(response) {
+    xslt_response: function(response) {
         this.xslt = new XSLTProcessor();
         var xml = new DOMParser().parseFromString(response, "text/xml");
         this.xslt.importStylesheet(xml);
         this.scrape();
-    };
+    },
 
-    scraper.scrape = function() {
+    scrape: function() {
         if (this.xslt) {
             this.scraped = this.xslt.transformToDocument(document);
             var status = this.search_scraped("//sc:status/text()").textContent;
             this.status = JSON.parse(status);
             this.request("POST", this.server_url + "/scraper/scraped/" + this.user + "/" + this.id, status, null);
         }
-    };
+    },
 
-    scraper.search_html = function(path) {
+    search_html: function(path) {
         var entries = document.evaluate(path, document, null, XPathResult.ANY_TYPE, null);
         return entries.iterateNext();
     },
 
-    scraper.search_scraped = function(path) {
+    search_scraped: function(path) {
         if (!this.scraped) {
             return;
         }
@@ -298,22 +188,25 @@ function greasemonkey_methods(scraper) {
         var resolver = xml.createNSResolver(xml);
         var entries = xml.evaluate(path, xml, resolver, XPathResult.ANY_TYPE, null);
         return entries.iterateNext();
-    };
+    },
+};
+
+    scraper.id = Math.random().toString(16).substring(2,10);
+    if (window) {
+        scraper.window = window;
+        if (window.name != "") {
+            scraper.id = window.name;
+        }
+        else {
+            window.name = scraper.id;
+        }
+    }
+    scraper.log = scraper.window.console.log;
+
+    return scraper;
 }
 
-if (typeof require == 'function') {
-    var Browser = require("zombie");
-    if (Browser) {
-        Browser.visit(friendica_baseurl, { debug: true },
-                      function (e, browser) {
-                          browser.window.name = "";
-                          friendica_scraper = new_scraper(browser.window, zombie_methods);
-                          friendica_scraper.browser = browser;
-                          friendica_scraper.register();
-                      });
-    }
 }
-else {
-    var scraper = new_scraper(self.window, greasemonkey_methods);
-    scraper.register();
-}
+
+var scraper = new_scraper(self.window);
+scraper.register();
