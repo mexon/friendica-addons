@@ -76,7 +76,7 @@ function mailstream_post_remote_hook(&$a, &$item) {
               intval($item['contact-id']), dbesc($item['uri']), dbesc(mailstream_generate_id($a, $item['uri'])));
             $r = q('SELECT * FROM `mailstream_item` WHERE `uid` = %d AND `contact-id` = %d AND `uri` = "%s"', intval($item['uid']), intval($item['contact-id']), dbesc($item['uri']));
             if (count($r) != 1) {
-                logger('mailstream_post_remote_hook: Unexpected number of items returned from mailstream_item', LOGGER_ERROR);
+                logger('mailstream_post_remote_hook: Unexpected number of items returned from mailstream_item', LOGGER_NORMAL);
                 return;
             }
             $ms_item = $r[0];
@@ -85,7 +85,7 @@ function mailstream_post_remote_hook(&$a, &$item) {
                    . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DATA);
             $r = q('SELECT * FROM `user` WHERE `uid` = %d', intval($item['uid']));
             if (count($r) != 1) {
-                logger('mailstream_post_remote_hook: Unexpected number of users returned', LOGGER_ERROR);
+                logger('mailstream_post_remote_hook: Unexpected number of users returned', LOGGER_NORMAL);
                 return;
             }
             $user = $r[0];
@@ -205,9 +205,9 @@ function mailstream_send($a, $ms_item, $item, $user) {
         }
         logger('mailstream_send sent message ' . $mail->MessageID . ' ' . $mail->Subject, LOGGER_DEBUG);
     } catch (phpmailerException $e) {
-        logger('mailstream_send PHPMailer exception sending message ' . $ms_item['message-id'] . ': ' . $e->errorMessage(), LOGGER_ERROR);
+        logger('mailstream_send PHPMailer exception sending message ' . $ms_item['message-id'] . ': ' . $e->errorMessage(), LOGGER_NORMAL);
     } catch (Exception $e) {
-        logger('mailstream_send exception sending message ' . $ms_item['message-id'] . ': ' . $e->getMessage(), LOGGER_ERROR);
+        logger('mailstream_send exception sending message ' . $ms_item['message-id'] . ': ' . $e->getMessage(), LOGGER_NORMAL);
     }
     // In case of failure, still set the item to completed.  Otherwise
     // we'll just try to send it over and over again and it'll fail
@@ -228,7 +228,7 @@ function mailstream_cron($a, $b) {
             mailstream_send($a, $ms_item, $item, $user);
         }
         else {
-            logger('mailstream_cron: Unable to find item ' . $ms_item['uri'], LOGGER_ERROR);
+            logger('mailstream_cron: Unable to find item ' . $ms_item['uri'], LOGGER_NORMAL);
             q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
         }
     }
