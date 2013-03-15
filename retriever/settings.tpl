@@ -1,9 +1,9 @@
 <div class="settings-block">
-  <h3>Retriever Settings</h3>
+  <h3>$title</h3>
   <table>
     <tbody>
       <tr>
-        <td>All Photos:</td>
+        <td>$all_photos_t:</td>
         <td><input class="checkbox" type="checkbox" name="all_photos" $all_photos></td>
       </tr>
       <tr>

@@ -405,7 +405,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     }
     $item['body'] .= "\n\n[i][color= #999999][url=";
     $item['body'] .=  $item['plink'];
-    $item['body'] .= "]retrieved[/url] ";
+    $item['body'] .= "]" . t("retrieved") . "[/url] ";
     $item['body'] .= date("Y-m-d");
     $item['body'] .= "[/color][/i]";
     q("UPDATE `item` SET `body` = '%s', `edited` = '%s' WHERE `id` = %d",
@@ -585,16 +585,23 @@ function retriever_content($a) {
 
         $template = file_get_contents(dirname(__file__).'/rule-config.tpl');
         $a->page['content'] .= replace_macros($template, array(
-            '$posts' => array('one', 'two', 'three'),
             '$title' => t('Retrieve Feed Content'),
             '$submit' => t('Submit'),
             '$id' => ($retriever["id"] ? $retriever["id"] : "create"),
+            '$enabled_t' => t('Enabled'),
             '$enabled' => ($retriever["data"]->enable == "on") ? ' checked="true"' : '',
+            '$pattern_t' => t('URL Pattern'),
             '$pattern' => $retriever["data"]->pattern ? ' value="' . $retriever["data"]->pattern . '"' : '',
+            '$replace_t' => t('URL Replace'),
             '$replace' => $retriever["data"]->replace ? ' value="' . $retriever["data"]->replace . '"' : '',
+            '$match_t' => t('Include'),
             '$match' => $retriever["data"]->match ? ' value="' . $retriever["data"]->match . '"' : '',
+            '$remove_t' => t('Exclude'),
             '$remove' => $retriever["data"]->remove ? ' value="' . $retriever["data"]->remove . '"' : '',
-            '$images' => ($retriever["data"]->images == "on") ? ' checked="true"' : ''));
+            '$images_t' => t('Download Images'),
+            '$images' => ($retriever["data"]->images == "on") ? ' checked="true"' : '',
+            '$retrospective_t' => t('Retrospectively apply to the last'),
+            '$posts_t' => t('posts')));
         return;
     }
 }
@@ -627,7 +634,10 @@ function retriever_plugin_settings(&$a,&$s) {
     $all_photos = get_pconfig(local_user(), 'retriever', 'all_photos');
     $all_photos_mu = ($all_photos == 'on') ? ' checked="true"' : '';
     $template = file_get_contents(dirname(__file__).'/settings.tpl');
-    $s .= replace_macros($template, array('$all_photos' => $all_photos_mu));
+    $s .= replace_macros($template, array(
+                             '$title' => t('Retriever Settings'),
+                             '$all_photos' => $all_photos_mu,
+                             '$all_photos_t' => t('All Photos')));
 }
 
 function retriever_plugin_settings_post($a,$post) {
