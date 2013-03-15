@@ -65,7 +65,7 @@ function retriever_cron($a, $b) {
     // 100 is a nice sane number.  Maybe this should be configurable.
     // Feel free to write me a bug about that, explaining in detail
     // how important it is to you.
-    retriever_retrieve_items(1000);
+    retriever_retrieve_items(100);
     retriever_tidy();
 }
 
