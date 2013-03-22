@@ -205,7 +205,10 @@ function mailstream_send($a, $ms_item, $item, $user) {
         $template = get_markup_template('mail.tpl', 'addon/mailstream/');
         $item['body'] = bbcode($item['body']);
         $item['url'] = $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item['id'];
-        $mail->Body = replace_macros($template, array('$item' => $item));
+        $mail->Body = replace_macros($template, array(
+                                         '$upstream' => t('Upstream'),
+                                         '$local' => t('Local'),
+                                         '$item' => $item));
         if (!$mail->Send()) {
             throw new Exception($mail->ErrorInfo);
         }
