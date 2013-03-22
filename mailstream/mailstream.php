@@ -52,7 +52,9 @@ function mailstream_plugin_admin(&$a,&$o) {
                     t('From Address'),
                     $frommail,
                     t('Email address that stream items will appear to be from.'));
-    $o .= replace_macros($template, array('$frommail' => $config));
+    $o .= replace_macros($template, array(
+                             '$frommail' => $config,
+                             '$submit' => t('Submit')));
 }
 
 function mailstream_plugin_admin_post ($a) {
@@ -241,10 +243,12 @@ function mailstream_plugin_settings(&$a,&$s) {
     $address = get_pconfig(local_user(), 'mailstream', 'address');
     $address_mu = $address ? (' value="' . $address . '"') : '';
     $template = file_get_contents(dirname(__file__).'/settings.tpl');
-    $s .= replace_macros($template, array('$address' => $address_mu,
-                                          '$address_caption' => t('Address:'),
-                                          '$enabled' => $enabled_mu,
-                                          '$enabled_caption' => t('Enabled:')));
+    $s .= replace_macros($template, array(
+                             '$submit' => t('Submit'),
+                             '$address' => $address_mu,
+                             '$address_caption' => t('Address:'),
+                             '$enabled' => $enabled_mu,
+                             '$enabled_caption' => t('Enabled:')));
 }
 
 function mailstream_plugin_settings_post($a,$post) {
