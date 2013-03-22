@@ -31,7 +31,10 @@ function mailstream_install() {
         q('ALTER TABLE `mailstream_item` CHANGE `created` `created` timestamp NOT NULL DEFAULT now()');
         q('ALTER TABLE `mailstream_item` CHANGE `completed` `completed` timestamp NULL DEFAULT NULL');
     }
-    set_config('mailstream', 'dbversion', '0.4');
+    if (get_config('mailstream', 'dbversion') == '0.4') {
+        q('ALTER TABLE `mailstream_item` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
+    }
+    set_config('mailstream', 'dbversion', '0.5');
 }
 
 function mailstream_uninstall() {
@@ -47,12 +50,14 @@ function mailstream_module() {}
 
 function mailstream_plugin_admin(&$a,&$o) {
     $frommail = get_config('mailstream', 'frommail');
-    $template = file_get_contents(dirname(__file__).'/admin.tpl');
+    $template = get_markup_template('admin.tpl', 'addon/mailstream/');
     $config = array('frommail',
                     t('From Address'),
                     $frommail,
                     t('Email address that stream items will appear to be from.'));
-    $o .= replace_macros($template, array('$frommail' => $config));
+    $o .= replace_macros($template, array(
+                             '$frommail' => $config,
+                             '$submit' => t('Submit')));
 }
 
 function mailstream_plugin_admin_post ($a) {
@@ -197,8 +202,9 @@ function mailstream_send($a, $ms_item, $item, $user) {
         }
         $mail->IsHTML(true);
         $mail->CharSet = 'utf-8';
-        $template = file_get_contents(dirname(__file__).'/mail.tpl');
+        $template = get_markup_template('mail.tpl', 'addon/mailstream/');
         $item['body'] = bbcode($item['body']);
+        $item['url'] = $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item['id'];
         $mail->Body = replace_macros($template, array('$item' => $item));
         if (!$mail->Send()) {
             throw new Exception($mail->ErrorInfo);
@@ -240,11 +246,13 @@ function mailstream_plugin_settings(&$a,&$s) {
     $enabled_mu = ($enabled === 'on') ? ' checked="true"' : '';
     $address = get_pconfig(local_user(), 'mailstream', 'address');
     $address_mu = $address ? (' value="' . $address . '"') : '';
-    $template = file_get_contents(dirname(__file__).'/settings.tpl');
-    $s .= replace_macros($template, array('$address' => $address_mu,
-                                          '$address_caption' => t('Address:'),
-                                          '$enabled' => $enabled_mu,
-                                          '$enabled_caption' => t('Enabled:')));
+    $template = get_markup_template('settings.tpl', 'addon/mailstream/');
+    $s .= replace_macros($template, array(
+                             '$submit' => t('Submit'),
+                             '$address' => $address_mu,
+                             '$address_caption' => t('Address:'),
+                             '$enabled' => $enabled_mu,
+                             '$enabled_caption' => t('Enabled:')));
 }
 
 function mailstream_plugin_settings_post($a,$post) {
