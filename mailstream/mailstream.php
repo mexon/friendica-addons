@@ -204,6 +204,7 @@ function mailstream_send($a, $ms_item, $item, $user) {
         $mail->CharSet = 'utf-8';
         $template = get_markup_template('mail.tpl', 'addon/mailstream/');
         $item['body'] = bbcode($item['body']);
+        $item['url'] = $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item['id'];
         $mail->Body = replace_macros($template, array('$item' => $item));
         if (!$mail->Send()) {
             throw new Exception($mail->ErrorInfo);
