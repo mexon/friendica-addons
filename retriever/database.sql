@@ -6,11 +6,11 @@ CREATE TABLE IF NOT EXISTS `retriever_rule` (
        PRIMARY KEY (`id`),
        KEY `uid` (`uid`),
        KEY `contact-id` (`contact-id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATION=utf8_bin;
 
 CREATE TABLE IF NOT EXISTS `retriever_item` (
        `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-       `item-uri` varchar(800) CHARACTER SET ascii NOT NULL,
+       `item-uri` varchar(800) CHARACTER SET ascii COLLATION ascii_bin NOT NULL,
        `item-uid` int(10) unsigned NOT NULL DEFAULT '0',
        `contact-id` int(10) unsigned NOT NULL DEFAULT '0',
        `resource` int(11) NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS `retriever_item` (
        KEY `resource` (`resource`),
        KEY `all` (`item-uri`, `item-uid`, `contact-id`),
        PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATION=utf8_bin;
 
 CREATE TABLE IF NOT EXISTS `retriever_resource` (
        `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
@@ -32,4 +32,4 @@ CREATE TABLE IF NOT EXISTS `retriever_resource` (
        `num-tries` int(11) NOT NULL DEFAULT 0,
        `data` mediumtext NOT NULL,
        PRIMARY KEY (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATION=utf8_bin

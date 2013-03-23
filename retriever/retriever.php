@@ -52,7 +52,14 @@ function retriever_install() {
         q('ALTER TABLE `retriever_item` DROP KEY `all`');
         q('ALTER TABLE `retriever_item` ADD KEY `all` (`item-uri`, `item-uid`, `contact-id`)');
     }
-    set_config('retriever', 'dbversion', '0.6');
+    if (get_config('retriever', 'dbversion') == '0.6') {
+        q('ALTER TABLE `retriever_item` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
+        q('ALTER TABLE `retriever_item` CHANGE `item-uri` `item-uri`  varchar(800) CHARACTER SET ascii COLLATION ascii_bin NOT NULL');
+        q('ALTER TABLE `retriever_resource` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
+        q('ALTER TABLE `retriever_resource` CHANGE `url` `url`  varchar(800) CHARACTER SET ascii COLLATION ascii_bin NOT NULL');
+        q('ALTER TABLE `retriever_rule` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
+    }
+    set_config('retriever', 'dbversion', '0.7');
 }
 
 function retriever_uninstall() {
@@ -115,17 +122,11 @@ function retriever_retrieve_items($max_items) {
 }
 
 function retriever_tidy() {
-    $r = q("SELECT id FROM retriever_resource WHERE completed IS NOT NULL AND completed < DATE_SUB(now(), INTERVAL 1 WEEK)");
-    $count = 0;
-    foreach ($r as $rr) {
-        $count++;
-        q('DELETE FROM retriever_resource WHERE id = %d', intval($rr['id']));
-    }
+    q("DELETE FROM retriever_resource WHERE completed IS NOT NULL AND completed < DATE_SUB(now(), INTERVAL 1 WEEK)");
+    q("DELETE FROM retriever_resource WHERE completed IS NULL AND created < DATE_SUB(now(), INTERVAL 3 MONTH)");
 
     $r = q("SELECT retriever_item.id FROM retriever_item LEFT OUTER JOIN retriever_resource ON (retriever_item.resource = retriever_resource.id) WHERE retriever_resource.id is null");
-    $count = 0;
     foreach ($r as $rr) {
-        $count++;
         q('DELETE FROM retriever_item WHERE id = %d', intval($rr['id']));
     }
 }
@@ -358,6 +359,14 @@ function add_retriever_item(&$item, $resource) {
     logger('add_retriever_item: created retriever_item ' . $r[0]['id'] . ' for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
 }
 
+function retriever_get_encoding($resource) {
+    $matches = array();
+    if (preg_match('/charset=(.*)/', $resource['type'], $matches)) {
+        return trim(array_pop($matches));
+    }
+    return 'utf-8';
+}
+
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
     logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['plink'], LOGGER_DEBUG);
     require_once('include/html2bbcode.php');	
@@ -370,14 +379,17 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         return;
     }
 
+    $encoding = retriever_get_encoding($resource);
+    logger('@@@ item type ' . $resource['type'] . ' encoding ' . $encoding);
     $extracter_template = file_get_contents(dirname(__file__).'/extract.tpl');
-    $doc = new DOMDocument();
+    $doc = new DOMDocument('1.0', 'utf-8');
     if (strpos($resource['type'], 'html') !== false) {
         @$doc->loadHTML($resource['data']);
     }
     else {
         $doc->loadXML($resource['data']);
     }
+    logger('@@@ actual encoding of document is ' . $doc->encoding);
 
     $components = parse_url($item['plink']);
     $rooturl = $components['scheme'] . "://" . $components['host'];
@@ -631,6 +643,7 @@ function retriever_plugin_settings(&$a,&$s) {
     $all_photos_mu = ($all_photos == 'on') ? ' checked="true"' : '';
     $template = file_get_contents(dirname(__file__).'/settings.tpl');
     $s .= replace_macros($template, array(
+                             '$submit' => t('Submit'),
                              '$title' => t('Retriever Settings'),
                              '$all_photos' => $all_photos_mu,
                              '$all_photos_t' => t('All Photos')));

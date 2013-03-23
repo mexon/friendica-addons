@@ -7,7 +7,7 @@
         <td><input class="checkbox" type="checkbox" name="all_photos" $all_photos></td>
       </tr>
       <tr>
-        <td colspan="2"><input type="submit"></td>
+        <td colspan="2"><input type="submit" value="$submit"></td>
       </tr>
     </tbody>
   </table>
