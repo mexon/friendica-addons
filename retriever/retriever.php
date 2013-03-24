@@ -411,7 +411,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         logger('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty', LOGGER_NORMAL);
         return;
     }
-    $item['body'] .= '\n\n' . t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
+    $item['body'] .= "\n\n" . t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
     $item['body'] .=  $item['plink'];
     $item['body'] .= ']' . $item['plink'] . '[/url]';
     q("UPDATE `item` SET `body` = '%s', `edited` = '%s' WHERE `id` = %d",
