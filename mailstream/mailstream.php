@@ -76,6 +76,7 @@ function mailstream_generate_id($a, $uri) {
 function mailstream_post_remote_hook(&$a, &$item) {
     if (get_pconfig($item['uid'], 'mailstream', 'enabled') === 'on') {
         if ($item['uid'] && $item['contact-id'] && $item['uri']) {
+            q('LOCK TABLES `mailstream_item` WRITE');
             q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `uri`, `message-id`) " .
               "VALUES (%d, '%s', '%s', '%s')", intval($item['uid']),
               intval($item['contact-id']), dbesc($item['uri']), dbesc(mailstream_generate_id($a, $item['uri'])));
@@ -95,6 +96,7 @@ function mailstream_post_remote_hook(&$a, &$item) {
             }
             $user = $r[0];
             mailstream_send($a, $ms_item, $item, $user);
+            q('UNLOCK TABLES');
         }
     }
 }
@@ -184,6 +186,9 @@ function mailstream_send($a, $ms_item, $item, $user) {
         $frommail = 'friendica@localhost.local';
     }
     $email = get_pconfig($item['uid'], 'mailstream', 'address');
+    if (!$email) {
+        $email = $user['email'];
+    }
     $mail = new PHPmailer;
     try {
         $mail->XMailer = 'Friendica Mailstream Plugin';
@@ -225,6 +230,8 @@ function mailstream_send($a, $ms_item, $item, $user) {
 }
 
 function mailstream_cron($a, $b) {
+    // A pretty brutal lock that will delay message delivery, but we usually won't really have 100 messages to send
+    q("LOCK TABLES `mailstream_item` WRITE");
     $ms_items = q("SELECT * FROM `mailstream_item` WHERE `completed` IS NULL LIMIT 100");
     logger('mailstream_cron processing ' . count($ms_items) . ' items', LOGGER_DEBUG);
     foreach ($ms_items as $ms_item) {
@@ -241,6 +248,7 @@ function mailstream_cron($a, $b) {
             q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
         }
     }
+    q("UNLOCK TABLES");
     mailstream_tidy();
 }
 
