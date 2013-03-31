@@ -59,7 +59,62 @@ function retriever_install() {
         q('ALTER TABLE `retriever_resource` CHANGE `url` `url`  varchar(800) CHARACTER SET ascii COLLATION ascii_bin NOT NULL');
         q('ALTER TABLE `retriever_rule` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
     }
-    set_config('retriever', 'dbversion', '0.7');
+    if (get_config('retriever', 'dbversion') == '0.7') {
+        $r = q("SELECT `id`, `data` FROM `retriever_rule`");
+        foreach ($r as $rr) {
+            logger('retriever_install: retriever ' . $rr['id'] . ' old config ' . $rr['data'], LOGGER_DATA);
+            $data = json_decode($rr['data'], true);
+            if ($data['pattern']) {
+                $matches = array();
+                if (preg_match("/\/(.*)\//", $data['pattern'], $matches)) {
+                    $data['pattern'] = $matches[1];
+                }
+            }
+            if ($data['match']) {
+                $include = array();
+                foreach (explode('|', $data['match']) as $component) {
+                    $matches = array();
+                    if (preg_match("/([A-Za-z][A-Za-z0-9]*)\[@([A-Za-z][a-z0-9]*)='([^']*)'\]/", $component, $matches)) {
+                        $include[] = array(
+                            'element' => $matches[1],
+                            'attribute' => $matches[2],
+                            'value' => $matches[3]);
+                    }
+                    if (preg_match("/([A-Za-z][A-Za-z0-9]*)\[contains(concat(' ',normalize-space(@class),' '),' ([^ ']+) ')]/", $component, $matches)) {
+                        $include[] = array(
+                            'element' => $matches[1],
+                            'attribute' => $matches[2],
+                            'value' => $matches[3]);
+                    }
+                }
+                $data['include'] = $include;
+                unset($data['match']);
+            }
+            if ($data['remove']) {
+                $exclude = array();
+                foreach (explode('|', $data['remove']) as $component) {
+                    $matches = array();
+                    if (preg_match("/([A-Za-z][A-Za-z0-9]*)\[@([A-Za-z][a-z0-9]*)='([^']*)'\]/", $component, $matches)) {
+                        $exclude[] = array(
+                            'element' => $matches[1],
+                            'attribute' => $matches[2],
+                            'value' => $matches[3]);
+                    }
+                    if (preg_match("/([A-Za-z][A-Za-z0-9]*)\[contains(concat(' ',normalize-space(@class),' '),' ([^ ']+) ')]/", $component, $matches)) {
+                        $exclude[] = array(
+                            'element' => $matches[1],
+                            'attribute' => $matches[2],
+                            'value' => $matches[3]);
+                    }
+                }
+                $data['exclude'] = $exclude;
+                unset($data['remove']);
+            }
+            $r = q('UPDATE `retriever_rule` SET `data` = "%s" WHERE `id` = %d', dbesc(json_encode($data)), $rr['id']);
+            logger('retriever_install: retriever ' . $rr['id'] . ' new config ' . json_encode($data), LOGGER_DATA);
+        }
+    }
+    set_config('retriever', 'dbversion', '0.8');
 }
 
 function retriever_uninstall() {
@@ -76,8 +131,6 @@ function retriever_module() {}
 
 function retriever_cron($a, $b) {
     // 100 is a nice sane number.  Maybe this should be configurable.
-    // Feel free to write me a bug about that, explaining in detail
-    // how important it is to you.
     retriever_retrieve_items(100);
     retriever_tidy();
 }
@@ -242,7 +295,7 @@ function get_retriever($contact_id, $uid, $create = false) {
     $r = q("SELECT * FROM `retriever_rule` WHERE `contact-id` = %d AND `uid` = %d",
            intval($contact_id), intval($uid));
     if (count($r)) {
-        $r[0]['data'] = json_decode($r[0]['data']);
+        $r[0]['data'] = json_decode($r[0]['data'], true);
         return $r[0];
     }
     if ($create) {
@@ -303,10 +356,10 @@ function retriever_on_item_insert($retriever, &$item) {
         logger('retriever_on_item_insert: No retriever supplied', LOGGER_NORMAL);
         return;
     }
-    if ($retriever["data"]->enable == "on") {
+    if ($retriever["data"]['enable'] == "on") {
     }
-    if ($retriever["data"]->pattern) {
-        $url = preg_replace($retriever["data"]->pattern, $retriever["data"]->replace, $item['plink']);
+    if ($retriever["data"]['pattern']) {
+        $url = preg_replace('/' . $retriever["data"]['pattern'] . '/', $retriever["data"]['replace'], $item['plink']);
         logger('retriever_on_item_insert: Changed ' . $item['plink'] . ' to ' . $url, LOGGER_DATA);
     }
     else {
@@ -367,11 +420,38 @@ function retriever_get_encoding($resource) {
     return 'utf-8';
 }
 
+function retriever_construct_xpath($spec) {
+    if (gettype($spec) != "array") {
+        return;
+    }
+    $components = array();
+    foreach ($spec as $clause) {
+        if (!$clause['attribute']) {
+            $components[] = $clause['element'];
+            continue;
+        }
+        if ($clause['attribute'] === 'class') {
+            $components[] =
+                $clause['element'] .
+                "[contains(concat(' ', normalize-space(@class), ' '), ' " .
+                $clause['value'] . " ')]";
+        }
+        else {
+            $components[] =
+                $clause['element'] . '[@' .
+                $clause['attribute'] . "='" .
+                $clause['value'] . "']";
+        }
+    }
+    // It would be better to do this in smarty3 in extract.tpl
+    return implode('|', $components);
+}
+
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
     logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['plink'], LOGGER_DEBUG);
     require_once('include/html2bbcode.php');	
 
-    if (!$retriever['data']->match) {
+    if (!$retriever['data']['include']) {
         return;
     }
     if (!$resource['data']) {
@@ -395,8 +475,8 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $rooturl = $components['scheme'] . "://" . $components['host'];
     $dirurl = $rooturl . dirname($components['path']) . "/";
 
-    $params = array('$match' => $retriever["data"]->match,
-                    '$remove' => $retriever["data"]->remove,
+    $params = array('$include' => retriever_construct_xpath($retriever['data']['include']),
+                    '$exclude' => retriever_construct_xpath($retriever['data']['exclude']),
                     '$pageurl' => $item['plink'],
                     '$dirurl' => $dirurl,
                     '$rooturl' => $rooturl);
@@ -472,7 +552,7 @@ function retriever_apply_completed_resource_to_item($retriever, &$item, $resourc
     if ((strpos($resource['type'], 'html') !== false) ||
         (strpos($resource['type'], 'xml') !== false)) {
         retriever_apply_dom_filter($retriever, $item, $resource);
-        if ($retriever["data"]->images ) {
+        if ($retriever["data"]['images'] ) {
             retrieve_images($item);
         }
     }
@@ -573,10 +653,26 @@ function retriever_content($a) {
 
         if (x($_POST["id"])) {
             $retriever = get_retriever($a->argv[1], local_user(), true);
-            $retriever["data"] = new stdClass;
-            foreach (array('pattern', 'replace', 'match', 'remove', 'enable', 'images') as $setting) {
+            $retriever["data"] = array();
+            foreach (array('pattern', 'replace', 'enable', 'images') as $setting) {
                 if (x($_POST[$setting])) {
-                    $retriever["data"]->{$setting} = $_POST[$setting];
+                    $retriever["data"][$setting] = $_POST[$setting];
+                }
+            }
+            foreach ($_POST as $k=>$v) {
+                if (preg_match("/retriever-(include|exclude)-(\d+)-(element|attribute|value)/", $k, $matches)) {
+                    $retriever['data'][$matches[1]][intval($matches[2])][$matches[3]] = $v;
+                }
+            }
+            // You've gotta have an element, even if it's just "*"
+            foreach ($retriever['data']['include'] as $k=>$clause) {
+                if (!$clause['element']) {
+                    unset($retriever['data']['include'][$k]);
+                }
+            }
+            foreach ($retriever['data']['exclude'] as $k=>$clause) {
+                if (!$clause['element']) {
+                    unset($retriever['data']['exclude'][$k]);
                 }
             }
             q("UPDATE `retriever_rule` SET `data`='%s' WHERE `id` = %d",
@@ -591,21 +687,31 @@ function retriever_content($a) {
 
         $template = file_get_contents(dirname(__file__).'/rule-config.tpl');
         $a->page['content'] .= replace_macros($template, array(
+                                                  '$pattern_2' =>
+                                                      array('pattern_2',
+                                                            t('URL Pattern'),
+                                                            $retriever["data"]['pattern'] ? ' value="' . $retriever["data"]['pattern'] . '"' : '',
+                                                            t('Regular expression matching part of the URL to replace')),
             '$title' => t('Retrieve Feed Content'),
             '$submit' => t('Submit'),
             '$id' => ($retriever["id"] ? $retriever["id"] : "create"),
             '$enabled_t' => t('Enabled'),
-            '$enabled' => ($retriever["data"]->enable == "on") ? ' checked="true"' : '',
+            '$enabled' => ($retriever["data"]['enable'] == "on") ? ' checked="true"' : '',
             '$pattern_t' => t('URL Pattern'),
-            '$pattern' => $retriever["data"]->pattern ? ' value="' . $retriever["data"]->pattern . '"' : '',
+            '$pattern' => $retriever["data"]['pattern'] ? ' value="' . $retriever["data"]['pattern'] . '"' : '',
             '$replace_t' => t('URL Replace'),
-            '$replace' => $retriever["data"]->replace ? ' value="' . $retriever["data"]->replace . '"' : '',
-            '$match_t' => t('Include'),
-            '$match' => $retriever["data"]->match ? ' value="' . $retriever["data"]->match . '"' : '',
-            '$remove_t' => t('Exclude'),
-            '$remove' => $retriever["data"]->remove ? ' value="' . $retriever["data"]->remove . '"' : '',
+            '$replace' => $retriever["data"]['replace'] ? ' value="' . $retriever["data"]['replace'] . '"' : '',
+            '$tag_t' => t('Tag'),
+            '$attribute_t' => t('Attribute'),
+            '$value_t' => t('Value'),
+            '$add_t' => t('Add'),
+            '$remove_t' => t('Remove'),
+            '$include_t' => t('Include'),
+            '$include' => $retriever['data']['include'],
+            '$exclude_t' => t('Exclude'),
+            '$exclude' => $retriever["data"]['exclude'],
             '$images_t' => t('Download Images'),
-            '$images' => ($retriever["data"]->images == "on") ? ' checked="true"' : '',
+            '$images' => ($retriever["data"]['images'] == "on") ? ' checked="true"' : '',
             '$retrospective_t' => t('Retrospectively apply to the last'),
             '$posts_t' => t('posts')));
         return;

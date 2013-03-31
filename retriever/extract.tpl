@@ -3,7 +3,7 @@
 
   <xsl:template match="text()"/>
 
-  <xsl:template match="$match">
+  <xsl:template match="$include">
     <xsl:copy>
       <xsl:apply-templates select="node()|@*" mode="remove"/>
     </xsl:copy>
@@ -15,8 +15,8 @@
     </xsl:copy>
   </xsl:template>
 
-{{ if $remove }}
-  <xsl:template match="$remove" mode="remove"/>
+{{ if $exclude }}
+  <xsl:template match="$exclude" mode="remove"/>
 {{ endif }}
 
   <!-- attempt to replace relative URLs with absolute URLs -->
