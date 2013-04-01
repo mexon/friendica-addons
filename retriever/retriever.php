@@ -563,8 +563,8 @@ function retriever_content($a) {
             $retriever = get_retriever($a->argv[1], local_user(), true);
             $retriever["data"] = array();
             foreach (array('pattern', 'replace', 'enable', 'images') as $setting) {
-                if (x($_POST[$setting])) {
-                    $retriever["data"][$setting] = $_POST[$setting];
+                if (x($_POST['retriever_' . $setting])) {
+                    $retriever["data"][$setting] = $_POST['retriever_' . $setting];
                 }
             }
             foreach ($_POST as $k=>$v) {
@@ -595,33 +595,41 @@ function retriever_content($a) {
 
         $template = file_get_contents(dirname(__file__).'/rule-config.tpl');
         $a->page['content'] .= replace_macros($template, array(
-                                                  '$pattern_2' =>
-                                                      array('pattern_2',
-                                                            t('URL Pattern'),
-                                                            $retriever["data"]['pattern'] ? ' value="' . $retriever["data"]['pattern'] . '"' : '',
-                                                            t('Regular expression matching part of the URL to replace')),
-            '$title' => t('Retrieve Feed Content'),
-            '$submit' => t('Submit'),
-            '$id' => ($retriever["id"] ? $retriever["id"] : "create"),
-            '$enabled_t' => t('Enabled'),
-            '$enabled' => ($retriever["data"]['enable'] == "on") ? ' checked="true"' : '',
-            '$pattern_t' => t('URL Pattern'),
-            '$pattern' => $retriever["data"]['pattern'] ? ' value="' . $retriever["data"]['pattern'] . '"' : '',
-            '$replace_t' => t('URL Replace'),
-            '$replace' => $retriever["data"]['replace'] ? ' value="' . $retriever["data"]['replace'] . '"' : '',
-            '$tag_t' => t('Tag'),
-            '$attribute_t' => t('Attribute'),
-            '$value_t' => t('Value'),
-            '$add_t' => t('Add'),
-            '$remove_t' => t('Remove'),
-            '$include_t' => t('Include'),
-            '$include' => $retriever['data']['include'],
-            '$exclude_t' => t('Exclude'),
-            '$exclude' => $retriever["data"]['exclude'],
-            '$images_t' => t('Download Images'),
-            '$images' => ($retriever["data"]['images'] == "on") ? ' checked="true"' : '',
-            '$retrospective_t' => t('Retrospectively apply to the last'),
-            '$posts_t' => t('posts')));
+                                                  '$enable' => array(
+                                                      'retriever_enable',
+                                                      t('Enabled'),
+                                                      $retriever['data']['enable']),
+                                                  '$pattern' => array(
+                                                      'retriever_pattern',
+                                                      t('URL Pattern'),
+                                                      $retriever["data"]['pattern'],
+                                                      t('Regular expression matching part of the URL to replace')),
+                                                  '$replace' => array(
+                                                      'retriever_replace',
+                                                      t('URL Replace'),
+                                                      $retriever["data"]['replace'],
+                                                      t('Text to replace matching part of above regular expression')),
+                                                  '$images' => array(
+                                                      'retriever_images',
+                                                      t('Download Images'),
+                                                      $retriever['data']['images']),
+                                                  '$retrospective' => array(
+                                                      'retriever_retrospective',
+                                                      t('Retrospectively Apply'),
+                                                      '0',
+                                                      t('Re-download and reapply the rules to this number of posts')),
+                                                  '$title' => t('Retrieve Feed Content'),
+                                                  '$submit' => t('Submit'),
+                                                  '$id' => ($retriever["id"] ? $retriever["id"] : "create"),
+                                                  '$tag_t' => t('Tag'),
+                                                  '$attribute_t' => t('Attribute'),
+                                                  '$value_t' => t('Value'),
+                                                  '$add_t' => t('Add'),
+                                                  '$remove_t' => t('Remove'),
+                                                  '$include_t' => t('Include'),
+                                                  '$include' => $retriever['data']['include'],
+                                                  '$exclude_t' => t('Exclude'),
+                                                  '$exclude' => $retriever["data"]['exclude']));
         return;
     }
 }
