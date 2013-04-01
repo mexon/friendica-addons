@@ -184,105 +184,13 @@ function retriever_tidy() {
     }
 }
 
-function retriever_fetch_url($url,$binary = false, &$content_type, &$redirects = 0, $timeout = 0, $accept_content=Null) {
-
-	$a = get_app();
-
-	$ch = @curl_init($url);
-	if(($redirects > 8) || (! $ch)) 
-		return false;
-
-	@curl_setopt($ch, CURLOPT_HEADER, true);
-
-	@curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-	@curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
-
-	if (!is_null($accept_content)){
-		curl_setopt($ch,CURLOPT_HTTPHEADER, array (
-			"Accept: " . $accept_content
-		));
-	}
-
-	@curl_setopt($ch, CURLOPT_RETURNTRANSFER,true);
-	//@curl_setopt($ch, CURLOPT_USERAGENT, "Friendica");
-	@curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (compatible; Friendica)");
-
-
-	if(intval($timeout)) {
-		@curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
-	}
-	else {
-		$curl_time = intval(get_config('system','curl_timeout'));
-		@curl_setopt($ch, CURLOPT_TIMEOUT, (($curl_time !== false) ? $curl_time : 60));
-	}
-	// by default we will allow self-signed certs
-	// but you can override this
-
-	$check_cert = get_config('system','verifyssl');
-	@curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, (($check_cert) ? true : false));
-
-	$prx = get_config('system','proxy');
-	if(strlen($prx)) {
-		@curl_setopt($ch, CURLOPT_HTTPPROXYTUNNEL, 1);
-		@curl_setopt($ch, CURLOPT_PROXY, $prx);
-		$prxusr = @get_config('system','proxyuser');
-		if(strlen($prxusr))
-			@curl_setopt($ch, CURLOPT_PROXYUSERPWD, $prxusr);
-	}
-	if($binary)
-		@curl_setopt($ch, CURLOPT_BINARYTRANSFER,1);
-
-	$a->set_curl_code(0);
-
-	// don't let curl abort the entire application
-	// if it throws any errors.
-
-	$s = curl_exec($ch);
-
-	$base = $s;
-	$curl_info = @curl_getinfo($ch);
-	$http_code = $curl_info['http_code'];
-        $content_type = $curl_info['content_type'];
-
-	$header = '';
-
-	// Pull out multiple headers, e.g. proxy and continuation headers
-	// allow for HTTP/2.x without fixing code
-
-	while(preg_match('/^HTTP\/[1-2].+? [1-5][0-9][0-9]/',$base)) {
-		$chunk = substr($base,0,strpos($base,"\r\n\r\n")+4);
-		$header .= $chunk;
-		$base = substr($base,strlen($chunk));
-	}
-
-        logger('retriever_fetch_url: got code ' . $http_code . ' fetching ' . $url, LOGGER_DEBUG);
-	if($http_code == 301 || $http_code == 302 || $http_code == 303 || $http_code == 307) {
-		$matches = array();
-		preg_match('/(Location:|URI:)(.*?)\n/', $header, $matches);
-		$newurl = trim(array_pop($matches));
-		if(strpos($newurl,'/') === 0)
-			$newurl = $url . $newurl;
-		$url_parsed = @parse_url($newurl);
-		if (isset($url_parsed)) {
-			$redirects++;
-			return retriever_fetch_url($newurl,$binary,$content_type,$redirects,$timeout);
-		}
-	}
-
-	$a->set_curl_code($http_code);
-
-	$body = substr($s,strlen($header));
-	$a->set_curl_headers($header);
-	@curl_close($ch);
-	return($body);
-}
-
 function retrieve_resource($resource) {
     logger('retrieve_resource: ' . ($resource['num-tries'] + 1) .
            ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
     q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1 WHERE id = %d",
       intval($resource['id']));
-    $data = retriever_fetch_url($resource['url'], $resource['binary'], $resource['type']);
+    $data = fetch_url($resource['url'], $resource['binary'], $resource['type']);
+    $resource['type'] = get_app()->get_curl_content_type();
     if ($data) {
         $resource['data'] = $data;
         q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s' WHERE id = %d",
