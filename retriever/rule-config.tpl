@@ -43,93 +43,68 @@ function retriever_remove_row(id, number)
   </script>
   <h2>$title</h2>
   <form method="post">
-{{ inc field_input.tpl with $field=$pattern_2 }}{{ endinc }}
     <input type="hidden" name="id" value="$id">
-    <table>
-      <tbody>
-        <tr>
-          <td>$enabled_t:</td>
-          <td><input class="checkbox" type="checkbox" name="enable" $enabled></td>
-        </tr>
-        <tr>
-          <td>$pattern_t:</td>
-          <td><input class="input" size="70" name="pattern" $pattern></td>
-        </tr>
-        <tr>
-          <td>$replace_t:</td>
-          <td><input class="input" size="70" name="replace" $replace></td>
-        </tr>
-        <tr>
-          <td>$include_t:</td>
-          <td>
-            <table>
-              <thead>
-                <tr><th>$tag_t</th><th>$attribute_t</th><th>$value_t</th></tr>
-              </thead>
-              <tbody id="retriever-include">
+{{ inc field_checkbox.tpl with $field=$enable }}{{ endinc }}
+{{ inc field_input.tpl with $field=$pattern }}{{ endinc }}
+{{ inc field_input.tpl with $field=$replace }}{{ endinc }}
+{{ inc field_checkbox.tpl with $field=$images }}{{ endinc }}
+{{ inc field_input.tpl with $field=$retrospective }}{{ endinc }}
+    <h3>$include_t:</h3>
+    <div>
+      <table>
+        <thead>
+          <tr><th>$tag_t</th><th>$attribute_t</th><th>$value_t</th></tr>
+        </thead>
+        <tbody id="retriever-include">
 {{ if $include }}
   {{ for $include as $k=>$m }}
-                <tr id="retriever-include-$k">
-                  <td><input name="retriever-include-$k-element" value="$m.element"></td>
-                  <td><input name="retriever-include-$k-attribute" value="$m.attribute"></td>
-                  <td><input name="retriever-include-$k-value" value="$m.value"></td>
-                  <td><input id="retrieve-include-$k-rem" type="button" onclick="retriever_remove_row('retriever-include', $k)" value="$remove_t"></td>
-                </tr>
+          <tr id="retriever-include-$k">
+            <td><input name="retriever-include-$k-element" value="$m.element"></td>
+            <td><input name="retriever-include-$k-attribute" value="$m.attribute"></td>
+            <td><input name="retriever-include-$k-value" value="$m.value"></td>
+            <td><input id="retrieve-include-$k-rem" type="button" onclick="retriever_remove_row('retriever-include', $k)" value="$remove_t"></td>
+          </tr>
   {{ endfor }}
 {{ else }}
-                <tr id="retriever-include-0">
-                  <td><input name="retriever-include-0-element"></td>
-                  <td><input name="retriever-include-0-attribute"></td>
-                  <td><input name="retriever-include-0-value"></td>
-                  <td><input id="retrieve-include-0-rem" type="button" onclick="retriever_remove_row('retriever-include', 0)" value="$remove_t"></td>
-                </tr>
+          <tr id="retriever-include-0">
+            <td><input name="retriever-include-0-element"></td>
+            <td><input name="retriever-include-0-attribute"></td>
+            <td><input name="retriever-include-0-value"></td>
+            <td><input id="retrieve-include-0-rem" type="button" onclick="retriever_remove_row('retriever-include', 0)" value="$remove_t"></td>
+          </tr>
 {{ endif }}
-              </tbody>
-            </table>
-            <input type="button" onclick="retriever_add_row('retriever-include')" value="$add_t">
-          </td>
-        </tr>
-        <tr>
-          <td>$exclude_t:</td>
-          <td>
-            <table>
-              <thead>
-                <tr><th>Tag</th><th>Attribute</th><th>Value</th></tr>
-              </thead>
-              <tbody id="retriever-exclude">
+        </tbody>
+      </table>
+      <input type="button" onclick="retriever_add_row('retriever-include')" value="$add_t">
+    </div>
+    <h3>$exclude_t:</h3>
+    <div>
+      <table>
+        <thead>
+          <tr><th>Tag</th><th>Attribute</th><th>Value</th></tr>
+        </thead>
+        <tbody id="retriever-exclude">
 {{ if $exclude }}
   {{ for $exclude as $k=>$r }}
-                <tr id="retriever-exclude-$k">
-                  <td><input name="retriever-exclude-$k-element" value="$r.element"></td>
-                  <td><input name="retriever-exclude-$k-attribute" value="$r.attribute"></td>
-                  <td><input name="retriever-exclude-$k-value" value="$r.value"></td>
-                  <td><input id="retrieve-exclude-$k-rem" type="button" onclick="retriever_remove_row('retriever-exclude', $k)" value="$remove_t"></td>
-                </tr>
+          <tr id="retriever-exclude-$k">
+            <td><input name="retriever-exclude-$k-element" value="$r.element"></td>
+            <td><input name="retriever-exclude-$k-attribute" value="$r.attribute"></td>
+            <td><input name="retriever-exclude-$k-value" value="$r.value"></td>
+            <td><input id="retrieve-exclude-$k-rem" type="button" onclick="retriever_remove_row('retriever-exclude', $k)" value="$remove_t"></td>
+          </tr>
   {{ endfor }}
 {{ else }}
-                <tr id="retriever-exclude-0">
-                  <td><input name="retriever-exclude-0-element"></td>
-                  <td><input name="retriever-exclude-0-attribute"></td>
-                  <td><input name="retriever-exclude-0-value"></td>
-                  <td><input id="retrieve-exclude-0-rem" type="button" onclick="retriever_remove_row('retriever-exclude', 0)" value="$remove_t"></td>
-                </tr>
+          <tr id="retriever-exclude-0">
+            <td><input name="retriever-exclude-0-element"></td>
+            <td><input name="retriever-exclude-0-attribute"></td>
+            <td><input name="retriever-exclude-0-value"></td>
+            <td><input id="retrieve-exclude-0-rem" type="button" onclick="retriever_remove_row('retriever-exclude', 0)" value="$remove_t"></td>
+          </tr>
 {{ endif }}
-              </tbody>
-            </table>
-            <input type="button" onclick="retriever_add_row('retriever-exclude')" value="$add_t">
-          </td>
-        </tr>
-        <tr>
-          <td>$images_t:</td>
-          <td><input class="checkbox" type="checkbox" name="images" $images></td>
-        </tr>
-        <tr>
-          <td colspan="2">$retrospective_t <input class="input" size="4" name="apply"> $posts_t</td>
-        </tr>
-        <tr>
-          <td colspan="2"><input type="submit" size="70" value="$submit"></td>
-        </tr>
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+      <input type="button" onclick="retriever_add_row('retriever-exclude')" value="$add_t">
+    </div>
+    <input type="submit" size="70" value="$submit">
   </form>
 </div>
