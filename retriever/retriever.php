@@ -163,7 +163,7 @@ function retriever_retrieve_items($max_items) {
                dbesc(implode($schedule_clauses, ' OR ')),
                intval($retrieve_items));
         if (count($r) == 0) {
-            return;
+            break;
         }
         foreach ($r as $rr) {
             retrieve_resource($rr);
@@ -172,6 +172,39 @@ function retriever_retrieve_items($max_items) {
         $retrieve_items = $max_items - $retriever_item_count;
     }
     while ($retrieve_items > 0);
+
+    /* Look for items that are waiting even though the resource has
+     * completed.  This usually happens because we've been asked to
+     * retrospectively apply a config change.  It could also happen
+     * due to a cron job dying or something. */
+    $r = q("SELECT retriever_resource.`id` as resource, retriever_item.`id` as item FROM retriever_resource, retriever_item, retriever_rule WHERE retriever_item.`finished` = 0 AND retriever_item.`resource` = retriever_resource.`id` AND retriever_resource.`completed` IS NOT NULL AND retriever_item.`contact-id` = retriever_rule.`contact-id` AND retriever_item.`item-uid` = retriever_rule.`uid` LIMIT %d",
+           intval($retrieve_items));
+    if (!$r) {
+        $r = array();
+    }
+    foreach ($r as $rr) {
+        $resource = q("SELECT * FROM retriever_resource WHERE `id` = %d", $rr['resource']);
+        $retriever_item = retriever_get_retriever_item($rr['item']);
+        if (!$retriever_item) {
+            logger('retriever_retrieve_items: no retriever item with id ' . $rr['item']);
+            continue;
+        }
+        $item = retriever_get_item($retriever_item);
+        if (!$item) {
+            logger('retriever_retrieve_items: no item ' . $retriever_item['item-uri']);
+            continue;
+        }
+        $retriever = get_retriever($item['contact-id'], $item['uid']);
+        if (!$retriever) {
+            logger('retriever_retrieve_items: no retriever for item ' .
+                   $retriever_item['item-uri'] . ' ' . $retriever_item['uid'] . ' ' . $item['contact-id']);
+            continue;
+        }
+        retriever_apply_completed_resource_to_item($retriever, $item, $resource[0]);
+        q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d",
+          intval($retriever_item['id']));
+        retriever_check_item_completed($item);
+    }
 }
 
 function retriever_tidy() {
@@ -215,32 +248,49 @@ function get_retriever($contact_id, $uid, $create = false) {
     }
 }
 
-function retriever_item_completed($retriever_item_id, $resource) {
-    logger('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url'], LOGGER_DEBUG);
-    $r = q("SELECT * FROM `retriever_item` WHERE id = %d", intval($retriever_item_id));
-    if (!count($r)) {
-        logger('retriever_item_completed: unable to find retriever_item ' . $retriever_item_id, LOGGER_NORMAL);
+function retriever_get_retriever_item($id) {
+    $retriever_items = q("SELECT * FROM `retriever_item` WHERE id = %d", intval($id));
+    if (count($retriever_items) != 1) {
+        logger('retriever_get_retriever_item: unable to find retriever_item ' . $id, LOGGER_NORMAL);
         return;
     }
-    $retriever_item = $r[0];
-    $retriever = get_retriever($retriever_item['contact-id'], $retriever_item['item-uid']);
+    return $retriever_items[0];
+}
+
+function retriever_get_item($retriever_item) {
     $items = q("SELECT * FROM `item` WHERE `uri` = '%s' AND `uid` = %d AND `contact-id` = %d",
                dbesc($retriever_item['item-uri']),
                intval($retriever_item['item-uid']),
                intval($retriever_item['contact-id']));
     if (count($items) != 1) {
-        logger('retriever_item_completed: unexpected number of results ' .
-               count($items) . ' when searching for item uri ' .
-               $retriever_item['item-uri'] . ' uid ' . $retriever_item['item-uid'] .
-               ' cid ' . $retriever_item['contact-id'], LOGGER_NORMAL);
+        logger('retriever_get_item: unexpected number of results ' .
+               count($items) . " when searching for item $uri $uid $cid", LOGGER_NORMAL);
+        return;
+    }
+    return $items[0];
+}
+
+function retriever_item_completed($retriever_item_id, $resource) {
+    logger('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url'], LOGGER_DEBUG);
+
+    $retriever_item = retriever_get_retriever_item($retriever_item_id);
+    if (!$retriever_item) {
+        return;
+    }
+    $retriever = get_retriever($retriever_item['contact-id'], $retriever_item['item-uid']);
+    if (!$retriever) {
+        return;
+    }
+    $item = retriever_get_item($retriever_item);
+    if (!$item) {
         return;
     }
 
-    retriever_apply_completed_resource_to_item($retriever, $items[0], $resource);
+    retriever_apply_completed_resource_to_item($retriever, $item, $resource);
 
     q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d",
       intval($retriever_item['id']));
-    retriever_check_item_completed($items[0]);
+    retriever_check_item_completed($item);
 }
 
 function retriever_resource_completed($resource) {
@@ -255,6 +305,7 @@ function apply_retrospective($retriever, $num) {
     $r = q("SELECT * FROM `item` WHERE `contact-id` = %d ORDER BY `received` DESC LIMIT %d",
            intval($retriever['contact-id']), intval($num));
     foreach ($r as $item) {
+        q('UPDATE `item` SET `visible` = 0 WHERE `id` = %d', $item['id']);
         retriever_on_item_insert($retriever, $item);
     }
 }
@@ -264,7 +315,8 @@ function retriever_on_item_insert($retriever, &$item) {
         logger('retriever_on_item_insert: No retriever supplied', LOGGER_NORMAL);
         return;
     }
-    if ($retriever["data"]['enable'] == "on") {
+    if (!$retriever["data"]['enable'] == "on") {
+        return;
     }
     if ($retriever["data"]['pattern']) {
         $url = preg_replace('/' . $retriever["data"]['pattern'] . '/', $retriever["data"]['replace'], $item['plink']);
@@ -275,7 +327,7 @@ function retriever_on_item_insert($retriever, &$item) {
     }
 
     $resource = add_retriever_resource($url);
-    add_retriever_item($item, $resource);
+    $retriever_item_id = add_retriever_item($item, $resource);
 }
 
 function add_retriever_resource($url, $binary = false) {
@@ -297,27 +349,20 @@ function add_retriever_resource($url, $binary = false) {
 function add_retriever_item(&$item, $resource) {
     logger('add_retriever_item: ' . $resource['url'] . ' for ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
 
-    $r = q("SELECT id FROM `retriever_item` WHERE " .
-           "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d",
-           dbesc($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource['id']));
-    if (count($r)) {
-        logger("add_retriever_item: retriever item for " .
-               $item['uid'] . ', id ' . $r[0]['id'] . " already exists, id " . $r[0]['id'], LOGGER_NORMAL);
-        return;
-    }
-
     q("INSERT INTO `retriever_item` (`item-uri`, `item-uid`, `contact-id`, `resource`) " .
       "VALUES ('%s', %d, %d, %d)",
       dbesc($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource["id"]));
     $r = q("SELECT id FROM `retriever_item` WHERE " .
-           "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d",
+           "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d ORDER BY id DESC",
            dbesc($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource['id']));
     if (!count($r)) {
         logger("add_retriever_item: couldn't create retriever item for " .
                $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'],
                LOGGER_NORMAL);
+        return;
     }
     logger('add_retriever_item: created retriever_item ' . $r[0]['id'] . ' for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
+    return $r[0]['id'];
 }
 
 function retriever_get_encoding($resource) {
@@ -556,6 +601,18 @@ function retriever_content($a) {
         $a->page['content'] .= "<p>Please log in</p>";
         return;
     }
+    if ($a->argv[1] === 'help') {
+        $feeds = q("SELECT `id`, `name`, `thumb` FROM contact WHERE `uid` = %d AND `network` = 'feed'",
+                   local_user());
+        foreach ($feeds as $k=>$v) {
+            $feeds[$k]['url'] = $a->get_baseurl() . '/retriever/' . $v['id'];
+        }
+        $template = file_get_contents(dirname(__file__).'/help.tpl');
+        $a->page['content'] .= replace_macros($template, array(
+                                                  '$config' => $a->get_baseurl() . '/settings/addon',
+                                                  '$feeds' => $feeds));
+        return;
+    }
     if ($a->argv[1]) {
         $retriever = get_retriever($a->argv[1], local_user(), false);
 
@@ -586,8 +643,8 @@ function retriever_content($a) {
             q("UPDATE `retriever_rule` SET `data`='%s' WHERE `id` = %d",
               dbesc(json_encode($retriever["data"])), intval($retriever["id"]));
             $a->page['content'] .= "<p><b>Settings Updated";
-            if (x($_POST["apply"])) {
-                apply_retrospective($retriever, $_POST["apply"]);
+            if (x($_POST["retriever_retrospective"])) {
+                apply_retrospective($retriever, $_POST["retriever_retrospective"]);
                 $a->page['content'] .= " and retrospectively applied to " . $_POST["apply"] . " posts";
             }
             $a->page['content'] .= ".</p></b>";
@@ -617,8 +674,9 @@ function retriever_content($a) {
                                                       'retriever_retrospective',
                                                       t('Retrospectively Apply'),
                                                       '0',
-                                                      t('Re-download and reapply the rules to this number of posts')),
+                                                      t('Reapply the rules to this number of posts')),
                                                   '$title' => t('Retrieve Feed Content'),
+                                                  '$help' => $a->get_baseurl() . '/retriever/help',
                                                   '$submit' => t('Submit'),
                                                   '$id' => ($retriever["id"] ? $retriever["id"] : "create"),
                                                   '$tag_t' => t('Tag'),
@@ -665,6 +723,7 @@ function retriever_plugin_settings(&$a,&$s) {
     $s .= replace_macros($template, array(
                              '$submit' => t('Submit'),
                              '$title' => t('Retriever Settings'),
+                             '$help' => $a->get_baseurl() . '/retriever/help',
                              '$all_photos' => $all_photos_mu,
                              '$all_photos_t' => t('All Photos')));
 }
