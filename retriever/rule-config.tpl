@@ -42,6 +42,7 @@ function retriever_remove_row(id, number)
 }
   </script>
   <h2>$title</h2>
+  <p><a href="$help">Get Help</a></p>
   <form method="post">
     <input type="hidden" name="id" value="$id">
 {{ inc field_checkbox.tpl with $field=$enable }}{{ endinc }}

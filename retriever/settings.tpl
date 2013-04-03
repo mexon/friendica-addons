@@ -1,5 +1,8 @@
 <div class="settings-block">
   <h3>$title</h3>
+  <p>
+    <a href="$help">Get Help</a>
+  </p>
   <table>
     <tbody>
       <tr>
