@@ -414,7 +414,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
 
     $encoding = retriever_get_encoding($resource);
     logger('@@@ item type ' . $resource['type'] . ' encoding ' . $encoding);
-    $extracter_template = file_get_contents(dirname(__file__).'/extract.tpl');
+    $extracter_template = get_markup_template('extract.tpl', 'addon/retriever/');
     $doc = new DOMDocument('1.0', 'utf-8');
     if (strpos($resource['type'], 'html') !== false) {
         @$doc->loadHTML($resource['data']);
@@ -607,7 +607,7 @@ function retriever_content($a) {
         foreach ($feeds as $k=>$v) {
             $feeds[$k]['url'] = $a->get_baseurl() . '/retriever/' . $v['id'];
         }
-        $template = file_get_contents(dirname(__file__).'/help.tpl');
+        $template = get_markup_template('/help.tpl', 'addon/retriever/');
         $a->page['content'] .= replace_macros($template, array(
                                                   '$config' => $a->get_baseurl() . '/settings/addon',
                                                   '$feeds' => $feeds));
@@ -650,7 +650,7 @@ function retriever_content($a) {
             $a->page['content'] .= ".</p></b>";
         }
 
-        $template = file_get_contents(dirname(__file__).'/rule-config.tpl');
+        $template = get_markup_template('/rule-config.tpl', 'addon/retriever/');
         $a->page['content'] .= replace_macros($template, array(
                                                   '$enable' => array(
                                                       'retriever_enable',
@@ -719,7 +719,7 @@ function retriever_post_remote_hook(&$a, &$item) {
 function retriever_plugin_settings(&$a,&$s) {
     $all_photos = get_pconfig(local_user(), 'retriever', 'all_photos');
     $all_photos_mu = ($all_photos == 'on') ? ' checked="true"' : '';
-    $template = file_get_contents(dirname(__file__).'/settings.tpl');
+    $template = get_markup_template('/settings.tpl', 'addon/retriever/');
     $s .= replace_macros($template, array(
                              '$submit' => t('Submit'),
                              '$title' => t('Retriever Settings'),
