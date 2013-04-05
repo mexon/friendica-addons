@@ -79,6 +79,13 @@ function publicise_make_int($in) {
 
 function publicise_create_user($owner, $contact) {
 
+    $nick = $contact['nick'];
+    if (!$nick) {
+        logger("Publicise: can't convert contact " .
+               $contact['id'] . ' ' . $contact['name'] .
+               ' because there is no nick', LOGGER_NORMAL);
+        return;
+    }
     logger('Publicise: create user, beginning key generation...', LOGGER_DATA);
     $res=openssl_pkey_new(array(
         'digest_alg' => 'sha1',
@@ -171,11 +178,11 @@ function publicise_create_self_contact($a, $contact, $uid) {
       . "`) VALUES ("
       . implode(", ", array_values($newcontact))
       . ")" );
-    $newcontact = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self` = 1", $newuid);
+    $newcontact = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self` = 1", $uid);
     if (count($newcontact) != 1) {
         logger('Publicise: create contact failed', LOGGER_NORMAL);
-        $r = q("DELETE FROM user WHERE uid = %d", $newuid);
-        logger('Publicise: deleted failed user ' . $newuid, LOGGER_DATA);
+        $r = q("DELETE FROM user WHERE uid = %d", $uid);
+        logger('Publicise: deleted failed user ' . $uid, LOGGER_DATA);
         return;
     }
     return $newcontact[0]['id'];
@@ -183,7 +190,7 @@ function publicise_create_self_contact($a, $contact, $uid) {
 
 function publicise_create_profile($contact, $uid) {
     $newprofile = array(
-        'uid' => $newuid,
+        'uid' => $uid,
         'profile-name' => publicise_make_string('default'),
         'is-default' => publicise_make_int(1),
         'name' => publicise_make_string($contact['name']),
@@ -248,6 +255,9 @@ function publicise($a, $contact, $owner) {
     }
     else {
         $uid = publicise_set_up_user($a, $contact, $owner);
+        if (!$uid) {
+            return;
+        }
         logger("Publicise: created new user $uid", LOGGER_DATA);
     }
 
@@ -299,7 +309,7 @@ function depublicise($a, $contact, $user) {
     // attached to the original feed contact, but must have their uid
     // updated.  Also update the fields we scribbled over in
     // publicise_post_remote_hook.
-    q('UPDATE `contact` SET `uid` = %d, `reason` = "" WHERE id = %d',
+    q('UPDATE `contact` SET `uid` = %d, `reason` = "", hidden = 0 WHERE id = %d',
       intval(local_user()), intval($contact['id']));
     q('UPDATE `item` SET `uid` = %d, `wall` = 0, `type` = "remote", `private` = 2 WHERE `contact-id` = %d',
       intval(local_user()), intval($contact['id']));
