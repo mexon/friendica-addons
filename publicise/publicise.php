@@ -1,7 +1,7 @@
 <?php
 /**
- * Name: Publicise Feed
- * Description: Convert a feed contact to a soapbox account so you can share it with other users
+ * Name: Publicise Feeds
+ * Description: Convert your feeds into soapbox accounts so you can share them with other users
  * Version: 0.1
  * Author: Matthew Exon <http://mat.exon.name>
  */
@@ -62,7 +62,11 @@ function publicise_plugin_admin(&$a,&$o) {
     $template = file_get_contents(dirname(__file__).'/admin.tpl');
     $o .= replace_macros($template, array(
                              '$feeds' => $contacts,
-                             '$submit' => t('Submit')));
+                             '$feed_t' => t('Feed'),
+                             '$publicised_t' => t('Publicised'),
+                             '$comments_t' => t('Allow Comments/Likes'),
+                             '$expire_t' => t('Expire Articles After (Days)'),
+                             '$submit_t' => t('Submit')));
 }
 
 function publicise_make_string($in) {
@@ -263,9 +267,6 @@ function publicise($a, $contact, $owner) {
     return $newcontact[0];
 }
 
-// This function takes a feed which was leading an independent life as
-// a soapbox user and converts it into a private feed owned by the
-// local_user().
 function depublicise($a, $contact, $user) {
     require_once('include/Contact.php');
 
@@ -355,7 +356,7 @@ function publicise_post_remote_hook(&$a, &$item) {
         return;
     }
 
-    logger('Publicise: moving to wall: ' . $item['plink'], LOGGER_DEBUG);
+    logger('Publicise: moving to wall: ' . $item['uid'] . ' ' . $item['contact-id'] . ' ' . $item['uri'], LOGGER_DEBUG);
     $item['type'] = 'wall';
     $item['wall'] = 1;
     $item['private'] = 0;
