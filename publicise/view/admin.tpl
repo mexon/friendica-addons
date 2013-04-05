@@ -2,10 +2,10 @@
   <table>
     <thead>
       <tr>
-        <th>Feed</th>
-        <th>Publicised</th>
-        <th>Allow Comments/Likes</th>
-        <th>Expire Articles After (Days)</th>
+        <th>$feed_t</th>
+        <th>$publicised_t</th>
+        <th>$comments_t</th>
+        <th>$expire_t</th>
       </tr>
     </thead>
     <tbody>
@@ -30,5 +30,5 @@
 {{ endfor }}
     </tbody>
   </table>
-  <input type="submit" size="70" value="$submit">
+  <input type="submit" size="70" value="$submit_t">
 </form>
