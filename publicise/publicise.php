@@ -1,14 +1,13 @@
 <?php
 /**
  * Name: Publicise Feed
- * Description: Convert a feed contact to a soapbox account so it can be easily added from the directory
+ * Description: Convert a feed contact to a soapbox account so you can share it with other users
  * Version: 0.1
  * Author: Matthew Exon <http://mat.exon.name>
  */
 
 function publicise_install() {
     register_hook('post_remote', 'addon/publicise/publicise.php', 'publicise_post_remote_hook');
-    register_hook('post_remote_end', 'addon/publicise/publicise.php', 'publicise_post_remote_end_hook');
 }
 
 function publicise_uninstall() {
@@ -16,31 +15,65 @@ function publicise_uninstall() {
     unregister_hook('post_remote_end', 'addon/publicise/publicise.php', 'publicise_post_remote_end_hook');
 }
 
-function publicise_plugin_admin(&$a,&$o) {
-
+function publicise_get_contacts() {
     $query = <<<EOF
-select id, name, micro
- from contact
- where contact.uid = %d
- and contact.network = 'feed'
- order by contact.id
- limit 100
+SELECT *
+ FROM `contact`
+ WHERE (`contact`.`uid` = %d and `contact`.`network` = 'feed')
+ OR (`reason` = 'publicise')
+ ORDER BY `contact`.`id`
 EOF;
-    $r = q($query, local_user());
-    $settings = array();
-    $template = file_get_contents(dirname(__file__).'/admin.tpl');
-    $o .= replace_macros($template, array('$feeds' => $r, '$submit' => t('Publicise')));
+    return q($query, local_user());
 }
 
-function make_string_field($in) {
+function publicise_get_user($uid) {
+    $r = q('SELECT * FROM `user` WHERE `uid` = %d', $uid);
+    if (count($r) != 1) {
+        logger('Publicise: unexpected number of results for uid ' . $uid, LOGGER_NORMAL);
+    }
+    return $r[0];
+}
+
+function publicise_plugin_admin(&$a,&$o) {
+    if (!is_site_admin()) {
+        $o .= "<p>This page is for site administrators only</p>";
+        return;
+    }
+
+    $contacts = publicise_get_contacts();
+    foreach ($contacts as $k=>$v) {
+        $enabled = ($v['reason'] === 'publicise') ? 1 : NULL;
+        $expire = 30;
+        $comments = 1;
+        $url = $v['url'];
+        if ($enabled) {
+            $r = q('SELECT `expire`, `page-flags` FROM `user` WHERE `uid` = %d', $v['uid']);
+            $expire = $r[0]['expire'];
+            $url = $a->get_baseurl() . '/profile/' . $v['nick'];
+            if ($r[0]['page-flags'] == PAGE_SOAPBOX) {
+                $comments = NULL;
+            }
+        }
+        $contacts[$k]['enabled'] = array('publicise-enabled-' . $v['id'], NULL, $enabled);
+        $contacts[$k]['comments'] = array('publicise-comments-' . $v['id'], NULL, $comments);
+        $contacts[$k]['expire'] = $expire;
+        $contacts[$k]['url'] = $url;
+    }
+    $template = file_get_contents(dirname(__file__).'/admin.tpl');
+    $o .= replace_macros($template, array(
+                             '$feeds' => $contacts,
+                             '$submit' => t('Submit')));
+}
+
+function publicise_make_string($in) {
     return "'" . dbesc($in) . "'";
 }
 
-function make_int_field($in) {
-    return $in ? $in : 0;
+function publicise_make_int($in) {
+    return intval($in) ? $in : 0;
 }
 
-function publicise($a, $contact, $owner) {
+function publicise_create_user($owner, $contact) {
 
     logger('Publicise: create user, beginning key generation...', LOGGER_DATA);
     $res=openssl_pkey_new(array(
@@ -59,32 +92,33 @@ function publicise($a, $contact, $owner) {
     openssl_pkey_export($sres, $sprvkey);
     $spkey = openssl_pkey_get_details($sres);
     $spubkey = $spkey["key"];
+    $guid = generate_user_guid();
 
     $newuser = array(
-        'guid' => make_string_field(generate_user_guid()),
-        'username' => make_string_field($contact['name']),
-        'password' => make_string_field($owner['password']),
-        'nickname' => make_string_field($contact['nick']),
-        'email' => make_string_field($owner['email']),
-        'openid' => make_string_field($owner['openid']),
-        'timezone' => make_string_field($owner['timezone']),
-        'language' => make_string_field($owner['language']),
-        'register_date' => make_string_field(datetime_convert()),
-        'default-location' => make_string_field($owner['default-location']),
-        'allow_location' => make_string_field($owner['allow_location']),
-        'theme' => make_string_field($owner['theme']),
-        'pubkey' => make_string_field($pubkey),
-        'prvkey' => make_string_field($prvkey),
-        'spubkey' => make_string_field($spubkey),
-        'sprvkey' => make_string_field($sprvkey),
-        'verified' => make_int_field($owner['verified']),
-        'blocked' => make_int_field(0),
-        'blockwall' => make_int_field(1),
-        'hidewall' => make_int_field(0),
-        'blocktags' => make_int_field(0),
-        'notify-flags' => make_int_field($owner['notifyflags']),
-        'page-flags' => make_int_field(PAGE_SOAPBOX),
-        'expire' => make_int_field(30), /* @@@ FIXME make configurable */
+        'guid' => publicise_make_string($guid),
+        'username' => publicise_make_string($contact['name']),
+        'password' => publicise_make_string($owner['password']),
+        'nickname' => publicise_make_string($contact['nick']),
+        'email' => publicise_make_string($owner['email']),
+        'openid' => publicise_make_string($owner['openid']),
+        'timezone' => publicise_make_string($owner['timezone']),
+        'language' => publicise_make_string($owner['language']),
+        'register_date' => publicise_make_string(datetime_convert()),
+        'default-location' => publicise_make_string($owner['default-location']),
+        'allow_location' => publicise_make_string($owner['allow_location']),
+        'theme' => publicise_make_string($owner['theme']),
+        'pubkey' => publicise_make_string($pubkey),
+        'prvkey' => publicise_make_string($prvkey),
+        'spubkey' => publicise_make_string($spubkey),
+        'sprvkey' => publicise_make_string($sprvkey),
+        'verified' => publicise_make_int($owner['verified']),
+        'blocked' => publicise_make_int(0),
+        'blockwall' => publicise_make_int(1),
+        'hidewall' => publicise_make_int(0),
+        'blocktags' => publicise_make_int(0),
+        'notify-flags' => publicise_make_int($owner['notifyflags']),
+        'page-flags' => publicise_make_int($comments ? PAGE_COMMUNITY : PAGE_SOAPBOX),
+        'expire' => publicise_make_int($expire),
         );
     logger('Publicise: created user ' . print_r($newuser, true), LOGGER_DATA);
     $r = q("INSERT INTO `user` (`" 
@@ -93,57 +127,67 @@ function publicise($a, $contact, $owner) {
 			. implode(", ", array_values($newuser)) 
 			. ")" );
     if (!$r) {
-        logger('Publicise: create user failed', LOGGER_ERROR);
+        logger('Publicise: create user failed', LOGGER_NORMAL);
         return;
     }
-    $r = q("SELECT uid FROM user ORDER BY uid DESC LIMIT 1");
-    $newuid = $r[0]['uid'];
+    $r = q('SELECT `uid` FROM `user` WHERE `guid` = "%s"', dbesc($guid));
+    if (count($r) != 1) {
+        logger('Publicise: unexpected number of uids returned', LOGGER_NORMAL);
+        return;
+    }
+    return $r[0]['uid'];
+}
+
+function publicise_create_self_contact($a, $contact, $uid) {
     $newcontact = array(
-        'uid' => $newuid,
-        'created' => make_string_field(datetime_convert()),
-        'self' => make_int_field(1),
-        'name' => make_string_field($contact['name']),
-        'nick' => make_string_field($contact['nick']),
-        'photo' => make_string_field($contact['photo']),
-        'thumb' => make_string_field($contact['thumb']),
-        'micro' => make_string_field($contact['micro']),
-        'blocked' => make_int_field(0),
-        'pending' => make_int_field(0),
-        'url' => make_string_field($a->get_baseurl() . '/profile/' . $contact['nick']),
-        'nurl' => make_string_field($a->get_baseurl() . '/profile/' . $contact['nick']),
-        'request' => make_string_field($a->get_baseurl() . '/dfrn_request/' . $contact['nick']),
-        'notify' => make_string_field($a->get_baseurl() . '/dfrn_notify/' . $contact['nick']),
-        'poll' => make_string_field($a->get_baseurl() . '/dfrn_poll/' . $contact['nick']),
-        'confirm' => make_string_field($a->get_baseurl() . '/dfrn_confirm/' . $contact['nick']),
-        'poco' => make_string_field($a->get_baseurl() . '/poco/' . $contact['nick']),
-        'uri-date' => make_string_field(datetime_convert()),
-        'avatar-date' => make_string_field(datetime_convert()),
-        'closeness' => make_int_field(0),
+        'uid' => $uid,
+        'created' => publicise_make_string(datetime_convert()),
+        'self' => publicise_make_int(1),
+        'name' => publicise_make_string($contact['name']),
+        'nick' => publicise_make_string($contact['nick']),
+        'photo' => publicise_make_string($contact['photo']),
+        'thumb' => publicise_make_string($contact['thumb']),
+        'micro' => publicise_make_string($contact['micro']),
+        'blocked' => publicise_make_int(0),
+        'pending' => publicise_make_int(0),
+        'url' => publicise_make_string($a->get_baseurl() . '/profile/' . $contact['nick']),
+        'nurl' => publicise_make_string($a->get_baseurl() . '/profile/' . $contact['nick']),
+        'request' => publicise_make_string($a->get_baseurl() . '/dfrn_request/' . $contact['nick']),
+        'notify' => publicise_make_string($a->get_baseurl() . '/dfrn_notify/' . $contact['nick']),
+        'poll' => publicise_make_string($a->get_baseurl() . '/dfrn_poll/' . $contact['nick']),
+        'confirm' => publicise_make_string($a->get_baseurl() . '/dfrn_confirm/' . $contact['nick']),
+        'poco' => publicise_make_string($a->get_baseurl() . '/poco/' . $contact['nick']),
+        'uri-date' => publicise_make_string(datetime_convert()),
+        'avatar-date' => publicise_make_string(datetime_convert()),
+        'closeness' => publicise_make_int(0),
         );
     logger('Publicise: create contact ' . print_r($newcontact, true), LOGGER_DATA);
-    $r = q("INSERT INTO `contact` (`"
-			. implode("`, `", array_keys($newcontact))
-			. "`) VALUES ("
-			. implode(", ", array_values($newcontact))
-			. ")" );
-    if (!$r) {
-        logger('Publicise: create contact failed', LOGGER_ERROR);
+    q("INSERT INTO `contact` (`"
+      . implode("`, `", array_keys($newcontact))
+      . "`) VALUES ("
+      . implode(", ", array_values($newcontact))
+      . ")" );
+    $newcontact = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self` = 1", $newuid);
+    if (count($newcontact) != 1) {
+        logger('Publicise: create contact failed', LOGGER_NORMAL);
         $r = q("DELETE FROM user WHERE uid = %d", $newuid);
         logger('Publicise: deleted failed user ' . $newuid, LOGGER_DATA);
         return;
     }
-    $r = q("SELECT id FROM contact ORDER BY id DESC LIMIT 1");
-    $newcontactid = $r[0]['id'];
+    return $newcontact[0]['id'];
+}
+
+function publicise_create_profile($contact, $uid) {
     $newprofile = array(
         'uid' => $newuid,
-        'profile-name' => make_string_field('default'),
-        'is-default' => make_int_field(1),
-        'name' => make_string_field($contact['name']),
-        'photo' => make_string_field($contact['photo']),
-        'thumb' => make_string_field($contact['thumb']),
-        'homepage' => make_string_field($contact['url']),
-        'publish' => make_int_field(1),
-        'net-publish' => make_int_field(1),
+        'profile-name' => publicise_make_string('default'),
+        'is-default' => publicise_make_int(1),
+        'name' => publicise_make_string($contact['name']),
+        'photo' => publicise_make_string($contact['photo']),
+        'thumb' => publicise_make_string($contact['thumb']),
+        'homepage' => publicise_make_string($contact['url']),
+        'publish' => publicise_make_int(1),
+        'net-publish' => publicise_make_int(1),
         );
     logger('Publicise: create profile ' . print_r($newprofile, true), LOGGER_DATA);
     $r = q("INSERT INTO `profile` (`" 
@@ -152,52 +196,167 @@ function publicise($a, $contact, $owner) {
 			. implode(", ", array_values($newprofile))
 			. ")" );
     if (!$r) {
-        logger('Publicise: create profile failed', LOGGER_ERROR);
+        logger('Publicise: create profile failed', LOGGER_NORMAL);
     }
-    $r = q("UPDATE `contact` SET `uid` = %d, `reason` = 'publicise', `hidden` = 1 WHERE id = %d", $newuid, $contact['id']);
-    if (!$r) {
-        logger('Publicise: update contact failed', LOGGER_ERROR);
+    $newprofile = q('SELECT `id` FROM `profile` WHERE `uid` = %d AND `is-default` = 1', $uid);
+    if (count($newprofile) != 1) {
+        logger('Publicise: create profile produced unexpected number of results', LOGGER_NORMAL);
+        return;
     }
-    $r = q("UPDATE `item` SET `uid` = %d, type = 'wall', wall = 1 WHERE `contact-id` = %d",
-           $newuid, $contact['id']);
-    logger('Publicise: moved items from contact ' . $contact['id'] . ' to uid ' . $newuid, LOGGER_DATA);
-    $r = q("UPDATE `pconfig` SET `uid` = %d WHERE `uid` = %d AND `cat` = 'retriever%d'",
-           $newuid, $contact['uid'], $contact['id']);
-    logger('Publicise: Updated retriever config from uid ' . $contact['uid'] . ' to ' . $newuid, LOGGER_DATA);
+    return $newprofile[0]['id'];
 }
 
-//function publicise_plugin_admin_post ($a,$post) {
-function publicise_plugin_admin_post ($a) {
-    $r = q("select * from user where uid = %d", local_user());
-    foreach ($r[0] as $k=>$v) {
-        $user[$k] = $v;
+function publicise_set_up_user($a, $contact, $owner) {
+    $uid = publicise_create_user($owner, $contact);
+    if (!$uid) {
+        return;
     }
-    $r = q("select * from contact where contact.uid = %d and contact.network = 'feed'", local_user());
-    foreach ($r as $rr) {
-        if ($_POST['publicise' . $rr['id']]) {
-            publicise($a, $rr, $user);
+    $self_contact = publicise_create_self_contact($a, $contact, $uid);
+    if (!$self_contact) {
+        logger("Publicise: unable to create self contact, deleting user $uid", LOGGER_NORMAL);
+        q('DELETE FROM `user` WHERE `uid` = %d', $uid);
+        return;
+    }
+    $profile = publicise_create_profile($contact, $uid);
+    if (!$profile) {
+        logger("Publicise: unable to create profile, deleting user $uid contact $self_contact", LOGGER_NORMAL);
+        q('DELETE FROM `user` WHERE `uid` = %d', $uid);
+        q('DELETE FROM `contact` WHERE `id` = %d', $self_contact);
+        return;
+    }
+    return $uid;
+}
+
+function publicise($a, $contact, $owner) {
+    if (!is_site_admin()) {
+        logger('Publicise: non-admin tried to publicise', LOGGER_NORMAL);
+        return;
+    }
+
+    // Check if we're changing our mind about a feed we earlier depublicised
+    $existing = q('SELECT `uid` FROM `user` WHERE `account_expires_on` != "0000-00-00 00:00:00" AND `nickname` = "%s" AND `email` = "%s" AND `page-flags` in (%d, %d)',
+                  $contact['nick'], $owner['email'], PAGE_COMMUNITY, PAGE_SOAPBOX);
+    if (count($existing) == 1) {
+        $uid = $existing[0]['uid'];
+        q('UPDATE `user` SET `account_expires_on` = "0000-00-00 00:00:00", `account_removed` = 0, `account_expired` = 0');
+        q('UPDATE `profile` SET `publish` = 1, `net-publish` = 1 WHERE `uid` = %d AND `is-default` = 1', $uid);
+        logger("Publicise: recycled previous user $uid", LOGGER_DATA);
+    }
+    else {
+        $uid = publicise_set_up_user($a, $contact, $owner);
+        logger("Publicise: created new user $uid", LOGGER_DATA);
+    }
+
+    $r = q("UPDATE `contact` SET `uid` = %d, `reason` = 'publicise', `hidden` = 1 WHERE id = %d", $uid, $contact['id']);
+    if (!$r) {
+        logger('Publicise: update contact failed, deleting user $uid contact $self_contact profile $profile', LOGGER_NORMAL);
+        q('DELETE FROM `user` WHERE `uid` = %d', $uid);
+        q('DELETE FROM `contact` WHERE `id` = %d', $self_contact);
+        q('DELETE FROM `profile` WHERE `id` = %d', $profile);
+    }
+    $r = q("UPDATE `item` SET `uid` = %d, type = 'wall', wall = 1, private = 0 WHERE `contact-id` = %d",
+           $uid, $contact['id']);
+    logger('Publicise: moved items from contact ' . $contact['id'] . ' to uid ' . $uid, LOGGER_DEBUG);
+    $r = q("UPDATE `pconfig` SET `uid` = %d WHERE `uid` = %d AND `cat` = 'retriever%d'",
+           $uid, $contact['uid'], $contact['id']);
+    logger('Publicise: Updated retriever config from uid ' . $contact['uid'] . ' to ' . $uid, LOGGER_DEBUG);
+    return $newcontact[0];
+}
+
+// This function takes a feed which was leading an independent life as
+// a soapbox user and converts it into a private feed owned by the
+// local_user().
+function depublicise($a, $contact, $user) {
+    require_once('include/Contact.php');
+
+    if (!is_site_admin()) {
+        logger('Publicise: non-admin tried to depublicise', LOGGER_NORMAL);
+        return;
+    }
+
+    logger('Publicise: about to depublicise contact ' . $contact['id'] . ' user ' . $user['uid'], LOGGER_DATA);
+
+    $r = q('SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1', $user['uid']);
+    if (count($r) != 1) {
+        logger('Publicise: unexpected number of self contacts for user ' . $user['uid'], LOGGER_NORMAL);
+        return;
+    }
+    $self_contact = $r[0];
+
+    // For the local_user, delete the contact to the feed user and any
+    // copies of its items.  These will be replaced by the originals,
+    // which will be brought back into the local_user's feed along
+    // with the feed contact itself.
+    $r = q('SELECT * FROM `contact` WHERE `uid` = %d AND `url` = "%s"',
+           intval(local_user()), dbesc($self_contact['url']));
+    foreach ($r as $my_contact) {
+        q('DELETE FROM `item` WHERE `contact-id` = %d', $my_contact['id']);
+        q('DELETE FROM `contact` WHERE `id` = %d', $my_contact['id']);
+    }
+
+    // Move the feed contact to local_user.  Existing items stay
+    // attached to the original feed contact, but must have their uid
+    // updated.  Also update the fields we scribbled over in
+    // publicise_post_remote_hook.
+    q('UPDATE `contact` SET `uid` = %d, `reason` = "" WHERE id = %d',
+      intval(local_user()), intval($contact['id']));
+    q('UPDATE `item` SET `uid` = %d, `wall` = 0, `type` = "remote", `private` = 2 WHERE `contact-id` = %d',
+      intval(local_user()), intval($contact['id']));
+
+    // Take ownership of any photos created by the feed user
+    q('UPDATE `photo` SET `uid` = %d WHERE `uid` = %d',
+      intval(local_user()), intval($user['uid']));
+
+    q('UPDATE `user` SET `account_expires_on` = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE `uid` = %d',
+      intval($user['uid']));
+    q('UPDATE `profile` SET `publish` = 0, `net-publish` = 0 WHERE `uid` = %d AND `is-default` = 1', $user['uid']);
+}
+
+function publicise_plugin_admin_post ($a) {
+    if (!is_site_admin()) {
+        logger('Publicise: non-admin tried to do admin post', LOGGER_NORMAL);
+        return;
+    }
+
+    foreach (publicise_get_contacts() as $contact) {
+        $user = publicise_get_user($contact['uid']);
+        if (!$_POST['publicise-enabled-' . $contact['id']]) {
+            if ($contact['reason'] === 'publicise') {
+                depublicise($a, $contact, $user);
+            }
+        }
+        else {
+            if ($contact['reason'] !== 'publicise') {
+                $contact = publicise($a, $contact, $user);
+            }
+            if ($_POST['publicise-expire-' . $contact['id']] != $user['expire']) {
+                q('UPDATE `user` SET `expire` = %d WHERE `uid` = %d',
+                  intval($_POST['publicise-expire-' . $contact['id']]), intval($user['uid']));
+            }
+            if ($_POST['publicise-comments-' . $contact['id']]) {
+                if ($user['page-flags'] != PAGE_COMMUNITY) {
+                    q('UPDATE `user` SET `page-flags` = %d WHERE `uid` = %d',
+                      intval(PAGE_COMMUNITY), intval($user['uid']));
+                }
+            }
+            else {
+                if ($user['page-flags'] != PAGE_SOAPBOX) {
+                    q('UPDATE `user` SET `page-flags` = %d WHERE `uid` = %d',
+                      intval(PAGE_SOAPBOX), intval($user['uid']));
+                }
+            }
         }
     }
 }
 
 function publicise_post_remote_hook(&$a, &$item) {
-    $r1 = q("select uid from contact where id = %d and reason = 'publicise'", $item['contact-id']);
+    $r1 = q("SELECT `uid` FROM `contact` WHERE `id` = %d AND `reason` = 'publicise'", $item['contact-id']);
     if (!$r1) {
         return;
     }
 
-    logger('Publicise: moving to wall: ' . $item['plink']);
+    logger('Publicise: moving to wall: ' . $item['plink'], LOGGER_DEBUG);
     $item['type'] = 'wall';
     $item['wall'] = 1;
     $item['private'] = 0;
 }
-
-function publicise_post_remote_end_hook(&$a, $item) {
-    $r1 = q("select uid from contact where id = %d and reason = 'publicise'", $item['contact-id']);
-    if (!$r1) {
-        return;
-    }
-
-    //proc_run('php', "include/notifier.php", 'wall-new', $item['id']);
-}
-
