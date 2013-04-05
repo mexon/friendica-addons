@@ -29,13 +29,12 @@ EOF;
 function publicise_get_user($uid) {
     $r = q('SELECT * FROM `user` WHERE `uid` = %d', $uid);
     if (count($r) != 1) {
-        logger('Publicise: unexpected number of results for uid ' . $uid);
+        logger('Publicise: unexpected number of results for uid ' . $uid, LOGGER_NORMAL);
     }
     return $r[0];
 }
 
 function publicise_plugin_admin(&$a,&$o) {
-    logger('@@@ hello world 2');
     if (!is_site_admin()) {
         $o .= "<p>This page is for site administrators only</p>";
         return;
@@ -74,12 +73,7 @@ function publicise_make_int($in) {
     return intval($in) ? $in : 0;
 }
 
-function publicise($a, $contact, $owner, $comments, $expire) {
-    logger('@@@ Publicise: the contact is ' . print_r($contact, true) . ' owner ' . print_r($owner, true) . ' comments ' . $comments . ' expire ' . $expire);
-    if (!is_site_admin()) {
-        logger('Publicise: non-admin tried to publicise', LOGGER_NORMAL);
-        return;
-    }
+function publicise_create_user($owner, $contact) {
 
     logger('Publicise: create user, beginning key generation...', LOGGER_DATA);
     $res=openssl_pkey_new(array(
@@ -136,16 +130,17 @@ function publicise($a, $contact, $owner, $comments, $expire) {
         logger('Publicise: create user failed', LOGGER_NORMAL);
         return;
     }
-    logger('@@@ guid is ' . $newuser['guid']);
     $r = q('SELECT `uid` FROM `user` WHERE `guid` = "%s"', dbesc($guid));
     if (count($r) != 1) {
         logger('Publicise: unexpected number of uids returned', LOGGER_NORMAL);
-        logger('@@@ ' . print_r($r, true));
         return;
     }
-    $newuid = $r[0]['uid'];
+    return $r[0]['uid'];
+}
+
+function publicise_create_self_contact($a, $contact, $uid) {
     $newcontact = array(
-        'uid' => $newuid,
+        'uid' => $uid,
         'created' => publicise_make_string(datetime_convert()),
         'self' => publicise_make_int(1),
         'name' => publicise_make_string($contact['name']),
@@ -172,14 +167,17 @@ function publicise($a, $contact, $owner, $comments, $expire) {
       . "`) VALUES ("
       . implode(", ", array_values($newcontact))
       . ")" );
-    $newcontact = q("SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1", $newuid);
+    $newcontact = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self` = 1", $newuid);
     if (count($newcontact) != 1) {
         logger('Publicise: create contact failed', LOGGER_NORMAL);
         $r = q("DELETE FROM user WHERE uid = %d", $newuid);
         logger('Publicise: deleted failed user ' . $newuid, LOGGER_DATA);
         return;
     }
-    $newcontactid = $newcontact[0]['id'];
+    return $newcontact[0]['id'];
+}
+
+function publicise_create_profile($contact, $uid) {
     $newprofile = array(
         'uid' => $newuid,
         'profile-name' => publicise_make_string('default'),
@@ -200,16 +198,68 @@ function publicise($a, $contact, $owner, $comments, $expire) {
     if (!$r) {
         logger('Publicise: create profile failed', LOGGER_NORMAL);
     }
-    $r = q("UPDATE `contact` SET `uid` = %d, `reason` = 'publicise', `hidden` = 1 WHERE id = %d", $newuid, $contact['id']);
+    $newprofile = q('SELECT `id` FROM `profile` WHERE `uid` = %d AND `is-default` = 1', $uid);
+    if (count($newprofile) != 1) {
+        logger('Publicise: create profile produced unexpected number of results', LOGGER_NORMAL);
+        return;
+    }
+    return $newprofile[0]['id'];
+}
+
+function publicise_set_up_user($a, $contact, $owner) {
+    $uid = publicise_create_user($owner, $contact);
+    if (!$uid) {
+        return;
+    }
+    $self_contact = publicise_create_self_contact($a, $contact, $uid);
+    if (!$self_contact) {
+        logger("Publicise: unable to create self contact, deleting user $uid", LOGGER_NORMAL);
+        q('DELETE FROM `user` WHERE `uid` = %d', $uid);
+        return;
+    }
+    $profile = publicise_create_profile($contact, $uid);
+    if (!$profile) {
+        logger("Publicise: unable to create profile, deleting user $uid contact $self_contact", LOGGER_NORMAL);
+        q('DELETE FROM `user` WHERE `uid` = %d', $uid);
+        q('DELETE FROM `contact` WHERE `id` = %d', $self_contact);
+        return;
+    }
+    return $uid;
+}
+
+function publicise($a, $contact, $owner) {
+    if (!is_site_admin()) {
+        logger('Publicise: non-admin tried to publicise', LOGGER_NORMAL);
+        return;
+    }
+
+    // Check if we're changing our mind about a feed we earlier depublicised
+    $existing = q('SELECT `uid` FROM `user` WHERE `account_expires_on` != "0000-00-00 00:00:00" AND `nickname` = "%s" AND `email` = "%s" AND `page-flags` in (%d, %d)',
+                  $contact['nick'], $owner['email'], PAGE_COMMUNITY, PAGE_SOAPBOX);
+    if (count($existing) == 1) {
+        $uid = $existing[0]['uid'];
+        q('UPDATE `user` SET `account_expires_on` = "0000-00-00 00:00:00", `account_removed` = 0, `account_expired` = 0');
+        q('UPDATE `profile` SET `publish` = 1, `net-publish` = 1 WHERE `uid` = %d AND `is-default` = 1', $uid);
+        logger("Publicise: recycled previous user $uid", LOGGER_DATA);
+    }
+    else {
+        $uid = publicise_set_up_user($a, $contact, $owner);
+        logger("Publicise: created new user $uid", LOGGER_DATA);
+    }
+
+    $r = q("UPDATE `contact` SET `uid` = %d, `reason` = 'publicise', `hidden` = 1 WHERE id = %d", $uid, $contact['id']);
     if (!$r) {
-        logger('Publicise: update contact failed', LOGGER_NORMAL);
+        logger('Publicise: update contact failed, deleting user $uid contact $self_contact profile $profile', LOGGER_NORMAL);
+        q('DELETE FROM `user` WHERE `uid` = %d', $uid);
+        q('DELETE FROM `contact` WHERE `id` = %d', $self_contact);
+        q('DELETE FROM `profile` WHERE `id` = %d', $profile);
     }
     $r = q("UPDATE `item` SET `uid` = %d, type = 'wall', wall = 1, private = 0 WHERE `contact-id` = %d",
-           $newuid, $contact['id']);
-    logger('Publicise: moved items from contact ' . $contact['id'] . ' to uid ' . $newuid, LOGGER_DEBUG);
+           $uid, $contact['id']);
+    logger('Publicise: moved items from contact ' . $contact['id'] . ' to uid ' . $uid, LOGGER_DEBUG);
     $r = q("UPDATE `pconfig` SET `uid` = %d WHERE `uid` = %d AND `cat` = 'retriever%d'",
-           $newuid, $contact['uid'], $contact['id']);
-    logger('Publicise: Updated retriever config from uid ' . $contact['uid'] . ' to ' . $newuid, LOGGER_DEBUG);
+           $uid, $contact['uid'], $contact['id']);
+    logger('Publicise: Updated retriever config from uid ' . $contact['uid'] . ' to ' . $uid, LOGGER_DEBUG);
     return $newcontact[0];
 }
 
@@ -224,8 +274,7 @@ function depublicise($a, $contact, $user) {
         return;
     }
 
-    logger('@@@ the contact is ' . print_r($contact, true));
-    logger('Publicise: about to depublicise contact ' . $contact['id'] . ' user ' . $user['uid']);
+    logger('Publicise: about to depublicise contact ' . $contact['id'] . ' user ' . $user['uid'], LOGGER_DATA);
 
     $r = q('SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1', $user['uid']);
     if (count($r) != 1) {
@@ -233,7 +282,6 @@ function depublicise($a, $contact, $user) {
         return;
     }
     $self_contact = $r[0];
-    logger('@@@ got self contact ' . print_r($self_contact, true));
 
     // For the local_user, delete the contact to the feed user and any
     // copies of its items.  These will be replaced by the originals,
@@ -241,62 +289,45 @@ function depublicise($a, $contact, $user) {
     // with the feed contact itself.
     $r = q('SELECT * FROM `contact` WHERE `uid` = %d AND `url` = "%s"',
            intval(local_user()), dbesc($self_contact['url']));
-    logger('@@@ deleting from contacts uid ' . print_r($r, true));
     foreach ($r as $my_contact) {
-        logger('@@@ delete from contacts where contact-id = ' . $my_contact['id']);
-        $r = q('DELETE FROM `item` WHERE `contact-id` = %d', $my_contact['id']);
-        logger('@@@ delete from item result ' . print_r($r, true));
-        $r = q('DELETE FROM `contact` WHERE `id` = %d', $my_contact['id']);
-        logger('@@@ delete from contact result ' . print_r($r, true));
+        q('DELETE FROM `item` WHERE `contact-id` = %d', $my_contact['id']);
+        q('DELETE FROM `contact` WHERE `id` = %d', $my_contact['id']);
     }
 
     // Move the feed contact to local_user.  Existing items stay
     // attached to the original feed contact, but must have their uid
     // updated.  Also update the fields we scribbled over in
     // publicise_post_remote_hook.
-    logger('@@@ change contact ' . $contact['id'] . ' to uid ' . local_user());
     q('UPDATE `contact` SET `uid` = %d, `reason` = "" WHERE id = %d',
       intval(local_user()), intval($contact['id']));
-    logger('@@@ change items of contact id ' . $contact['id'] . ' to uid ' . local_user());
-    $r = q('UPDATE `item` SET `uid` = %d, `wall` = 0, `type` = "remote", `private` = 2 WHERE `contact-id` = %d',
+    q('UPDATE `item` SET `uid` = %d, `wall` = 0, `type` = "remote", `private` = 2 WHERE `contact-id` = %d',
       intval(local_user()), intval($contact['id']));
-    //@@@ seriously, do something with the results
-    logger('@@@ changing the items result was ' . print_r($r, true));
 
     // Take ownership of any photos created by the feed user
-    $r = q('UPDATE `photo` SET `uid` = %d WHERE `uid` = %d',
+    q('UPDATE `photo` SET `uid` = %d WHERE `uid` = %d',
       intval(local_user()), intval($user['uid']));
-    logger('@@@ changing the photos result was ' . print_r($r, true));
 
-    q('DELETE FROM `contact` WHERE `uid` = %d', intval($user['uid']));
-    logger('@@@ deleted from contact result is ' . print_r($r, true));
-    q('DELETE FROM `contact` WHERE `url` = "%s"', dbesc($self_contact['url']));
-
-    user_remove($user['uid']);
+    q('UPDATE `user` SET `account_expires_on` = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE `uid` = %d',
+      intval($user['uid']));
+    q('UPDATE `profile` SET `publish` = 0, `net-publish` = 0 WHERE `uid` = %d AND `is-default` = 1', $user['uid']);
 }
 
 function publicise_plugin_admin_post ($a) {
-    logger('@@@ hello world?');
     if (!is_site_admin()) {
         logger('Publicise: non-admin tried to do admin post', LOGGER_NORMAL);
         return;
     }
 
-    //@@@ check that the local_user() actually has rights to do this stuff!
     foreach (publicise_get_contacts() as $contact) {
         $user = publicise_get_user($contact['uid']);
         if (!$_POST['publicise-enabled-' . $contact['id']]) {
             if ($contact['reason'] === 'publicise') {
-                logger('@@@ publicise_plugin_admin_post would depublicise ' . $contact['id']);
                 depublicise($a, $contact, $user);
             }
         }
         else {
             if ($contact['reason'] !== 'publicise') {
-                logger('@@@ publicise_plugin_admin_post would publicise ' . $contact['id']);
-                $contact = publicise($a, $contact, $user,
-                                     $_POST['publicise-comments-' . $contact['id']],
-                                     $_POST['publicise-expire-' . $contact['id']]);
+                $contact = publicise($a, $contact, $user);
             }
             if ($_POST['publicise-expire-' . $contact['id']] != $user['expire']) {
                 q('UPDATE `user` SET `expire` = %d WHERE `uid` = %d',
