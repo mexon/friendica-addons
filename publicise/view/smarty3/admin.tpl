@@ -35,5 +35,5 @@
 {{/foreach}}
     </tbody>
   </table>
-  <input type="submit" size="70" value="{{$submit}}">
+  <input type="submit" size="70" value="{{$submit_t}}">
 </form>
