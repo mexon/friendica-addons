@@ -59,7 +59,7 @@ function publicise_plugin_admin(&$a,&$o) {
         $contacts[$k]['expire'] = $expire;
         $contacts[$k]['url'] = $url;
     }
-    $template = file_get_contents(dirname(__file__).'/admin.tpl');
+    $template = get_markup_template('admin.tpl', 'addon/publicise/');
     $o .= replace_macros($template, array(
                              '$feeds' => $contacts,
                              '$feed_t' => t('Feed'),
