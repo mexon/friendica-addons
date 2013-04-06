@@ -294,29 +294,34 @@ function depublicise($a, $contact, $user) {
     }
     $self_contact = $r[0];
 
-    // For the local_user, delete the contact to the feed user and any
-    // copies of its items.  These will be replaced by the originals,
-    // which will be brought back into the local_user's feed along
-    // with the feed contact itself.
+    // If the local_user() is subscribed to the feed, take ownership
+    // of the feed and all its items and photos.  Otherwise they will
+    // be deleted when the account expires.
     $r = q('SELECT * FROM `contact` WHERE `uid` = %d AND `url` = "%s"',
            intval(local_user()), dbesc($self_contact['url']));
-    foreach ($r as $my_contact) {
-        q('DELETE FROM `item` WHERE `contact-id` = %d', $my_contact['id']);
-        q('DELETE FROM `contact` WHERE `id` = %d', $my_contact['id']);
+    if (count($r)) {
+        // Delete the contact to the feed user and any
+        // copies of its items.  These will be replaced by the originals,
+        // which will be brought back into the local_user's feed along
+        // with the feed contact itself.
+        foreach ($r as $my_contact) {
+            q('DELETE FROM `item` WHERE `contact-id` = %d', $my_contact['id']);
+            q('DELETE FROM `contact` WHERE `id` = %d', $my_contact['id']);
+        }
+
+        // Move the feed contact to local_user.  Existing items stay
+        // attached to the original feed contact, but must have their uid
+        // updated.  Also update the fields we scribbled over in
+        // publicise_post_remote_hook.
+        q('UPDATE `contact` SET `uid` = %d, `reason` = "", hidden = 0 WHERE id = %d',
+          intval(local_user()), intval($contact['id']));
+        q('UPDATE `item` SET `uid` = %d, `wall` = 0, `type` = "remote", `private` = 2 WHERE `contact-id` = %d',
+          intval(local_user()), intval($contact['id']));
+
+        // Take ownership of any photos created by the feed user
+        q('UPDATE `photo` SET `uid` = %d WHERE `uid` = %d',
+          intval(local_user()), intval($user['uid']));
     }
-
-    // Move the feed contact to local_user.  Existing items stay
-    // attached to the original feed contact, but must have their uid
-    // updated.  Also update the fields we scribbled over in
-    // publicise_post_remote_hook.
-    q('UPDATE `contact` SET `uid` = %d, `reason` = "", hidden = 0 WHERE id = %d',
-      intval(local_user()), intval($contact['id']));
-    q('UPDATE `item` SET `uid` = %d, `wall` = 0, `type` = "remote", `private` = 2 WHERE `contact-id` = %d',
-      intval(local_user()), intval($contact['id']));
-
-    // Take ownership of any photos created by the feed user
-    q('UPDATE `photo` SET `uid` = %d WHERE `uid` = %d',
-      intval(local_user()), intval($user['uid']));
 
     q('UPDATE `user` SET `account_expires_on` = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE `uid` = %d',
       intval($user['uid']));
