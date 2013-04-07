@@ -186,18 +186,19 @@ function retriever_retrieve_items($max_items) {
         $resource = q("SELECT * FROM retriever_resource WHERE `id` = %d", $rr['resource']);
         $retriever_item = retriever_get_retriever_item($rr['item']);
         if (!$retriever_item) {
-            logger('retriever_retrieve_items: no retriever item with id ' . $rr['item']);
+            logger('retriever_retrieve_items: no retriever item with id ' . $rr['item'], LOGGER_NORMAL);
             continue;
         }
         $item = retriever_get_item($retriever_item);
         if (!$item) {
-            logger('retriever_retrieve_items: no item ' . $retriever_item['item-uri']);
+            logger('retriever_retrieve_items: no item ' . $retriever_item['item-uri'], LOGGER_NORMAL);
             continue;
         }
         $retriever = get_retriever($item['contact-id'], $item['uid']);
         if (!$retriever) {
             logger('retriever_retrieve_items: no retriever for item ' .
-                   $retriever_item['item-uri'] . ' ' . $retriever_item['uid'] . ' ' . $item['contact-id']);
+                   $retriever_item['item-uri'] . ' ' . $retriever_item['uid'] . ' ' . $item['contact-id'],
+                   LOGGER_NORMAL);
             continue;
         }
         retriever_apply_completed_resource_to_item($retriever, $item, $resource[0]);
@@ -413,16 +414,14 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     }
 
     $encoding = retriever_get_encoding($resource);
-    logger('@@@ item type ' . $resource['type'] . ' encoding ' . $encoding);
     $extracter_template = get_markup_template('extract.tpl', 'addon/retriever/');
-    $doc = new DOMDocument('1.0', 'utf-8');
+    $doc = new DOMDocument('1.0', $encoding);
     if (strpos($resource['type'], 'html') !== false) {
         @$doc->loadHTML($resource['data']);
     }
     else {
         $doc->loadXML($resource['data']);
     }
-    logger('@@@ actual encoding of document is ' . $doc->encoding);
 
     $components = parse_url($item['plink']);
     $rooturl = $components['scheme'] . "://" . $components['host'];
@@ -725,7 +724,7 @@ function retriever_plugin_settings(&$a,&$s) {
                              '$title' => t('Retriever Settings'),
                              '$help' => $a->get_baseurl() . '/retriever/help',
                              '$all_photos' => $all_photos_mu,
-                             '$all_photos_t' => t('All Photos')));
+                             '$all_photos_t' => t('All Photos'))); //@@@ todo do field thing
 }
 
 function retriever_plugin_settings_post($a,$post) {

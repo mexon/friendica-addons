@@ -1,7 +1,7 @@
 <?php
 /**
- * Name: Receive Mail
- * Description: Process incoming mail commands
+ * Name: Post By Mail
+ * Description: Post messages, including photos, by sending a mail to the server
  * Version: 0.1
  * Author: Matthew Exon <http://mat.exon.name>
  */

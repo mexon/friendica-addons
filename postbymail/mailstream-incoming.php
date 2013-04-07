@@ -23,33 +23,6 @@ function mailstream_incoming_mail($a, $b) {
     mailstream_create_item($a, $message);
 }
 
-function mailstream_handle_permissions(&$message) {
-    $m = array();
-    if (!preg_match('/\[meta\](.*)\[\/meta\]/', $message['body'], $m)) {
-        return false;
-    }
-    $message['body'] = preg_replace('/\[meta\].*\[\/meta\]/', "", $message['body']);
-    $meta = json_decode($m[1]);
-    print_r($meta);
-    echo "\n";
-    $encrypted = hash('whirlpool', trim($meta->password));
-    echo $meta->username . "\n";
-    echo $encrypted . "\n";
-    $r = q("SELECT * FROM `user` WHERE `nickname` = '%s' AND `password` = '%s' AND `blocked` = 0 AND `account_expired` = 0 AND `verified` = 1", $meta->username, $encrypted);
-    if (!count($r)) {
-        echo "no user matched " . $meta->username . "\n";
-        return false;
-    }
-    $_SESSION['authenticated'] = true;
-    $_SESSION['uid'] = $r[0]['uid'];
-    $message['uid'] = local_user();
-    $r = q("SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1", local_user());
-    $message['contact'] = $r[0];
-    $message['contact-id'] = $message['contact']['id'];
-    $message['postopts'] = $meta->postopts;
-    return true;
-}
-
 function mailstream_process_structure($structure, &$message) {
     if (!$message['images']) {
         $message['images'] = array();
@@ -93,6 +66,33 @@ function mailstream_process_structure($structure, &$message) {
             array_push($message['images'], $image);
         }
     }
+}
+
+function mailstream_handle_permissions(&$message) {
+    $m = array();
+    if (!preg_match('/\[meta\](.*)\[\/meta\]/', $message['body'], $m)) {
+        return false;
+    }
+    $message['body'] = preg_replace('/\[meta\].*\[\/meta\]/', "", $message['body']);
+    $meta = json_decode($m[1]);
+    print_r($meta);
+    echo "\n";
+    $encrypted = hash('whirlpool', trim($meta->password));
+    echo $meta->username . "\n";
+    echo $encrypted . "\n";
+    $r = q("SELECT * FROM `user` WHERE `nickname` = '%s' AND `password` = '%s' AND `blocked` = 0 AND `account_expired` = 0 AND `verified` = 1", $meta->username, $encrypted);
+    if (!count($r)) {
+        echo "no user matched " . $meta->username . "\n";
+        return false;
+    }
+    $_SESSION['authenticated'] = true;
+    $_SESSION['uid'] = $r[0]['uid'];
+    $message['uid'] = local_user();
+    $r = q("SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1", local_user());
+    $message['contact'] = $r[0];
+    $message['contact-id'] = $message['contact']['id'];
+    $message['postopts'] = $meta->postopts;
+    return true;
 }
 
 function mailstream_create_images($message) {
