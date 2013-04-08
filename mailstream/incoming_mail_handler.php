@@ -3,6 +3,8 @@
 
 chdir(dirname(__FILE__) . '/../..');
 require_once("boot.php");
+require_once(dirname(__FILE__) . '/class.phpmailer.php');
+require_once(dirname(__FILE__) . '/incoming_mail.php');
 
 function postbymail_hooks_run($argv, $argc){
     global $a, $db;
@@ -30,7 +32,6 @@ function postbymail_hooks_run($argv, $argc){
 
     logger('postbymail: start');
 
-    require_once(dirname(__FILE__) . '/mail.php');
     $incoming = new IncomingMail();
     foreach ($incoming->consume_directive('session') as $session) {
         session_id($session['value']);
@@ -55,8 +56,6 @@ function postbymail_hooks_run($argv, $argc){
         }
 
         call_hooks('incoming_mail_directives', $incoming);
-
-        require_once(dirname(__file__).'../mailstream/class.phpmailer.php');
 
         $frommail = get_config('mailstream', 'frommail');
         if ($frommail == '') {
