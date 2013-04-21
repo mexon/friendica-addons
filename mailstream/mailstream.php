@@ -49,6 +49,7 @@ function mailstream_uninstall() {
 function mailstream_module() {}
 
 function mailstream_plugin_admin(&$a,&$o) {
+    //@@@ add a check if the mimedecode plugin is installed
     $frommail = get_config('mailstream', 'frommail');
     $template = get_markup_template('admin.tpl', 'addon/mailstream/');
     $config = array('frommail',
@@ -104,7 +105,7 @@ function mailstream_post_remote_hook(&$a, &$item) {
         logger('mailstream_post_remote_hook: no user ' . $item['uid'], LOGGER_NORMAL);
         return;
     }
-    mailstream_send($a, $ms_item, $item, $user);
+    mailstream_send($a, $ms_item['message-id'], $item, $user);
 }
 
 function mailstream_get_user($uid) {
@@ -188,7 +189,7 @@ function mailstream_subject($item) {
     return t("Friendica Item");
 }
 
-function mailstream_send($a, $ms_item, $item, $user) {
+function mailstream_send($a, $message_id, $item, $user) {
     if (!$item['visible']) {
         return;
     }
@@ -209,7 +210,7 @@ function mailstream_send($a, $ms_item, $item, $user) {
         $mail->XMailer = 'Friendica Mailstream Plugin';
         $mail->SetFrom($frommail, $item['author-name']);
         $mail->AddAddress($address, $user['username']);
-        $mail->MessageID = $ms_item['message-id'];
+        $mail->MessageID = $message_id;
         $mail->Subject = mailstream_subject($item);
         if ($item['thr-parent'] != $item['uri']) {
             $mail->addCustomHeader('In-Reply-To: ' . mailstream_generate_id($a, $item['thr-parent']));
@@ -234,31 +235,30 @@ function mailstream_send($a, $ms_item, $item, $user) {
         }
         logger('mailstream_send sent message ' . $mail->MessageID . ' ' . $mail->Subject, LOGGER_DEBUG);
     } catch (phpmailerException $e) {
-        logger('mailstream_send PHPMailer exception sending message ' . $ms_item['message-id'] . ': ' . $e->errorMessage(), LOGGER_NORMAL);
+        logger('mailstream_send PHPMailer exception sending message ' . $message_id . ': ' . $e->errorMessage(), LOGGER_NORMAL);
     } catch (Exception $e) {
-        logger('mailstream_send exception sending message ' . $ms_item['message-id'] . ': ' . $e->getMessage(), LOGGER_NORMAL);
+        logger('mailstream_send exception sending message ' . $message_id . ': ' . $e->getMessage(), LOGGER_NORMAL);
     }
     // In case of failure, still set the item to completed.  Otherwise
     // we'll just try to send it over and over again and it'll fail
     // every time.
-    q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
+    q('UPDATE `mailstream_item` SET `completed` = now() WHERE `message-id` = "%s"', dbesc($message_id));
 }
 
 function mailstream_cron($a, $b) {
-    $ms_items = q("SELECT * FROM `mailstream_item` WHERE `completed` IS NULL LIMIT 100");
-    logger('mailstream_cron processing ' . count($ms_items) . ' items', LOGGER_DEBUG);
-    foreach ($ms_items as $ms_item) {
-        $items = q("SELECT * FROM `item` WHERE `uid` = %d AND `uri` = '%s' AND `contact-id` = %d",
-                   intval($ms_item['uid']), dbesc($ms_item['uri']), intval($ms_item['contact-id']));
+    $ms_item_ids = q("SELECT `mailstream_item`.`message-id`, `item`.`id` FROM `mailstream_item` JOIN `item` ON (`mailstream_item`.`uid` = `item`.`uid` AND `mailstream_item`.`uri` = `item`.`uri` AND `mailstream_item`.`contact-id` = `item`.`contact-id`) WHERE `mailstream_item`.`completed` IS NULL AND `item`.`visible` = 1 ORDER BY `mailstream_item`.`created` LIMIT 100");
+    logger('mailstream_cron processing ' . count($ms_item_ids) . ' items', LOGGER_DEBUG);
+    foreach ($ms_item_ids as $ms_item_id) {
+        $items = q('SELECT * FROM `item` WHERE `id` = %d', $ms_item_id['id']);
         $item = $items[0];
-        $users = q("SELECT * FROM `user` WHERE `uid` = %d", intval($ms_item['uid']));
+        $users = q("SELECT * FROM `user` WHERE `uid` = %d", intval($item['uid']));
         $user = $users[0];
         if ($user && $item) {
-            mailstream_send($a, $ms_item, $item, $user);
+            mailstream_send($a, $ms_item_id['message-id'], $item, $user);
         }
         else {
-            logger('mailstream_cron: Unable to find item ' . $ms_item['uri'], LOGGER_NORMAL);
-            q("UPDATE `mailstream_item` SET `completed` = now() WHERE `id` = %d", intval($ms_item['id']));
+            logger('mailstream_cron: Unable to find item ' . $ms_item_id['id'], LOGGER_NORMAL);
+            q("UPDATE `mailstream_item` SET `completed` = now() WHERE `message-id` = %d", intval($ms_item['message-id']));
         }
     }
     mailstream_tidy();
