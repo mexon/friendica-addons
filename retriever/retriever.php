@@ -278,10 +278,8 @@ function retriever_item_completed($retriever_item_id, $resource) {
     if (!$retriever_item) {
         return;
     }
+    // Note: the retriever might be null.  Doesn't matter.
     $retriever = get_retriever($retriever_item['contact-id'], $retriever_item['item-uid']);
-    if (!$retriever) {
-        return;
-    }
     $item = retriever_get_item($retriever_item);
     if (!$item) {
         return;
