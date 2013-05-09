@@ -23,11 +23,11 @@ SELECT *
  OR (`reason` = 'publicise')
  ORDER BY `contact`.`id`
 EOF;
-    return q($query, local_user());
+    return q($query, intval(local_user()));
 }
 
 function publicise_get_user($uid) {
-    $r = q('SELECT * FROM `user` WHERE `uid` = %d', $uid);
+    $r = q('SELECT * FROM `user` WHERE `uid` = %d', intval($uid));
     if (count($r) != 1) {
         logger('Publicise: unexpected number of results for uid ' . $uid, LOGGER_NORMAL);
     }
@@ -47,7 +47,7 @@ function publicise_plugin_admin(&$a,&$o) {
         $comments = 1;
         $url = $v['url'];
         if ($enabled) {
-            $r = q('SELECT `expire`, `page-flags` FROM `user` WHERE `uid` = %d', $v['uid']);
+            $r = q('SELECT `expire`, `page-flags` FROM `user` WHERE `uid` = %d', intval($v['uid']));
             $expire = $r[0]['expire'];
             $url = $a->get_baseurl() . '/profile/' . $v['nick'];
             if ($r[0]['page-flags'] == PAGE_SOAPBOX) {
@@ -178,10 +178,10 @@ function publicise_create_self_contact($a, $contact, $uid) {
       . "`) VALUES ("
       . implode(", ", array_values($newcontact))
       . ")" );
-    $newcontact = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self` = 1", $uid);
+    $newcontact = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self` = 1", intval($uid));
     if (count($newcontact) != 1) {
         logger('Publicise: create contact failed', LOGGER_NORMAL);
-        $r = q("DELETE FROM user WHERE uid = %d", $uid);
+        $r = q("DELETE FROM user WHERE uid = %d", intval($uid));
         logger('Publicise: deleted failed user ' . $uid, LOGGER_DATA);
         return;
     }
@@ -209,7 +209,7 @@ function publicise_create_profile($contact, $uid) {
     if (!$r) {
         logger('Publicise: create profile failed', LOGGER_NORMAL);
     }
-    $newprofile = q('SELECT `id` FROM `profile` WHERE `uid` = %d AND `is-default` = 1', $uid);
+    $newprofile = q('SELECT `id` FROM `profile` WHERE `uid` = %d AND `is-default` = 1', intval($uid));
     if (count($newprofile) != 1) {
         logger('Publicise: create profile produced unexpected number of results', LOGGER_NORMAL);
         return;
@@ -246,7 +246,7 @@ function publicise($a, &$contact, &$owner) {
 
     // Check if we're changing our mind about a feed we earlier depublicised
     $existing = q('SELECT * FROM `user` WHERE `account_expires_on` != "0000-00-00 00:00:00" AND `nickname` = "%s" AND `email` = "%s" AND `page-flags` in (%d, %d)',
-                  $contact['nick'], $owner['email'], PAGE_COMMUNITY, PAGE_SOAPBOX);
+                  dbesc($contact['nick']), dbesc($owner['email']), intval(PAGE_COMMUNITY), intval(PAGE_SOAPBOX));
     if (count($existing) == 1) {
         $owner = $existing[0];
         q('UPDATE `user` SET `account_expires_on` = "0000-00-00 00:00:00", `account_removed` = 0, `account_expired` = 0 WHERE `uid` = %d', intval($owner['uid']));
@@ -271,10 +271,10 @@ function publicise($a, &$contact, &$owner) {
     $contact['reason'] = 'publicise';
     $contact['hidden'] = 1;
     $r = q("UPDATE `item` SET `uid` = %d, type = 'wall', wall = 1, private = 0 WHERE `contact-id` = %d",
-           $owner['uid'], $contact['id']);
+           intval($owner['uid']), intval($contact['id']));
     logger('Publicise: moved items from contact ' . $contact['id'] . ' to uid ' . $owner['uid'], LOGGER_DEBUG);
     $r = q("UPDATE `pconfig` SET `uid` = %d WHERE `uid` = %d AND `cat` = 'retriever%d'",
-           $owner['uid'], $contact['uid'], $contact['id']);
+           intval($owner['uid']), intval($contact['uid']), intval($contact['id']));
     logger('Publicise: Updated retriever config from uid ' . $contact['uid'] . ' to ' . $owner['uid'], LOGGER_DEBUG);
     return true;
 }
@@ -289,7 +289,7 @@ function depublicise($a, $contact, $user) {
 
     logger('Publicise: about to depublicise contact ' . $contact['id'] . ' user ' . $user['uid'], LOGGER_DATA);
 
-    $r = q('SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1', $user['uid']);
+    $r = q('SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1', intval($user['uid']));
     if (count($r) != 1) {
         logger('Publicise: unexpected number of self contacts for user ' . $user['uid'], LOGGER_NORMAL);
         return;
@@ -307,8 +307,8 @@ function depublicise($a, $contact, $user) {
         // which will be brought back into the local_user's feed along
         // with the feed contact itself.
         foreach ($r as $my_contact) {
-            q('DELETE FROM `item` WHERE `contact-id` = %d', $my_contact['id']);
-            q('DELETE FROM `contact` WHERE `id` = %d', $my_contact['id']);
+            q('DELETE FROM `item` WHERE `contact-id` = %d', intval($my_contact['id']));
+            q('DELETE FROM `contact` WHERE `id` = %d', intval($my_contact['id']));
         }
 
         // Move the feed contact to local_user.  Existing items stay
@@ -327,7 +327,7 @@ function depublicise($a, $contact, $user) {
 
     q('UPDATE `user` SET `account_expires_on` = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE `uid` = %d',
       intval($user['uid']));
-    q('UPDATE `profile` SET `publish` = 0, `net-publish` = 0 WHERE `uid` = %d AND `is-default` = 1', $user['uid']);
+    q('UPDATE `profile` SET `publish` = 0, `net-publish` = 0 WHERE `uid` = %d AND `is-default` = 1', intval($user['uid']));
 }
 
 function publicise_plugin_admin_post ($a) {
@@ -371,7 +371,7 @@ function publicise_plugin_admin_post ($a) {
 }
 
 function publicise_post_remote_hook(&$a, &$item) {
-    $r1 = q("SELECT `uid` FROM `contact` WHERE `id` = %d AND `reason` = 'publicise'", $item['contact-id']);
+    $r1 = q("SELECT `uid` FROM `contact` WHERE `id` = %d AND `reason` = 'publicise'", intval($item['contact-id']));
     if (!$r1) {
         return;
     }
