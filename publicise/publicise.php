@@ -262,7 +262,6 @@ function publicise($a, &$contact, &$owner) {
     }
     logger('Publicise: new contact user is ' . $owner['uid']);
 
-    //@@@ fix all the lak of intval everywhere.
     $r = q("UPDATE `contact` SET `uid` = %d, `reason` = 'publicise', `hidden` = 1 WHERE id = %d", intval($owner['uid']), intval($contact['id']));
     if (!$r) {
         logger('Publicise: update contact failed, user is probably in a bad state ' . $user['uid'], LOGGER_NORMAL);
@@ -273,9 +272,11 @@ function publicise($a, &$contact, &$owner) {
     $r = q("UPDATE `item` SET `uid` = %d, type = 'wall', wall = 1, private = 0 WHERE `contact-id` = %d",
            intval($owner['uid']), intval($contact['id']));
     logger('Publicise: moved items from contact ' . $contact['id'] . ' to uid ' . $owner['uid'], LOGGER_DEBUG);
-    $r = q("UPDATE `pconfig` SET `uid` = %d WHERE `uid` = %d AND `cat` = 'retriever%d'",
-           intval($owner['uid']), intval($contact['uid']), intval($contact['id']));
-    logger('Publicise: Updated retriever config from uid ' . $contact['uid'] . ' to ' . $owner['uid'], LOGGER_DEBUG);
+
+    // Update the retriever config
+    $r = q("UPDATE `retriever_rule` SET `uid` = %d WHERE `contact-id` = %d",
+           intval($owner['uid']), intval($contact['id']));
+
     return true;
 }
 
@@ -323,6 +324,10 @@ function depublicise($a, $contact, $user) {
         // Take ownership of any photos created by the feed user
         q('UPDATE `photo` SET `uid` = %d WHERE `uid` = %d',
           intval(local_user()), intval($user['uid']));
+
+        // Update the retriever config
+        $r = q("UPDATE `retriever_rule` SET `uid` = %d WHERE `contact-id` = %d",
+               intval($owner['uid']), intval($contact['id']));
     }
 
     q('UPDATE `user` SET `account_expires_on` = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE `uid` = %d',
