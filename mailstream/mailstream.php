@@ -230,6 +230,9 @@ function mailstream_send($a, $message_id, $item, $user) {
                                          '$upstream' => t('Upstream'),
                                          '$local' => t('Local'),
                                          '$item' => $item));
+        logger('@@@ mailstream_send before wrapping body ' . $mail->Body);
+        mailstream_html_wrap($mail->Body);
+        logger('@@@ mailstream_send after wrapping body ' . $mail->Body);
         if (!$mail->Send()) {
             throw new Exception($mail->ErrorInfo);
         }
@@ -243,6 +246,21 @@ function mailstream_send($a, $message_id, $item, $user) {
     // we'll just try to send it over and over again and it'll fail
     // every time.
     q('UPDATE `mailstream_item` SET `completed` = now() WHERE `message-id` = "%s"', dbesc($message_id));
+}
+
+/**
+ * Email tends to break if you send excessively long lines.  To make
+ * bbcode's output suitable for transmission, we try to break things
+ * up so that lines are about 200 characters.
+ */
+function mailstream_html_wrap(&$text)
+{
+    $lines = str_split($text, 200);
+    for ($i = 0; $i < count($lines); $i++)
+    {
+        $lines[$i] = preg_replace('/ /', "\n", $lines[$i], 1);
+    }
+    $text = implode($lines);
 }
 
 function mailstream_cron($a, $b) {
