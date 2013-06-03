@@ -632,8 +632,6 @@ function facebook_content(&$a) {
  */
 function facebook_cron($a,$b) {
 
-        logger('@@@ facebook_cron started');
-
 	$last = get_config('facebook','last_poll');
 	
 	$poll_interval = intval(get_config('facebook','poll_interval'));
@@ -643,10 +641,7 @@ function facebook_cron($a,$b) {
 	if($last) {
 		$next = $last + ($poll_interval * 60);
 		if($next > time()) 
-                {
-        logger('@@@ facebook_cron not time yet');
 			return;
-                }
 	}
 
 	logger('facebook_cron');
@@ -722,8 +717,6 @@ function facebook_cron($a,$b) {
 	}
 	
 	set_config('facebook','last_poll', time());
-
-        logger('@@@ facebook_cron finished');
 }
 
 
