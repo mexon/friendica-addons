@@ -645,7 +645,6 @@ function facebook_cron($a,$b) {
 	}
 
 	logger('facebook_cron');
-	set_config('facebook','last_poll', time());
 
 
 	// Find the FB users on this site and randomize in case one of them
@@ -717,6 +716,7 @@ function facebook_cron($a,$b) {
 	}
 	
 	set_config('facebook','last_poll', time());
+
 }
 
 
