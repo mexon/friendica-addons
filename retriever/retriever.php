@@ -223,7 +223,7 @@ function retrieve_resource($resource) {
            ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
     q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1 WHERE id = %d",
       intval($resource['id']));
-    $data = fetch_url($resource['url'], $resource['binary'], $resource['type']);
+    $data = fetch_url($resource['url'], $resource['binary'], 0, 0, Null, '/tmp/friendica/cookies.txt');
     $resource['type'] = get_app()->get_curl_content_type();
     if ($data) {
         $resource['data'] = $data;
