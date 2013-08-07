@@ -109,6 +109,7 @@ function fromgplus_post($a, $uid, $source, $body, $location) {
 	$_SESSION['authenticated'] = true;
 	$_SESSION['uid'] = $uid;
 
+	unset($_REQUEST);
 	$_REQUEST['type'] = 'wall';
 	$_REQUEST['api_source'] = true;
 
@@ -123,11 +124,16 @@ function fromgplus_post($a, $uid, $source, $body, $location) {
 	$_REQUEST['body'] = $body;
 	$_REQUEST['location'] = $location;
 
-        logger('fromgplus: posting for user '.$uid);
+	if (($_REQUEST['title'] == "") AND ($_REQUEST['body'] == "")) {
+	        logger('fromgplus: empty post for user '.$uid." ".print_r($_REQUEST, true));
+		return;
+	}
 
 	require_once('mod/item.php');
 	//print_r($_REQUEST);
+        logger('fromgplus: posting for user '.$uid." ".print_r($_REQUEST, true));
 	item_post($a);
+        logger('fromgplus: done for user '.$uid);
 }
 
 function fromgplus_html2bbcode($html) {
@@ -212,7 +218,7 @@ function fromgplus_cleanupgoogleproxy($fullImage, $image) {
 	return($cleaned);
 }
 
-function fromgplus_handleattachments($item) {
+function fromgplus_handleattachments($item, $displaytext) {
 	$post = "";
 	$quote = "";
 
@@ -251,7 +257,7 @@ function fromgplus_handleattachments($item) {
 				elseif ($images["full"] != "")
 					$post .= "\n[img]".$images["full"]."[/img]\n";
 
-				if ($attachment->displayName != "")
+				if (($attachment->displayName != "") AND ($attachment->displayName != $displaytext))
 					$post .= fromgplus_html2bbcode($attachment->displayName)."\n";
 				break;
 
@@ -319,7 +325,7 @@ function fromgplus_fetch($a, $uid) {
 					$post = fromgplus_html2bbcode($item->object->content);
 
 					if (is_array($item->object->attachments))
-						$post .= fromgplus_handleattachments($item);
+						$post .= fromgplus_handleattachments($item, $item->object->content);
 
 					// geocode, placeName
 					if (isset($item->address))
@@ -346,7 +352,7 @@ function fromgplus_fetch($a, $uid) {
 						$post .= fromgplus_html2bbcode($item->object->content);
 
 						if (is_array($item->object->attachments))
-							$post .= "\n".trim(fromgplus_handleattachments($item));
+							$post .= "\n".trim(fromgplus_handleattachments($item, $item->object->content));
 
 						$post .= "[/share]";
 					} else {
@@ -355,7 +361,7 @@ function fromgplus_fetch($a, $uid) {
 						$post .= fromgplus_html2bbcode($item->object->content);
 
 						if (is_array($item->object->attachments))
-							$post .= "\n".trim(fromgplus_handleattachments($item));
+							$post .= "\n".trim(fromgplus_handleattachments($item, $item->object->content));
 					}
 
 					if (isset($item->address))

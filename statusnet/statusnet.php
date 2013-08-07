@@ -3,7 +3,7 @@
  * Name: StatusNet Connector
  * Description: Relay public postings to a connected StatusNet account
  * Version: 1.0.5
- * Author: Tobias Diekershoff <http://diekershoff.homeunix.net/friendika/profile/tobias>
+ * Author: Tobias Diekershoff <https://f.diekershoff.de/profile/tobias>
  * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
  *
  * Copyright (c) 2011-2013 Tobias Diekershoff, Michael Vogel
@@ -491,10 +491,10 @@ function statusnet_shortenmsg($b, $max_char) {
 	$body = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', "\n", $body);
 
 	// remove the share element
-	$body = preg_replace("/\[share(.*?)\](.*?)\[\/share\]/ism","\n\n$2\n\n",$body);
+	//$body = preg_replace("/\[share(.*?)\](.*?)\[\/share\]/ism","\n\n$2\n\n",$body);
 
 	// At first convert the text to html
-	$html = bbcode($body, false, false);
+	$html = bbcode($body, false, false, 2);
 
 	// Then convert it to plain text
 	//$msg = trim($b['title']." \n\n".html2plain($html, 0, true));
@@ -563,13 +563,13 @@ function statusnet_shortenmsg($b, $max_char) {
 		else if ($lastchar != "\n")
 			$msg = substr($msg, 0, -3)."...";
 	}
-	$msg = str_replace("\n", " ", $msg);
+	//$msg = str_replace("\n", " ", $msg);
 
 	// Removing multiple spaces - again
 	while (strpos($msg, "  ") !== false)
 		$msg = str_replace("  ", " ", $msg);
 
-	return(array("msg"=>trim($msg." ".$msglink), "image"=>$image));
+	return(array("msg"=>trim($msg."\n".$msglink), "image"=>$image));
 }
 
 function statusnet_post_hook(&$a,&$b) {
@@ -727,6 +727,8 @@ function statusnet_plugin_admin_post(&$a){
 	foreach($_POST['sitename'] as $id=>$sitename){
 		$sitename=trim($sitename);
 		$apiurl=trim($_POST['apiurl'][$id]);
+		if (! (substr($apiurl, -1)=='/'))
+		    $apiurl=$apiurl.'/';
 		$secret=trim($_POST['secret'][$id]);
 		$key=trim($_POST['key'][$id]);
                 $applicationname = ((x($_POST, 'applicationname')) ? notags(trim($_POST['applicationname'][$id])):'');
@@ -758,7 +760,7 @@ function statusnet_plugin_admin(&$a, &$o){
 		foreach($sites as $id=>$s){
 			$sitesform[] = Array(
 				'sitename' => Array("sitename[$id]", "Site name", $s['sitename'], ""),
-				'apiurl' => Array("apiurl[$id]", "Api url", $s['apiurl'], ""),
+				'apiurl' => Array("apiurl[$id]", "Api url", $s['apiurl'], t("Base API Path \x28remember the trailing /\x29") ),
 				'secret' => Array("secret[$id]", "Secret", $s['consumersecret'], ""),
 				'key' => Array("key[$id]", "Key", $s['consumerkey'], ""),
 				'applicationname' => Array("applicationname[$id]", "Application name", $s['applicationname'], ""),
@@ -770,7 +772,7 @@ function statusnet_plugin_admin(&$a, &$o){
 	$id++;
 	$sitesform[] = Array(
 		'sitename' => Array("sitename[$id]", t("Site name"), "", ""),
-		'apiurl' => Array("apiurl[$id]", t("API URL"), "", ""),
+		'apiurl' => Array("apiurl[$id]", "Api url", "", t("Base API Path \x28remember the trailing /\x29") ),
 		'secret' => Array("secret[$id]", t("Consumer Secret"), "", ""),
 		'key' => Array("key[$id]", t("Consumer Key"), "", ""),
 		'applicationname' => Array("applicationname[$id]", t("Application name"), "", ""),
@@ -853,6 +855,9 @@ function statusnet_fetchtimeline($a, $uid) {
 		if ($first_time)
 			continue;
 
+		if ($post->source == "activity")
+			continue;
+
 		if (is_object($post->retweeted_status))
 			continue;
 
@@ -863,12 +868,15 @@ function statusnet_fetchtimeline($a, $uid) {
 			$_SESSION["authenticated"] = true;
 			$_SESSION["uid"] = $uid;
 
+			unset($_REQUEST);
 			$_REQUEST["type"] = "wall";
 			$_REQUEST["api_source"] = true;
 			$_REQUEST["profile_uid"] = $uid;
 			$_REQUEST["source"] = "StatusNet";
 
 			//$_REQUEST["date"] = $post->created_at;
+
+			$_REQUEST["title"] = "";
 
 			$_REQUEST["body"] = $post->text;
 			if (is_string($post->place->name))
