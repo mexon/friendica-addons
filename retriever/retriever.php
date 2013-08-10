@@ -219,17 +219,22 @@ function retriever_tidy() {
 }
 
 function retrieve_resource($resource) {
+    $a = get_app();
+
     logger('retrieve_resource: ' . ($resource['num-tries'] + 1) .
            ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
     q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1 WHERE id = %d",
       intval($resource['id']));
     $redirects;
-    $data = fetch_url($resource['url'], $resource['binary'], $redirects, 0, Null, '/tmp/friendica-cookies.txt');
-    $resource['type'] = get_app()->get_curl_content_type();
+    $cookiejar = tempnam ('/tmp', 'cookiejar-retriever');
+    $data = fetch_url($resource['url'], $resource['binary'], $redirects, 0, Null, $cookiejar);
+    unlink($cookiejar);
+    $resource['type'] = $a->get_curl_content_type();
+    $resource['url'] = $a->get_curl_redirect_url();
     if ($data) {
         $resource['data'] = $data;
-        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s' WHERE id = %d",
-          dbesc($data), dbesc($resource['type']), intval($resource['id']));
+        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s', `url` = '%s' WHERE id = %d",
+          dbesc($data), dbesc($resource['type']), intval($resource['id']), dbesc($resource['url']));
         retriever_resource_completed($resource);
     }
 }
@@ -428,7 +433,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
 
     $params = array('$include' => retriever_construct_xpath($retriever['data']['include']),
                     '$exclude' => retriever_construct_xpath($retriever['data']['exclude']),
-                    '$pageurl' => $item['plink'],
+                    '$pageurl' => $resource['url'],
                     '$dirurl' => $dirurl,
                     '$rooturl' => $rooturl);
     $xslt = replace_macros($extracter_template, $params);
