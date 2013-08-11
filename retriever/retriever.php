@@ -13,12 +13,6 @@ function retriever_install() {
     register_hook('contact_photo_menu', 'addon/retriever/retriever.php', 'retriever_contact_photo_menu');
     register_hook('cron', 'addon/retriever/retriever.php', 'retriever_cron');
 
-    $schema = file_get_contents(dirname(__file__).'/database.sql');
-    $arr = explode(';', $schema);
-    foreach ($arr as $a) {
-        $r = q($a);
-    }
-
     $r = q("SELECT `id` FROM `pconfig` WHERE `cat` LIKE 'retriever_%%'");
     if (count($r) || (get_config('retriever', 'dbversion') == '0.1')) {
         $retrievers = array();
@@ -34,16 +28,20 @@ function retriever_install() {
               intval($uid), intval($k), dbesc(json_encode($v)));
         }
         q("DELETE FROM `pconfig` WHERE `cat` LIKE 'retriever%%'");
+        set_config('retriever', 'dbversion', '0.2');
     }
     if (get_config('retriever', 'dbversion') == '0.2') {
         q("ALTER TABLE `retriever_resource` DROP COLUMN `retriever`");
+        set_config('retriever', 'dbversion', '0.3');
     }
     if (get_config('retriever', 'dbversion') == '0.3') {
         q("ALTER TABLE `retriever_item` MODIFY COLUMN `item-uri` varchar(800) CHARACTER SET ascii NOT NULL");
         q("ALTER TABLE `retriever_resource` MODIFY COLUMN `url` varchar(800) CHARACTER SET ascii NOT NULL");
+        set_config('retriever', 'dbversion', '0.4');
     }
     if (get_config('retriever', 'dbversion') == '0.4') {
         q("ALTER TABLE `retriever_item` ADD COLUMN `finished` tinyint(1) unsigned NOT NULL DEFAULT '0'");
+        set_config('retriever', 'dbversion', '0.5');
     }
     if (get_config('retriever', 'dbversion') == '0.5') {
         q('ALTER TABLE `retriever_resource` CHANGE `created` `created` timestamp NOT NULL DEFAULT now()');
@@ -51,6 +49,7 @@ function retriever_install() {
         q('ALTER TABLE `retriever_resource` CHANGE `last-try` `last-try` timestamp NULL DEFAULT NULL');
         q('ALTER TABLE `retriever_item` DROP KEY `all`');
         q('ALTER TABLE `retriever_item` ADD KEY `all` (`item-uri`, `item-uid`, `contact-id`)');
+        set_config('retriever', 'dbversion', '0.6');
     }
     if (get_config('retriever', 'dbversion') == '0.6') {
         q('ALTER TABLE `retriever_item` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
@@ -58,6 +57,7 @@ function retriever_install() {
         q('ALTER TABLE `retriever_resource` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
         q('ALTER TABLE `retriever_resource` CHANGE `url` `url`  varchar(800) CHARACTER SET ascii COLLATE ascii_bin NOT NULL');
         q('ALTER TABLE `retriever_rule` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
+        set_config('retriever', 'dbversion', '0.7');
     }
     if (get_config('retriever', 'dbversion') == '0.7') {
         $r = q("SELECT `id`, `data` FROM `retriever_rule`");
@@ -113,8 +113,21 @@ function retriever_install() {
             $r = q('UPDATE `retriever_rule` SET `data` = "%s" WHERE `id` = %d', dbesc(json_encode($data)), $rr['id']);
             logger('retriever_install: retriever ' . $rr['id'] . ' new config ' . json_encode($data), LOGGER_DATA);
         }
+        set_config('retriever', 'dbversion', '0.8');
     }
-    set_config('retriever', 'dbversion', '0.8');
+    if (get_config('retriever', 'dbversion') == '0.8') {
+        q("ALTER TABLE `retriever_resource` ADD COLUMN `http-code` smallint(1) unsigned NULL DEFAULT NULL");
+        set_config('retriever', 'dbversion', '0.9');
+    }
+
+    if (get_config('retriever', 'dbversion') != '0.9') {
+        $schema = file_get_contents(dirname(__file__).'/database.sql');
+        $arr = explode(';', $schema);
+        foreach ($arr as $a) {
+            $r = q($a);
+        }
+        set_config('retriever', 'dbversion', '0.9');
+    }
 }
 
 function retriever_uninstall() {
@@ -229,12 +242,17 @@ function retrieve_resource($resource) {
     $cookiejar = tempnam ('/tmp', 'cookiejar-retriever');
     $data = fetch_url($resource['url'], $resource['binary'], $redirects, 0, Null, $cookiejar);
     unlink($cookiejar);
+    $resource['http-code'] = $a->get_curl_code();
     $resource['type'] = $a->get_curl_content_type();
     $resource['url'] = $a->get_curl_redirect_url();
     if ($data) {
         $resource['data'] = $data;
-        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s', `url` = '%s' WHERE id = %d",
-          dbesc($data), dbesc($resource['type']), intval($resource['id']), dbesc($resource['url']));
+        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s', `url` = '%s', `http-code` = %d WHERE id = %d",
+          dbesc($data),
+          dbesc($resource['type']),
+          intval($resource['id']),
+          dbesc($resource['url']),
+          intval($resource['http-code']));
         retriever_resource_completed($resource);
     }
 }
