@@ -236,23 +236,24 @@ function retrieve_resource($resource) {
 
     logger('retrieve_resource: ' . ($resource['num-tries'] + 1) .
            ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
-    q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1 WHERE id = %d",
-      intval($resource['id']));
     $redirects;
     $cookiejar = tempnam ('/tmp', 'cookiejar-retriever');
     $data = fetch_url($resource['url'], $resource['binary'], $redirects, 0, Null, $cookiejar);
     unlink($cookiejar);
+    logger('retrieve_resource: got code ' . $a->get_curl_code() . ' retrieving resource ' .
+           $resource['id'] . ' final url ' . $a->get_curl_redirect_url(), LOGGER_DEBUG);
     $resource['http-code'] = $a->get_curl_code();
     $resource['type'] = $a->get_curl_content_type();
     $resource['url'] = $a->get_curl_redirect_url();
+    q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1, `http-code` = %d WHERE id = %d",
+      intval($resource['http-code']), intval($resource['id']));
     if ($data) {
         $resource['data'] = $data;
-        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s', `url` = '%s', `http-code` = %d WHERE id = %d",
+        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s', `url` = '%s' WHERE id = %d",
           dbesc($data),
           dbesc($resource['type']),
-          intval($resource['id']),
           dbesc($resource['url']),
-          intval($resource['http-code']));
+          intval($resource['id']));
         retriever_resource_completed($resource);
     }
 }
