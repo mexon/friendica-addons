@@ -243,23 +243,22 @@ function retrieve_resource($resource) {
            ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
     $redirects;
     $cookiejar = tempnam ('/tmp', 'cookiejar-retriever');
-    $data = fetch_url($resource['url'], $resource['binary'], $redirects, 0, Null, $cookiejar, true);
+    $resource['data'] = fetch_url($resource['url'], $resource['binary'], $redirects, 0, Null, $cookiejar, true);
     unlink($cookiejar);
-    logger('retrieve_resource: got code ' . $a->get_curl_code() . ' retrieving resource ' .
-           $resource['id'] . ' final url ' . $a->get_curl_redirect_url(), LOGGER_DEBUG);
     $resource['http-code'] = $a->get_curl_code();
     $resource['type'] = $a->get_curl_content_type();
     $resource['redirect-url'] = $a->get_curl_redirect_url();
+    logger('retrieve_resource: got code ' . $resource['http-code'] .
+           ' retrieving resource ' . $resource['id'] .
+           ' final url ' . $resource['redirect-url'], LOGGER_DEBUG);
     q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1, `http-code` = %d, `redirect-url` = '%s' WHERE id = %d",
       intval($resource['http-code']),
       dbesc($resource['redirect-url']),
       intval($resource['id']));
-    if ($data) {
-        $resource['data'] = $data;
-        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s', `url` = '%s' WHERE id = %d",
-          dbesc($data),
+    if ($resource['data']) {
+        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s' WHERE id = %d",
+          dbesc($resource['data']),
           dbesc($resource['type']),
-          dbesc($resource['url']),
           intval($resource['id']));
         retriever_resource_completed($resource);
     }
@@ -363,18 +362,53 @@ function retriever_on_item_insert($retriever, &$item) {
 
 function add_retriever_resource($url, $binary = false) {
     logger('add_retriever_resource: ' . $url, LOGGER_DEBUG);
+
+    $scheme = parse_url($url, PHP_URL_SCHEME);
+    if ($scheme == 'data') {
+        $fp = fopen($resource['url'], 'r');
+        $meta = stream_get_meta_data($fp);
+        $type = $meta['mediatype'];
+        $data = stream_get_contents($fp);
+        fclose($fp);
+
+        $url = 'md5://' . hash('md5', $url);
+        $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
+        $resource = $r[0];
+        if (count($r)) {
+            logger('add_retriever_resource: Resource ' . $url . ' already requested', LOGGER_DEBUG);
+            return $resource;
+        }
+
+        logger('retrieve_resource: got data URL type ' . $resource['type'], LOGGER_DEBUG);
+        q("INSERT INTO `retriever_resource` (`type`, `binary`, `url`, `completed`, `data`) " .
+          "VALUES ('%s', %d, '%s', now(), '%s')",
+          dbesc($type),
+          intval($binary ? 1 : 0),
+          dbesc($url),
+          dbesc($data));
+        $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
+        $resource = $r[0];
+        if (count($r)) {
+            retriever_resource_completed($resource);
+        }
+        return $r[0];
+    }
+
+    if (strlen($url) > 800) {
+        logger('add_retriever_resource: URL is longer than 800 characters', LOGGER_ERROR);
+    }
+
     $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
     $resource = $r[0];
     if (count($r)) {
         logger('add_retriever_resource: Resource ' . $url . ' already requested', LOGGER_DEBUG);
         return $r[0];
     }
-    else {
-        q("INSERT INTO `retriever_resource` (`binary`, `url`) " .
-          "VALUES (%d, '%s')", intval($binary ? 1 : 0), dbesc($url));
-        $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
-        return $r[0];
-    }
+
+    q("INSERT INTO `retriever_resource` (`binary`, `url`) " .
+      "VALUES (%d, '%s')", intval($binary ? 1 : 0), dbesc($url));
+    $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
+    return $r[0];
 }
 
 function add_retriever_item(&$item, $resource) {
