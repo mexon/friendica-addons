@@ -395,7 +395,7 @@ function add_retriever_resource($url, $binary = false) {
     }
 
     if (strlen($url) > 800) {
-        logger('add_retriever_resource: URL is longer than 800 characters', LOGGER_ERROR);
+        logger('add_retriever_resource: URL is longer than 800 characters', LOGGER_NORMAL);
     }
 
     $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
@@ -465,6 +465,21 @@ function retriever_construct_xpath($spec) {
     return implode('|', $components);
 }
 
+function retriever_apply_xslt_template($xslt_text, $doc) {
+    if (!$xslt_text) {
+        logger('retriever_apply_xslt_template: empty XSLT text', LOGGER_NORMAL);
+        return;
+    }
+    $template_doc = new DOMDocument();
+    if (!$template_doc->loadXML($xslt_text)) {
+        logger('retriever_apply_xslt_template: could not load XML', LOGGER_NORMAL);
+        return;
+    }
+    $xp = new XsltProcessor();
+    $xp->importStylesheet($template_doc);
+    return $xp->transformToDoc($doc);
+}
+
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
     logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['plink'], LOGGER_DEBUG);
     require_once('include/html2bbcode.php');	
@@ -478,7 +493,6 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     }
 
     $encoding = retriever_get_encoding($resource);
-    $extracter_template = get_markup_template('extract.tpl', 'addon/retriever/');
     $doc = new DOMDocument('1.0', $encoding);
     if (strpos($resource['type'], 'html') !== false) {
         @$doc->loadHTML($resource['data']);
@@ -498,13 +512,15 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
                     '$resource' => $resource,
                     '$dirurl' => $dirurl,
                     '$rooturl' => $rooturl);
-    $xslt = replace_macros($extracter_template, $params);
-    $xmldoc = new DOMDocument();
-    $xmldoc->loadXML($xslt);
-    $xp = new XsltProcessor();
-    $xp->importStylesheet($xmldoc);
-    $transformed = $xp->transformToXML($doc);
-    $item['body'] = html2bbcode($transformed);
+    $extract_template = get_markup_template('extract.tpl', 'addon/retriever/');
+    $extract_xslt = replace_macros($extract_template, $params);
+    $doc = retriever_apply_xslt_template($extract_xslt, $doc);
+    if (!$doc) {
+        logger('retriever_apply_dom_filter: failed to apply extract XSLT template', LOGGER_NORMAL);
+        return;
+    }
+
+    $item['body'] = html2bbcode($doc->saveXML());
     if (!strlen($item['body'])) {
         logger('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty', LOGGER_NORMAL);
         return;
