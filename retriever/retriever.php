@@ -119,14 +119,19 @@ function retriever_install() {
         q("ALTER TABLE `retriever_resource` ADD COLUMN `http-code` smallint(1) unsigned NULL DEFAULT NULL");
         set_config('retriever', 'dbversion', '0.9');
     }
+    if (get_config('retriever', 'dbversion') == '0.9') {
+        q("ALTER TABLE `retriever_item` DROP COLUMN `parent`");
+        q("ALTER TABLE `retriever_resource` ADD COLUMN `redirect-url` varchar(800) CHARACTER SET ascii COLLATE ascii_bin NULL DEFAULT NULL");
+        set_config('retriever', 'dbversion', '0.10');
+    }
 
-    if (get_config('retriever', 'dbversion') != '0.9') {
+    if (get_config('retriever', 'dbversion') != '0.10') {
         $schema = file_get_contents(dirname(__file__).'/database.sql');
         $arr = explode(';', $schema);
         foreach ($arr as $a) {
             $r = q($a);
         }
-        set_config('retriever', 'dbversion', '0.9');
+        set_config('retriever', 'dbversion', '0.10');
     }
 }
 
@@ -244,9 +249,11 @@ function retrieve_resource($resource) {
            $resource['id'] . ' final url ' . $a->get_curl_redirect_url(), LOGGER_DEBUG);
     $resource['http-code'] = $a->get_curl_code();
     $resource['type'] = $a->get_curl_content_type();
-    $resource['url'] = $a->get_curl_redirect_url();
-    q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1, `http-code` = %d WHERE id = %d",
-      intval($resource['http-code']), intval($resource['id']));
+    $resource['redirect-url'] = $a->get_curl_redirect_url();
+    q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1, `http-code` = %d, `redirect-url` = '%s' WHERE id = %d",
+      intval($resource['http-code']),
+      dbesc($resource['redirect-url']),
+      intval($resource['id']));
     if ($data) {
         $resource['data'] = $data;
         q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s', `url` = '%s' WHERE id = %d",
@@ -446,13 +453,15 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         $doc->loadXML($resource['data']);
     }
 
-    $components = parse_url($item['plink']);
+    $components = parse_url($resource['redirect-url']);
     $rooturl = $components['scheme'] . "://" . $components['host'];
     $dirurl = $rooturl . dirname($components['path']) . "/";
 
     $params = array('$include' => retriever_construct_xpath($retriever['data']['include']),
                     '$exclude' => retriever_construct_xpath($retriever['data']['exclude']),
-                    '$pageurl' => $resource['url'],
+                    '$spec' => $retriever['data'],
+                    '$item' => $item,
+                    '$resource' => $resource,
                     '$dirurl' => $dirurl,
                     '$rooturl' => $rooturl);
     $xslt = replace_macros($extracter_template, $params);
