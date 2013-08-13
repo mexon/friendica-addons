@@ -391,7 +391,7 @@ function add_retriever_resource($url, $binary = false) {
         if (count($r)) {
             retriever_resource_completed($resource);
         }
-        return $r[0];
+        return $resource;
     }
 
     if (strlen($url) > 800) {
@@ -402,7 +402,7 @@ function add_retriever_resource($url, $binary = false) {
     $resource = $r[0];
     if (count($r)) {
         logger('add_retriever_resource: Resource ' . $url . ' already requested', LOGGER_DEBUG);
-        return $r[0];
+        return $resource;
     }
 
     q("INSERT INTO `retriever_resource` (`binary`, `url`) " .
