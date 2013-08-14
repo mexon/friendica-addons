@@ -142,7 +142,7 @@ Photos" box in the "Retriever Settings" section and click "Submit".
 </p>
 <h2>Configure Feeds:</h2>
 <div>
-{{ for $feeds as $feed }}
-{{ inc contact_template.tpl with $contact=$feed }}{{ endinc }}
-{{ endfor }}
+{{foreach $feeds as $feed}}
+{{include file='contact_template.tpl' contact=$feed}}
+{{/foreach}}
 </div>
