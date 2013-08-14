@@ -526,8 +526,8 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         return;
     }
     $item['body'] .= "\n\n" . t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
-    $item['body'] .=  $item['plink'];
-    $item['body'] .= ']' . $item['plink'] . '[/url]';
+    $item['body'] .=  $resource['redirect-url'];
+    $item['body'] .= ']' . $resource['redirect-url'] . '[/url]';
     q("UPDATE `item` SET `body` = '%s', `edited` = '%s' WHERE `id` = %d",
       dbesc($item['body']), dbesc(datetime_convert('UTC', 'UTC')), intval($item['id']));
 }
