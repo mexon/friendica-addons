@@ -4,13 +4,10 @@
   <xsl:template match="text()"/>
 
 {{function clause_xpath}}
-  {{if !$clause.attribute}}
-$clause.element
-  {{elseif $clause.attribute == 'class'}}
-$clause.element[contains(concat(' ', normalize-space(@class), ' '), '$clause.value')]
-  {{else}}
-$clause.element[@$clause.attribute]='$clause.value']
-  {{/if}}
+{{if !$clause.attribute}}
+{{$clause.element}}{{elseif $clause.attribute == 'class'}}
+{{$clause.element}}[contains(concat(' ', normalize-space(@class), ' '), '{{$clause.value}}')]{{else}}
+{{$clause.element}}[@{{$clause.attribute}}]='{{$clause.value}}']{{/if}}
 {{/function}}
 
 {{if $spec}}
@@ -18,10 +15,7 @@ $clause.element[@$clause.attribute]='$clause.value']
 {{if $spec.include}}
 <!-- there is a spec.include -->
 {{foreach $spec.include as $clause}}
-<!-- include: element $clause.element attribute $clause.attribute value $clause.value -->
-{{foreach $clause as $k=>$v}}
-<!-- dothis include $k => $v -->
-{{/foreach}}
+<!-- include: element {{$clause.element}} attribute {{$clause.attribute}} value {{$clause.value}} -->
 <!--
   <xsl:template match="{{clause_xpath clause=$clause}}">
     <xsl:copy>
