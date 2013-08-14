@@ -700,7 +700,7 @@ function retriever_content($a) {
         if (x($_POST["id"])) {
             $retriever = get_retriever($a->argv[1], local_user(), true);
             $retriever["data"] = array();
-            foreach (array('pattern', 'replace', 'enable', 'images') as $setting) {
+            foreach (array('pattern', 'replace', 'enable', 'images', 'customxslt') as $setting) {
                 if (x($_POST['retriever_' . $setting])) {
                     $retriever["data"][$setting] = $_POST['retriever_' . $setting];
                 }
@@ -756,9 +756,15 @@ function retriever_content($a) {
                                                       t('Retrospectively Apply'),
                                                       '0',
                                                       t('Reapply the rules to this number of posts')),
+                                                  '$customxslt' => array(
+                                                      'retriever_customxslt',
+                                                      t('Custom XSLT'),
+                                                      $retriever['data']['customxslt'],
+                                                      t("When standard rules aren't enough, apply custom XSLT to the article")),
                                                   '$title' => t('Retrieve Feed Content'),
                                                   '$help' => $a->get_baseurl() . '/retriever/help',
-                                                  '$submit' => t('Submit'),
+                                                  '$help_t' => t('Get Help'),
+                                                  '$submit_t' => t('Submit'),
                                                   '$id' => ($retriever["id"] ? $retriever["id"] : "create"),
                                                   '$tag_t' => t('Tag'),
                                                   '$attribute_t' => t('Attribute'),
