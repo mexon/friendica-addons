@@ -152,7 +152,9 @@ function mailstream_sender($item) {
     $r = q('SELECT * FROM `contact` WHERE `id` = %d', $item['contact-id']);
     if (count($r)) {
         $contact = $r[0];
-        return $contact['name'] . ' - ' . $item['author-name'];
+        if ($contact['name'] != $item['author-name']) {
+            return $contact['name'] . ' - ' . $item['author-name'];
+        }
     }
     return $item['author-name'];
 }
