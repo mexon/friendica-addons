@@ -148,6 +148,15 @@ function mailstream_do_images($a, &$item, &$attachments) {
     }
 }
 
+function mailstream_sender($item) {
+    $r = q('SELECT * FROM `contact` WHERE `id` = %d', $item['contact-id']);
+    if (count($r)) {
+        $contact = $r[0];
+        return $contact['name'] . ' - ' . $item['author-name'];
+    }
+    return $item['author-name'];
+}
+
 function mailstream_subject($item) {
     if ($item['title']) {
         return $item['title'];
@@ -208,7 +217,7 @@ function mailstream_send($a, $message_id, $item, $user) {
     $mail = new PHPmailer;
     try {
         $mail->XMailer = 'Friendica Mailstream Plugin';
-        $mail->SetFrom($frommail, $item['author-name']);
+        $mail->SetFrom($frommail, mailstream_sender($item));
         $mail->AddAddress($address, $user['username']);
         $mail->MessageID = $message_id;
         $mail->Subject = mailstream_subject($item);
@@ -230,9 +239,7 @@ function mailstream_send($a, $message_id, $item, $user) {
                                          '$upstream' => t('Upstream'),
                                          '$local' => t('Local'),
                                          '$item' => $item));
-        logger('@@@ mailstream_send before wrapping body ' . $mail->Body);
         mailstream_html_wrap($mail->Body);
-        logger('@@@ mailstream_send after wrapping body ' . $mail->Body);
         if (!$mail->Send()) {
             throw new Exception($mail->ErrorInfo);
         }
