@@ -181,7 +181,7 @@ function publicise_create_self_contact($a, $contact, $uid) {
     $newcontact = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self` = 1", intval($uid));
     if (count($newcontact) != 1) {
         logger('Publicise: create contact failed', LOGGER_NORMAL);
-        $r = q("DELETE FROM user WHERE uid = %d", intval($uid));
+        $r = q("DELETE FROM `user` WHERE `uid` = %d", intval($uid));
         logger('Publicise: deleted failed user ' . $uid, LOGGER_DATA);
         return;
     }
@@ -363,12 +363,16 @@ function publicise_plugin_admin_post ($a) {
                 if ($user['page-flags'] != PAGE_COMMUNITY) {
                     q('UPDATE `user` SET `page-flags` = %d WHERE `uid` = %d',
                       intval(PAGE_COMMUNITY), intval($user['uid']));
+                    q('UPDATE `contact` SET `rel` = %d WHERE `uid` = %d AND `network` = "dfrn"',
+                      intval(CONTACT_IS_SHARING), intval($user['uid']));
                 }
             }
             else {
                 if ($user['page-flags'] != PAGE_SOAPBOX) {
                     q('UPDATE `user` SET `page-flags` = %d WHERE `uid` = %d',
                       intval(PAGE_SOAPBOX), intval($user['uid']));
+                    q('UPDATE `contact` SET `rel` = %d WHERE `uid` = %d AND `network` = "dfrn"',
+                      intval(CONTACT_IS_FOLLOWER), intval($user['uid']));
                 }
             }
         }
