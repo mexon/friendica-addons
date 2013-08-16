@@ -188,7 +188,7 @@ function mailstream_subject($item) {
         return t("Diaspora post");
     }
     if ($contact['network'] === 'face') {
-        $text = trim(strip_tags(bbcode($item['body'])));
+        $text = trim(html_entity_decode(strip_tags(bbcode($item['body']))));
         $subject = (strlen($text) > 150) ? (substr($text, 0, 140) . '...') : $text;
         return preg_replace('/\\s+/', ' ', $subject);
     }
