@@ -52,18 +52,4 @@
   <xsl:template match="{{$exclude}}" mode="remove"/>
 {{/if}}
 
-  <!-- attempt to replace relative URLs with absolute URLs -->
-  <!-- http://stackoverflow.com/questions/3824631/replace-href-value-in-anchor-tags-of-html-using-xslt -->
-
-  <xsl:template match="*/@src[starts-with(.,'.')]" mode="remove">
-    <xsl:attribute name="src">
-      <xsl:value-of select="concat('{{$dirurl}}',.)"/>
-    </xsl:attribute>
-  </xsl:template>
-  <xsl:template match="*/@src[starts-with(.,'/')]" mode="remove">
-    <xsl:attribute name="src">
-      <xsl:value-of select="concat('{{$rooturl}}',.)"/>
-    </xsl:attribute>
-  </xsl:template>
-
 </xsl:stylesheet>
