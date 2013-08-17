@@ -87,6 +87,12 @@ function mailstream_post_remote_hook(&$a, &$item) {
     if (!$item['uri']) {
         return;
     }
+    if (get_pconfig($item['uid'], 'mailstream', 'nolikes')) {
+        if ($item['verb'] == ACTIVITY_LIKE) {
+            logger('@@@ mailstream_post_remote_hook: rejecting like ' . $item['id'] . ' uri ' . $item['uri']);
+            return;
+        }
+    }
 
     q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `uri`, `message-id`) " .
       "VALUES (%d, '%s', '%s', '%s')", intval($item['uid']),
@@ -302,6 +308,11 @@ function mailstream_plugin_settings(&$a,&$s) {
                                  t('Email Address'),
                                  $address,
                                  t("Leave blank to use your account email address")),
+                             '$nolikes' => array(
+                                 'mailstream_nolikes',
+                                 t('Exclude Likes'),
+                                 $address,
+                                 t("Check this to omit mailing \"Like\" notifications")),
                              '$enabled' => array(
                                  'mailstream_enabled',
                                  t('Enabled'),
@@ -316,6 +327,12 @@ function mailstream_plugin_settings_post($a,$post) {
     }
     else {
         del_pconfig(local_user(), 'mailstream', 'address');
+    }
+    if ($_POST['mailstream_nolikes']) {
+        set_pconfig(local_user(), 'mailstream', 'nolikes', $_POST['mailstream_enabled']);
+    }
+    else {
+        del_pconfig(local_user(), 'mailstream', 'nolikes');
     }
     if ($_POST['mailstream_enabled']) {
         set_pconfig(local_user(), 'mailstream', 'enabled', $_POST['mailstream_enabled']);
