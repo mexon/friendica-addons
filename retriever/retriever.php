@@ -365,10 +365,14 @@ function add_retriever_resource($url, $binary = false) {
 
     $scheme = parse_url($url, PHP_URL_SCHEME);
     if ($scheme == 'data') {
+        logger('@@@ add_retriever_resource: data url ' . print_r($url, true));
         $fp = fopen($resource['url'], 'r');
         $meta = stream_get_meta_data($fp);
+        logger('@@@ add_retriever_resource: meta ' . print_r($meta, true));
         $type = $meta['mediatype'];
         $data = stream_get_contents($fp);
+        logger('@@@ add_retriever_resource: after reading, meta ' . print_r(stream_get_meta_data($fp), true));
+        logger('@@@ add_retriever_resource: got bytes ' . strlen($data));
         fclose($fp);
 
         $url = 'md5://' . hash('md5', $url);
@@ -438,49 +442,19 @@ function retriever_get_encoding($resource) {
     return 'utf-8';
 }
 
-function retriever_construct_xpath($spec) {
-    if (gettype($spec) != "array") {
-        return;
-    }
-    $components = array();
-    foreach ($spec as $clause) {
-        if (!$clause['attribute']) {
-            $components[] = $clause['element'];
-            continue;
-        }
-        if ($clause['attribute'] === 'class') {
-            $components[] =
-                $clause['element'] .
-                "[contains(concat(' ', normalize-space(@class), ' '), ' " .
-                $clause['value'] . " ')]";
-        }
-        else {
-            $components[] =
-                $clause['element'] . '[@' .
-                $clause['attribute'] . "='" .
-                $clause['value'] . "']";
-        }
-    }
-    // It would be better to do this in smarty3 in extract.tpl
-    return implode('|', $components);
-}
-
-function retriever_apply_xslt_template($xslt_text, $doc) {
+function retriever_apply_xslt_text($xslt_text, $doc) {
     if (!$xslt_text) {
-        logger('retriever_apply_xslt_template: empty XSLT text', LOGGER_NORMAL);
+        logger('retriever_apply_xslt_text: empty XSLT text', LOGGER_NORMAL);
         return;
     }
-    $template_doc = new DOMDocument();
-    if (!$template_doc->loadXML($xslt_text)) {
-        logger('retriever_apply_xslt_template: could not load XML', LOGGER_NORMAL);
+    $xslt_doc = new DOMDocument();
+    if (!$xslt_doc->loadXML($xslt_text)) {
+        logger('retriever_apply_xslt_text: could not load XML', LOGGER_NORMAL);
         return;
     }
-    logger('@@@ retriever_apply_xslt_template, xslt length ' . strlen($xslt_text) . ' incoming doc length ' . strlen($doc->saveXML()));
-    logger("@@@ retriever_apply_xslt_template: full xslt\n" . $xslt_text . "\n");
     $xp = new XsltProcessor();
-    $xp->importStylesheet($template_doc);
+    $xp->importStylesheet($xslt_doc);
     $result = $xp->transformToDoc($doc);
-    logger('@@@ retriever_apply_xslt_template, result length ' . strlen($result->saveXML()));
     return $result;
 }
 
@@ -512,14 +486,13 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $params = array('$spec' => $retriever['data']);
     $extract_template = get_markup_template('extract.tpl', 'addon/retriever/');
     $extract_xslt = replace_macros($extract_template, $params);
-    $doc = retriever_apply_xslt_template($extract_xslt, $doc);
+    $doc = retriever_apply_xslt_text($extract_xslt, $doc);
     if (!$doc) {
         logger('retriever_apply_dom_filter: failed to apply extract XSLT template', LOGGER_NORMAL);
         return;
     }
-    logger("@@@ retriever_apply_dom_filter: full results\n" . $doc->saveXML() . "\n");
     if ($retriever['data']['customxslt']) {
-        $doc = retriever_apply_xslt_template($retriever['data']['customxslt'], $doc);
+        $doc = retriever_apply_xslt_text($retriever['data']['customxslt'], $doc);
         if (!$doc) {
             logger('retriever_apply_dom_filter: failed to apply custom XSLT', LOGGER_NORMAL);
             return;
@@ -528,7 +501,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $params = array('$dirurl' => $dirurl, '$rooturl' => $rooturl);
     $fix_urls_template = get_markup_template('fix-urls.tpl', 'addon/retriever/');
     $fix_urls_xslt = replace_macros($fix_urls_template, $params);
-    $doc = retriever_apply_xslt_template($fix_urls_xslt, $doc);
+    $doc = retriever_apply_xslt_text($fix_urls_xslt, $doc);
     if (!$doc) {
         logger('retriever_apply_dom_filter: failed to apply fix urls XSLT template', LOGGER_NORMAL);
         return;
@@ -826,7 +799,7 @@ function retriever_plugin_settings(&$a,&$s) {
                              '$title' => t('Retriever Settings'),
                              '$help' => $a->get_baseurl() . '/retriever/help',
                              '$all_photos' => $all_photos_mu,
-                             '$all_photos_t' => t('All Photos'))); //@@@ todo do field thing
+                             '$all_photos_t' => t('All Photos'))); //@@@ todo replace this with a standard field template like mailstream does
 }
 
 function retriever_plugin_settings_post($a,$post) {
