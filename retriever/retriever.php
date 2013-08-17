@@ -475,9 +475,13 @@ function retriever_apply_xslt_template($xslt_text, $doc) {
         logger('retriever_apply_xslt_template: could not load XML', LOGGER_NORMAL);
         return;
     }
+    logger('@@@ retriever_apply_xslt_template, xslt length ' . strlen($xslt_text) . ' incoming doc length ' . strlen($doc->saveXML()));
+    logger("@@@ retriever_apply_xslt_template: full xslt\n" . $xslt_text . "\n");
     $xp = new XsltProcessor();
     $xp->importStylesheet($template_doc);
-    return $xp->transformToDoc($doc);
+    $result = $xp->transformToDoc($doc);
+    logger('@@@ retriever_apply_xslt_template, result length ' . strlen($result->saveXML()));
+    return $result;
 }
 
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
@@ -508,12 +512,12 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $params = array('$spec' => $retriever['data']);
     $extract_template = get_markup_template('extract.tpl', 'addon/retriever/');
     $extract_xslt = replace_macros($extract_template, $params);
-    logger("@@@ retriever_apply_dom_filter: full filter\n" . $extract_xslt . "\n");
     $doc = retriever_apply_xslt_template($extract_xslt, $doc);
     if (!$doc) {
         logger('retriever_apply_dom_filter: failed to apply extract XSLT template', LOGGER_NORMAL);
         return;
     }
+    logger("@@@ retriever_apply_dom_filter: full results\n" . $doc->saveXML() . "\n");
     if ($retriever['data']['customxslt']) {
         $doc = retriever_apply_xslt_template($retriever['data']['customxslt'], $doc);
         if (!$doc) {
