@@ -300,6 +300,7 @@ function mailstream_cron($a, $b) {
 
 function mailstream_plugin_settings(&$a,&$s) {
     $enabled = get_pconfig(local_user(), 'mailstream', 'enabled');
+    $nolikes = get_pconfig(local_user(), 'mailstream', 'nolikes');
     $address = get_pconfig(local_user(), 'mailstream', 'address');
     $template = get_markup_template('settings.tpl', 'addon/mailstream/');
     $s .= replace_macros($template, array(
@@ -311,7 +312,7 @@ function mailstream_plugin_settings(&$a,&$s) {
                              '$nolikes' => array(
                                  'mailstream_nolikes',
                                  t('Exclude Likes'),
-                                 $address,
+                                 $nolikes,
                                  t("Check this to omit mailing \"Like\" notifications")),
                              '$enabled' => array(
                                  'mailstream_enabled',
