@@ -483,21 +483,20 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $rooturl = $components['scheme'] . "://" . $components['host'];
     $dirurl = $rooturl . dirname($components['path']) . "/";
 
-    $params = array('$spec' => $retriever['data']);
-    $extract_template = get_markup_template('extract.tpl', 'addon/retriever/');
-    $extract_xslt = replace_macros($extract_template, $params);
+    if ($retriever['data']['customxslt']) {
+        $extract_xslt = $retriever['data']['customxslt'];
+    }
+    else {
+        $params = array('$spec' => $retriever['data']);
+        $extract_template = get_markup_template('extract.tpl', 'addon/retriever/');
+        $extract_xslt = replace_macros($extract_template, $params);
+    }
     $doc = retriever_apply_xslt_text($extract_xslt, $doc);
     if (!$doc) {
         logger('retriever_apply_dom_filter: failed to apply extract XSLT template', LOGGER_NORMAL);
         return;
     }
-    if ($retriever['data']['customxslt']) {
-        $doc = retriever_apply_xslt_text($retriever['data']['customxslt'], $doc);
-        if (!$doc) {
-            logger('retriever_apply_dom_filter: failed to apply custom XSLT', LOGGER_NORMAL);
-            return;
-        }
-    }
+
     $params = array('$dirurl' => $dirurl, '$rooturl' => $rooturl);
     $fix_urls_template = get_markup_template('fix-urls.tpl', 'addon/retriever/');
     $fix_urls_xslt = replace_macros($fix_urls_template, $params);
