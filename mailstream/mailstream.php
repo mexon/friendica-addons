@@ -194,6 +194,7 @@ function mailstream_subject($item) {
     }
     if ($contact['network'] === 'face') {
         $text = trim(html_entity_decode(strip_tags(bbcode($item['body']))));
+        $text = preg_replace('/\xA0$/', '', $text);
         logger('@@@ Facebook post, full text ' . $text);
         $subject = (strlen($text) > 150) ? (substr($text, 0, 140) . '...') : $text;
         logger('@@@ Facebook post, substring "' . substr($text, 0, 140) . '"');
