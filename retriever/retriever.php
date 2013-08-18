@@ -447,7 +447,6 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
         logger('retriever_apply_xslt_text: empty XSLT text', LOGGER_NORMAL);
         return;
     }
-    logger("@@@ retriever_apply_xslt_text: text\n" . $xslt_text . "\n");
     $xslt_doc = new DOMDocument();
     if (!$xslt_doc->loadXML($xslt_text)) {
         logger('retriever_apply_xslt_text: could not load XML', LOGGER_NORMAL);

@@ -7,7 +7,7 @@
 {{if !$clause.attribute}}
 {{$clause.element}}{{elseif $clause.attribute == 'class'}}
 {{$clause.element}}[contains(concat(' ', normalize-space(@class), ' '), '{{$clause.value}}')]{{else}}
-{{$clause.element}}[@{{$clause.attribute}}]='{{$clause.value}}']{{/if}}
+{{$clause.element}}[@{{$clause.attribute}}='{{$clause.value}}']{{/if}}
 {{/function}}
 
 {{foreach $spec.include as $clause}}
