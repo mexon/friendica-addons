@@ -447,6 +447,7 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
         logger('retriever_apply_xslt_text: empty XSLT text', LOGGER_NORMAL);
         return;
     }
+    logger("@@@ retriever_apply_xslt_text: text\n" . $xslt_text . "\n");
     $xslt_doc = new DOMDocument();
     if (!$xslt_doc->loadXML($xslt_text)) {
         logger('retriever_apply_xslt_text: could not load XML', LOGGER_NORMAL);
@@ -459,7 +460,7 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
 }
 
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
-    logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['plink'], LOGGER_DEBUG);
+    logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['uri'], LOGGER_DEBUG);
     require_once('include/html2bbcode.php');	
 
     if (!$retriever['data']['include']) {
