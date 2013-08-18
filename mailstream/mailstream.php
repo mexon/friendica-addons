@@ -89,7 +89,6 @@ function mailstream_post_remote_hook(&$a, &$item) {
     }
     if (get_pconfig($item['uid'], 'mailstream', 'nolikes')) {
         if ($item['verb'] == ACTIVITY_LIKE) {
-            logger('@@@ mailstream_post_remote_hook: rejecting like ' . $item['id'] . ' uri ' . $item['uri']);
             return;
         }
     }
@@ -195,7 +194,10 @@ function mailstream_subject($item) {
     }
     if ($contact['network'] === 'face') {
         $text = trim(html_entity_decode(strip_tags(bbcode($item['body']))));
+        logger('@@@ Facebook post, full text ' . $text);
         $subject = (strlen($text) > 150) ? (substr($text, 0, 140) . '...') : $text;
+        logger('@@@ Facebook post, substring "' . substr($text, 0, 140) . '"');
+        logger('@@@ Facebook post, after replace "' . preg_replace('/\\s+/', ' ', $subject) . '"');
         return preg_replace('/\\s+/', ' ', $subject);
     }
     if ($contact['network'] === 'feed') {
@@ -280,7 +282,12 @@ function mailstream_html_wrap(&$text)
 }
 
 function mailstream_cron($a, $b) {
-    $ms_item_ids = q("SELECT `mailstream_item`.`message-id`, `item`.`id` FROM `mailstream_item` JOIN `item` ON (`mailstream_item`.`uid` = `item`.`uid` AND `mailstream_item`.`uri` = `item`.`uri` AND `mailstream_item`.`contact-id` = `item`.`contact-id`) WHERE `mailstream_item`.`completed` IS NULL AND `item`.`visible` = 1 ORDER BY `mailstream_item`.`created` LIMIT 100");
+    // Only process items older than an hour in cron.  This is because
+    // we want to give mailstream_post_remote_hook a fair chance to
+    // send the email itself before cron jumps in.  Only if
+    // mailstream_post_remote_hook fails for some reason will this get
+    // used, and in that case it's worth holding off a bit anyway.
+    $ms_item_ids = q("SELECT `mailstream_item`.`message-id`, `item`.`id` FROM `mailstream_item` JOIN `item` ON (`mailstream_item`.`uid` = `item`.`uid` AND `mailstream_item`.`uri` = `item`.`uri` AND `mailstream_item`.`contact-id` = `item`.`contact-id`) WHERE `mailstream_item`.`completed` IS NULL AND `mailstream_item`.`created` < DATE_SUB(NOW(), INTERVAL 1 HOUR) AND `item`.`visible` = 1 ORDER BY `mailstream_item`.`created` LIMIT 100");
     logger('mailstream_cron processing ' . count($ms_item_ids) . ' items', LOGGER_DEBUG);
     foreach ($ms_item_ids as $ms_item_id) {
         $items = q('SELECT * FROM `item` WHERE `id` = %d', $ms_item_id['id']);
