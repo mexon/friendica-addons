@@ -18,7 +18,7 @@
   </xsl:template>
 {{/foreach}}
 
-{{foreach $spec.remove as $clause}}
+{{foreach $spec.exclude as $clause}}
   <xsl:template match="{{clause_xpath clause=$clause}}" mode="remove"/>
 {{/foreach}}
 
