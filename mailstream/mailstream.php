@@ -166,7 +166,7 @@ function mailstream_sender($item) {
 
 function mailstream_subject($item) {
     if ($item['title']) {
-        return $item['title'];
+        return trim(html_entity_decode($item['title']));
     }
     $parent = $item['thr-parent'];
     // Don't look more than 100 levels deep for a subject, in case of loops
@@ -179,7 +179,7 @@ function mailstream_subject($item) {
             break;
         }
         if ($r[0]['title']) {
-            return t('Re:') . ' ' . $r[0]['title'];
+            return t('Re:') . ' ' . trim(html_entity_decode($r[0]['title']));
         }
         $parent = $r[0]['thr-parent'];
     }
@@ -195,10 +195,7 @@ function mailstream_subject($item) {
     if ($contact['network'] === 'face') {
         $text = trim(html_entity_decode(strip_tags(bbcode($item['body']))));
         $text = preg_replace('/\xA0$/', '', $text);
-        logger('@@@ Facebook post, full text ' . $text);
         $subject = (strlen($text) > 150) ? (substr($text, 0, 140) . '...') : $text;
-        logger('@@@ Facebook post, substring "' . substr($text, 0, 140) . '"');
-        logger('@@@ Facebook post, after replace "' . preg_replace('/\\s+/', ' ', $subject) . '"');
         return preg_replace('/\\s+/', ' ', $subject);
     }
     if ($contact['network'] === 'feed') {
