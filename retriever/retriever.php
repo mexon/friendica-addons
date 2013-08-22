@@ -792,19 +792,21 @@ function retriever_post_remote_hook(&$a, &$item) {
 
 function retriever_plugin_settings(&$a,&$s) {
     $all_photos = get_pconfig(local_user(), 'retriever', 'all_photos');
-    $all_photos_mu = ($all_photos == 'on') ? ' checked="true"' : '';
     $template = get_markup_template('/settings.tpl', 'addon/retriever/');
     $s .= replace_macros($template, array(
+                             '$allphotos' => array(
+                                 'retriever_all_photos',
+                                 t('All Photos'),
+                                 $all_photos,
+                                 t('Check this to retrieve photos for all posts')),
                              '$submit' => t('Submit'),
                              '$title' => t('Retriever Settings'),
-                             '$help' => $a->get_baseurl() . '/retriever/help',
-                             '$all_photos' => $all_photos_mu,
-                             '$all_photos_t' => t('All Photos'))); //@@@ todo replace this with a standard field template like mailstream does
+                             '$help' => $a->get_baseurl() . '/retriever/help'));
 }
 
 function retriever_plugin_settings_post($a,$post) {
-    if ($_POST['all_photos']) {
-        set_pconfig(local_user(), 'retriever', 'all_photos', $_POST['all_photos']);
+    if ($_POST['retriever_all_photos']) {
+        set_pconfig(local_user(), 'retriever', 'all_photos', $_POST['retriever_all_photos']);
     }
     else {
         del_pconfig(local_user(), 'retriever', 'all_photos');

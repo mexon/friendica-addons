@@ -3,15 +3,6 @@
   <p>
     <a href="{{$help}}">Get Help</a>
   </p>
-  <table>
-    <tbody>
-      <tr>
-        <td>{{$all_photos_t}}:</td>
-        <td><input class="checkbox" type="checkbox" name="all_photos" {{$all_photos}}></td>
-      </tr>
-      <tr>
-        <td colspan="2"><input type="submit" value="{{$submit}}"></td>
-      </tr>
-    </tbody>
-  </table>
+{{include file="field_checkbox.tpl" field=$allphotos}}
+  <input type="submit" value="{{$submit}}">
 </div>
