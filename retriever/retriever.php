@@ -365,14 +365,10 @@ function add_retriever_resource($url, $binary = false) {
 
     $scheme = parse_url($url, PHP_URL_SCHEME);
     if ($scheme == 'data') {
-        logger('@@@ add_retriever_resource: data url ' . print_r($url, true));
-        $fp = fopen($resource['url'], 'r');
+        $fp = fopen($url, 'r');
         $meta = stream_get_meta_data($fp);
-        logger('@@@ add_retriever_resource: meta ' . print_r($meta, true));
         $type = $meta['mediatype'];
         $data = stream_get_contents($fp);
-        logger('@@@ add_retriever_resource: after reading, meta ' . print_r(stream_get_meta_data($fp), true));
-        logger('@@@ add_retriever_resource: got bytes ' . strlen($data));
         fclose($fp);
 
         $url = 'md5://' . hash('md5', $url);
