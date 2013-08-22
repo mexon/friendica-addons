@@ -27,7 +27,7 @@ function retriever_install() {
             q("INSERT INTO `retriever_rule` (`uid`, `contact-id`, `data`) VALUES (%d, %d, '%s')",
               intval($uid), intval($k), dbesc(json_encode($v)));
         }
-        q("DELETE FROM `pconfig` WHERE `cat` LIKE 'retriever%%'");
+        q("DELETE FROM `pconfig` WHERE `cat` LIKE 'retriever_%%'");
         set_config('retriever', 'dbversion', '0.2');
     }
     if (get_config('retriever', 'dbversion') == '0.2') {
