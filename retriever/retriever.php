@@ -6,6 +6,9 @@
  * Author: Matthew Exon <http://mat.exon.name>
  */
 
+require_once('include/html2bbcode.php');	
+require_once('include/Photo.php');	
+
 function retriever_install() {
     register_hook('plugin_settings', 'addon/retriever/retriever.php', 'retriever_plugin_settings');
     register_hook('plugin_settings_post', 'addon/retriever/retriever.php', 'retriever_plugin_settings_post');
@@ -457,7 +460,6 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
 
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
     logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['uri'], LOGGER_DEBUG);
-    require_once('include/html2bbcode.php');	
 
     if (!$retriever['data']['include']) {
         return;
@@ -628,8 +630,6 @@ function retriever_store_photo($item, &$resource) {
 }
 
 function retriever_transform_images(&$item, $resource) {
-    require_once('include/Photo.php');	
-
     if (!$resource["data"]) {
         logger('retriever_transform_images: no data available for '
                . $resource['id'] . ' ' . $resource['url'], LOGGER_NORMAL);
@@ -771,6 +771,34 @@ function retriever_contact_photo_menu($a, &$args) {
     }
 }
 
+function retriever_oembed_cb($match) {
+    logger('@@@ found an embed: ' . print_r($match, true));
+    $url = ((count($match)==2)?$match[1]:$match[2]);
+    logger('@@@ embed url: ' . $url);
+
+    $o = oembed_fetch_url($matches[1]);
+    logger('@@@ embed result of fetch: ' . print_r($o, true));
+
+    if ($o->type=="error") return $match[0];
+
+    $html = oembed_format_object($o);
+    logger('@@@ embed html version: ' . $html);
+    logger('@@@ embed bbcode version: ' . html2bbcode($html));
+    return html2bbcode($html);
+}
+
+function retriever_handle_embed(&$item) {
+    logger('retriever_post_remote_hook: ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
+
+    logger('@@@ retriever_handle_embed for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
+    $before = $item['body']; //@@@
+    $item['body'] = preg_replace_callback("/\[bookmark\=([^\]]*)\](.*?)\[\/bookmark\]/ism", 'retriever_oembed_cb', $item['body']);
+    if ($before != $item['body']) {
+        logger('@@@ retriever_handle_embed: before' . "\n" . $before);
+        logger('@@@ retriever_handle_embed: after' . "\n" . $item['body']);
+    }
+}
+
 function retriever_post_remote_hook(&$a, &$item) {
     logger('retriever_post_remote_hook: ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
 
@@ -780,6 +808,8 @@ function retriever_post_remote_hook(&$a, &$item) {
     }
     else {
         if (get_pconfig($item["uid"], 'retriever', 'all_photos')) {
+            retriever_handle_embed($item);
+            logger('@@@ retriever_handle_embed did not blow up the world');
             retrieve_images($item, null);
         }
     }
