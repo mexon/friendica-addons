@@ -808,8 +808,13 @@ function retriever_post_remote_hook(&$a, &$item) {
     }
     else {
         if (get_pconfig($item["uid"], 'retriever', 'all_photos')) {
-            retriever_handle_embed($item);
-            logger('@@@ retriever_handle_embed did not blow up the world');
+            // Convert to HTML and back in order to resolve oembeds.
+            $body = $item['body'];
+            $html = bbcode($body);
+            $body = html2bbcode($html);
+            if ($body) {
+                $item['body'] = $body;
+            }
             retrieve_images($item, null);
         }
     }
