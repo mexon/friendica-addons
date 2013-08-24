@@ -446,7 +446,6 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
         logger('retriever_apply_xslt_text: empty XSLT text', LOGGER_NORMAL);
         return;
     }
-    logger("@@@ retriever_apply_xslt_text: text\n" . $xslt_text . "\n");
     $xslt_doc = new DOMDocument();
     if (!$xslt_doc->loadXML($xslt_text)) {
         logger('retriever_apply_xslt_text: could not load XML', LOGGER_NORMAL);
@@ -771,34 +770,6 @@ function retriever_contact_photo_menu($a, &$args) {
     }
 }
 
-function retriever_oembed_cb($match) {
-    logger('@@@ found an embed: ' . print_r($match, true));
-    $url = ((count($match)==2)?$match[1]:$match[2]);
-    logger('@@@ embed url: ' . $url);
-
-    $o = oembed_fetch_url($matches[1]);
-    logger('@@@ embed result of fetch: ' . print_r($o, true));
-
-    if ($o->type=="error") return $match[0];
-
-    $html = oembed_format_object($o);
-    logger('@@@ embed html version: ' . $html);
-    logger('@@@ embed bbcode version: ' . html2bbcode($html));
-    return html2bbcode($html);
-}
-
-function retriever_handle_embed(&$item) {
-    logger('retriever_post_remote_hook: ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
-
-    logger('@@@ retriever_handle_embed for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
-    $before = $item['body']; //@@@
-    $item['body'] = preg_replace_callback("/\[bookmark\=([^\]]*)\](.*?)\[\/bookmark\]/ism", 'retriever_oembed_cb', $item['body']);
-    if ($before != $item['body']) {
-        logger('@@@ retriever_handle_embed: before' . "\n" . $before);
-        logger('@@@ retriever_handle_embed: after' . "\n" . $item['body']);
-    }
-}
-
 function retriever_post_remote_hook(&$a, &$item) {
     logger('retriever_post_remote_hook: ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
 
@@ -807,14 +778,14 @@ function retriever_post_remote_hook(&$a, &$item) {
         retriever_on_item_insert($retriever, $item);
     }
     else {
-        if (get_pconfig($item["uid"], 'retriever', 'all_photos')) {
-            // Convert to HTML and back in order to resolve oembeds.
-            $body = $item['body'];
-            $html = bbcode($body);
-            $body = html2bbcode($html);
+        if (get_pconfig($item["uid"], 'retriever', 'oembed')) {
+            // Convert to HTML and back to take advantage of bbcode's resolution of oembeds.
+            $body = html2bbcode(bbcode($item['body']));
             if ($body) {
                 $item['body'] = $body;
             }
+        }
+        if (get_pconfig($item["uid"], 'retriever', 'all_photos')) {
             retrieve_images($item, null);
         }
     }
@@ -830,6 +801,11 @@ function retriever_plugin_settings(&$a,&$s) {
                                  t('All Photos'),
                                  $all_photos,
                                  t('Check this to retrieve photos for all posts')),
+                             '$oembed' => array(
+                                 'retriever_oembed',
+                                 t('Resolve OEmbed'),
+                                 $all_photos,
+                                 t('Check this to attempt to retrieve embedded content for all posts - useful e.g. for Facebook posts')),
                              '$submit' => t('Submit'),
                              '$title' => t('Retriever Settings'),
                              '$help' => $a->get_baseurl() . '/retriever/help'));
@@ -841,5 +817,11 @@ function retriever_plugin_settings_post($a,$post) {
     }
     else {
         del_pconfig(local_user(), 'retriever', 'all_photos');
+    }
+    if ($_POST['retriever_oembed']) {
+        set_pconfig(local_user(), 'retriever', 'oembed', $_POST['retriever_oembed']);
+    }
+    else {
+        del_pconfig(local_user(), 'retriever', 'oembed');
     }
 }
