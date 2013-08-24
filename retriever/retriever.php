@@ -794,6 +794,7 @@ function retriever_post_remote_hook(&$a, &$item) {
 
 function retriever_plugin_settings(&$a,&$s) {
     $all_photos = get_pconfig(local_user(), 'retriever', 'all_photos');
+    $oembed = get_pconfig(local_user(), 'retriever', 'oembed');
     $template = get_markup_template('/settings.tpl', 'addon/retriever/');
     $s .= replace_macros($template, array(
                              '$allphotos' => array(
@@ -804,7 +805,7 @@ function retriever_plugin_settings(&$a,&$s) {
                              '$oembed' => array(
                                  'retriever_oembed',
                                  t('Resolve OEmbed'),
-                                 $all_photos,
+                                 $oembed,
                                  t('Check this to attempt to retrieve embedded content for all posts - useful e.g. for Facebook posts')),
                              '$submit' => t('Submit'),
                              '$title' => t('Retriever Settings'),
