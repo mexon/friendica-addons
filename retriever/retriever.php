@@ -460,7 +460,7 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
     logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['uri'], LOGGER_DEBUG);
 
-    if (!$retriever['data']['include']) {
+    if (!$retriever['data']['include'] && !$retriever['customxslt']) {
         return;
     }
     if (!$resource['data']) {
