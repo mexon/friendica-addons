@@ -2,7 +2,7 @@
 /**
  * Name: Publicise Feeds
  * Description: Convert your feeds into soapbox accounts so you can share them with other users
- * Version: 0.1
+ * Version: 1.0
  * Author: Matthew Exon <http://mat.exon.name>
  */
 
