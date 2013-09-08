@@ -2,7 +2,7 @@
 /**
  * Name: Mail Stream
  * Description: Mail all items coming into your network feed to an email address
- * Version: 0.2
+ * Version: 1.0
  * Author: Matthew Exon <http://mat.exon.name>
  */
 
@@ -12,29 +12,38 @@ function mailstream_install() {
     register_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     register_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
 
-    $schema = file_get_contents(dirname(__file__).'/database.sql');
-    $arr = explode(';', $schema);
-    foreach ($arr as $a) {
-        $r = q($a);
-    }
-
     if (get_config('mailstream', 'dbversion') == '0.1') {
         q('ALTER TABLE `mailstream_item` DROP INDEX `uid`');
         q('ALTER TABLE `mailstream_item` DROP INDEX `contact-id`');
         q('ALTER TABLE `mailstream_item` DROP INDEX `plink`');
         q('ALTER TABLE `mailstream_item` CHANGE `plink` `uri` char(255) NOT NULL');
+        set_config('mailstream', 'dbversion', '0.2');
     }
     if (get_config('mailstream', 'dbversion') == '0.2') {
         q('DELETE FROM `pconfig` WHERE `cat` = "mailstream" AND `k` = "delay"');
+        set_config('mailstream', 'dbversion', '0.3');
     }
     if (get_config('mailstream', 'dbversion') == '0.3') {
         q('ALTER TABLE `mailstream_item` CHANGE `created` `created` timestamp NOT NULL DEFAULT now()');
         q('ALTER TABLE `mailstream_item` CHANGE `completed` `completed` timestamp NULL DEFAULT NULL');
+        set_config('mailstream', 'dbversion', '0.4');
     }
     if (get_config('mailstream', 'dbversion') == '0.4') {
         q('ALTER TABLE `mailstream_item` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
+        set_config('mailstream', 'dbversion', '0.5');
     }
-    set_config('mailstream', 'dbversion', '0.5');
+    if (get_config('mailstream', 'dbversion') == '0.5') {
+        set_config('mailstream', 'dbversion', '1.0');
+    }
+
+    if (get_config('retriever', 'dbversion') != '1.0') {
+        $schema = file_get_contents(dirname(__file__).'/database.sql');
+        $arr = explode(';', $schema);
+        foreach ($arr as $a) {
+            $r = q($a);
+        }
+        set_config('mailstream', 'dbversion', '1.0');
+    }
 }
 
 function mailstream_uninstall() {
