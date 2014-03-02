@@ -294,10 +294,14 @@ function jappixmini_settings(&$a, &$s) {
         $a->page['htmlhead'] .= '<script type="text/javascript" src="' . $a->get_baseurl() . '/addon/jappixmini/lib.js"></script>'."\r\n";
     }
 
-    $s .= '<div class="settings-block">';
-
+    $s .= '<span id="settings_jappixmini_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_jappixmini_expanded\'); openClose(\'settings_jappixmini_inflated\');">';
     $s .= '<h3>'.t('Jappix Mini addon settings').'</h3>';
-    $s .= '<div>';
+    $s .= '</span>';
+    $s .= '<div id="settings_jappixmini_expanded" class="settings-block" style="display: none;">';
+    $s .= '<span class="fakelink" onclick="openClose(\'settings_jappixmini_expanded\'); openClose(\'settings_jappixmini_inflated\');">';
+    $s .= '<h3>'.t('Jappix Mini addon settings').'</h3>';
+    $s .= '</span>';
+
     $s .= '<label for="jappixmini-activate">'.t('Activate addon').'</label>';
     $s .= ' <input id="jappixmini-activate" type="checkbox" name="jappixmini-activate" value="1"'.$activate.' />';
     $s .= '<br />';
@@ -340,9 +344,8 @@ function jappixmini_settings(&$a, &$s) {
     $s .= '<br />';
     if ($info_text) $s .= '<br />Configuration help:<p style="margin-left:2em;">'.$info_text.'</p>';
     $s .= '<br />Status:<p style="margin-left:2em;">Addon knows '.$address_cnt.' Jabber addresses of '.$contact_cnt.' Friendica contacts (takes some time, usually 10 minutes, to update).</p>';
-    $s .= '<input type="submit" name="jappixmini-submit" value="' . t('Submit') . '" />';
+    $s .= '<input type="submit" name="jappixmini-submit" value="' . t('Save Settings') . '" />';
     $s .= ' <input type="button" value="'.t('Add contact').'" onclick="jappixmini_addon_subscribe();" />';
-    $s .= '</div>';
 
     $s .= '</div>';
 
@@ -498,11 +501,16 @@ function jappixmini_script(&$a,&$s) {
     // get nickname
     $r = q("SELECT `username` FROM `user` WHERE `uid`=$uid");
     $nickname = json_encode($r[0]["username"]);
+    $groupchats = get_config('jappixmini','groupchats');
+    //if $groupchats has no value jappix_addon_start will produce a syntax error
+    if(empty($groupchats)){
+    	$groupchats = "{}";
+    }
 
     // add javascript to start Jappix Mini
     $a->page['htmlhead'] .= "<script type=\"text/javascript\">
         jQuery(document).ready(function() {
-           jappixmini_addon_start('$server', '$username', '$proxy', '$bosh', $encrypt, '$password', $nickname, $contacts_json, '$contacts_hash', $autoapprove, $autosubscribe);
+           jappixmini_addon_start('$server', '$username', '$proxy', '$bosh', $encrypt, '$password', $nickname, $contacts_json, '$contacts_hash', $autoapprove, $autosubscribe, $groupchats);
         });
     </script>";
 

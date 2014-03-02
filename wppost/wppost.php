@@ -72,8 +72,13 @@ function wppost_settings(&$a,&$s) {
 
     /* Add some HTML to the existing form */
 
-    $s .= '<div class="settings-block">';
+    $s .= '<span id="settings_wppost_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_wppost_expanded\'); openClose(\'settings_wppost_inflated\');">';
     $s .= '<h3>' . t('WordPress Post Settings') . '</h3>';
+    $s .= '</span>';
+    $s .= '<div id="settings_wppost_expanded" class="settings-block" style="display: none;">';
+    $s .= '<span class="fakelink" onclick="openClose(\'settings_wppost_expanded\'); openClose(\'settings_wppost_inflated\');">';
+    $s .= '<h3>' . t('WordPress Post Settings') . '</h3>';
+    $s .= '</span>';
     $s .= '<div id="wppost-enable-wrapper">';
     $s .= '<label id="wppost-enable-label" for="wppost-checkbox">' . t('Enable WordPress Post Plugin') . '</label>';
     $s .= '<input id="wppost-checkbox" type="checkbox" name="wppost" value="1" ' . $checked . '/>';
@@ -107,7 +112,7 @@ function wppost_settings(&$a,&$s) {
 
     /* provide a submit button */
 
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="wppost-submit" name="wppost-submit" class="settings-submit" value="' . t('Submit') . '" /></div></div>';
+    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="wppost-submit" name="wppost-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
 
 }
 
@@ -189,7 +194,10 @@ function wppost_send(&$a,&$b) {
 
 			// If no bookmark is found then take the first line
 			if ($wptitle == '') {
-				$title = html2plain(bbcode($b['body'], false, false), 0, true)."\n";
+				// Remove the share element before fetching the first line
+				$title = trim(preg_replace("/\[share.*?\](.*?)\[\/share\]/ism","\n$1\n",$b['body']));
+
+				$title = html2plain(bbcode($title, false, false), 0, true)."\n";
 				$pos = strpos($title, "\n");
 				$trailer = "";
 				if (($pos == 0) or ($pos > 100)) {
@@ -202,7 +210,7 @@ function wppost_send(&$a,&$b) {
 		}
 
 		$title = '<title>' . (($wptitle) ? $wptitle : t('Post from Friendica')) . '</title>';
-		$post = bbcode($b['body'], false, false);
+		$post = bbcode($b['body'], false, false, 4);
 
 		// If a link goes to youtube then remove the stuff around it. Wordpress detects youtube links and embeds it
 		$post = preg_replace('/<a.*?href="(https?:\/\/www.youtube.com\/.*?)".*?>(.*?)<\/a>/ism',"\n$1\n",$post);

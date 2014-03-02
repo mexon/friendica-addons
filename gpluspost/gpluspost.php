@@ -42,6 +42,10 @@ function gpluspost_settings(&$a,&$s) {
 	if(! local_user())
 		return;
 
+	/* Add our stylesheet to the page so we can make our settings look nice */
+
+	$a->page['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . $a->get_baseurl() . '/addon/gpluspost/gpluspost.css' . '" media="all" />' . "\r\n";
+
 	$enabled = get_pconfig(local_user(),'gpluspost','post');
 	$checked = (($enabled) ? ' checked="checked" ' : '');
 
@@ -54,8 +58,14 @@ function gpluspost_settings(&$a,&$s) {
 	$skip_enabled = get_pconfig(local_user(),'gpluspost','skip_without_link');
 	$skip_checked = (($skip_enabled) ? ' checked="checked" ' : '');
 
-	$s .= '<div class="settings-block">';
+	$s .= '<span id="settings_gpluspost_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_gpluspost_expanded\'); openClose(\'settings_gpluspost_inflated\');">';
 	$s .= '<h3>' . t('Google+ Post Settings') . '</h3>';
+	$s .= '</span>';
+	$s .= '<div id="settings_gpluspost_expanded" class="settings-block" style="display: none;">';
+	$s .= '<span class="fakelink" onclick="openClose(\'settings_gpluspost_expanded\'); openClose(\'settings_gpluspost_inflated\');">';
+	$s .= '<h3>' . t('Google+ Post Settings') . '</h3>';
+	$s .= '</span>';
+
 	$s .= '<div id="gpluspost-enable-wrapper">';
 	$s .= '<label id="gpluspost-enable-label" for="gpluspost-checkbox">' . t('Enable Google+ Post Plugin') . '</label>';
 	$s .= '<input id="gpluspost-checkbox" type="checkbox" name="gpluspost" value="1" ' . $checked . '/>';
@@ -78,9 +88,9 @@ function gpluspost_settings(&$a,&$s) {
 
 	/* provide a submit button */
 
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="gpluspost-submit" name="gpluspost-submit" class="settings-submit" value="' . t('Submit') . '" /></div>';
-	$s .= 'Register an account at <a href="https://hootsuite.com">Hootsuite</a>, add your G+ page and add the feed-url there.<br />';
-	$s .= 'Feed-url: '.$a->get_baseurl().'/gpluspost/'.urlencode($a->user["nickname"]).'</div>';
+	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="gpluspost-submit" name="gpluspost-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>';
+	$s .= '<p>Register an account at <a href="https://hootsuite.com">Hootsuite</a>, add your G+ page and add the feed-url there.<br />';
+	$s .= 'Feed-url: '.$a->get_baseurl().'/gpluspost/'.urlencode($a->user["nickname"]).'</p></div>';
 }
 
 function gpluspost_settings_post(&$a,&$b) {
@@ -216,7 +226,7 @@ function gpluspost_original_url($url, $depth=1) {
 	curl_setopt($ch, CURLOPT_NOBODY, 0);
 	curl_setopt($ch, CURLOPT_TIMEOUT, 3);
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($ch,CURLOPT_USERAGENT,'Opera/9.64(Windows NT 5.1; U; de) Presto/2.1.1');
+	curl_setopt($ch,CURLOPT_USERAGENT,'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:24.0) Gecko/20100101 Firefox/24.0');
 
 	$header = curl_exec($ch);
 	$curl_info = @curl_getinfo($ch);
@@ -263,32 +273,6 @@ function gpluspost_original_url($url, $depth=1) {
 	return($url);
 }
 
-function gpluspost_ShareAttributes($match) {
-
-        $attributes = $match[1];
-
-        $author = "";
-        preg_match("/author='(.*?)'/ism", $attributes, $matches);
-        if ($matches[1] != "")
-                $author = $matches[1];
-
-        preg_match('/author="(.*?)"/ism', $attributes, $matches);
-        if ($matches[1] != "")
-                $author = $matches[1];
-
-        $headline = '<div class="shared_header">';
-
-        $headline .= sprintf(t('%s:'), $author);
-
-        $headline .= "</div>";
-
-        //$text = "<br />".$headline."</strong><blockquote>".$match[2]."</blockquote>";
-	//$text = "\n\t".$match[2].":\t";
-	$text = html_entity_decode("&#x2672; ", ENT_QUOTES, 'UTF-8').$author.": ".$match[2];
-
-        return($text);
-}
-
 function gpluspost_feeditem($pid, $uid) {
 	global $a;
 
@@ -299,6 +283,8 @@ function gpluspost_feeditem($pid, $uid) {
 
 	$items = q("SELECT `uri`, `plink`, `author-link`, `author-name`, `created`, `edited`, `id`, `title`, `body` from `item` WHERE id=%d", intval($pid));
 	foreach ($items AS $item) {
+
+		$item['body'] = bb_CleanPictureLinks($item['body']);
 
 		// Looking for the first image
 		$image = '';
@@ -323,10 +309,13 @@ function gpluspost_feeditem($pid, $uid) {
 		$multiplelinks = (strpos($item['body'], "[bookmark") != strrpos($item['body'], "[bookmark"));
 
 		$body = $item['body'];
-		$body = preg_replace_callback("/\[share(.*?)\]\s?(.*?)\s?\[\/share\]/ism","gpluspost_ShareAttributes", $body);
 
-		$html = bbcode($body, false, false);
+		// At first convert the text to html
+		$html = bbcode($body, false, false, 2);
+
+		// Then convert it to plain text
 		$msg = trim(html2plain($html, 0, true));
+		$msg = html_entity_decode($msg,ENT_QUOTES,'UTF-8');
 
 		// If there is no bookmark element then take the first link
 		if ($link == '') {

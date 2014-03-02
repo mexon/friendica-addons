@@ -278,8 +278,13 @@ function statusnet_settings(&$a,&$s) {
 	$shorteningenabled = get_pconfig(local_user(),'statusnet','intelligent_shortening');
 	$shorteningchecked = (($shorteningenabled) ? ' checked="checked" ' : '');
 
-	$s .= '<div class="settings-block">';
+	$s .= '<span id="settings_statusnet_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_statusnet_expanded\'); openClose(\'settings_statusnet_inflated\');">';
 	$s .= '<h3>'. t('StatusNet Posting Settings').'</h3>';
+	$s .= '</span>';
+	$s .= '<div id="settings_statusnet_expanded" class="settings-block" style="display: none;">';
+	$s .= '<span class="fakelink" onclick="openClose(\'settings_statusnet_expanded\'); openClose(\'settings_statusnet_inflated\');">';
+	$s .= '<h3>'. t('StatusNet Posting Settings').'</h3>';
+	$s .= '</span>';
 
 	if ( (!$ckey) && (!$csecret) ) {
 		/***
@@ -300,7 +305,7 @@ function statusnet_settings(&$a,&$s) {
                     $s .= '<input type="radio" name="statusnet-preconf-apiurl" value="'. $asn['apiurl'] .'">'. $asn['sitename'] .'<br />';
                 }
                 $s .= '<p></p><div class="clear"></div></div>';
-                $s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Submit') . '" /></div>';
+                $s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>';
             }
             $s .= '<h4>' . t('Provide your own OAuth Credentials') . '</h4>';
             $s .= '<p>'. t('No consumer key pair for StatusNet found. Register your Friendica Account as an desktop client on your StatusNet account, copy the consumer key pair here and enter the API base root.<br />Before you register your own OAuth key pair ask the administrator if there is already a key pair for this Friendica installation at your favorited StatusNet installation.') .'</p>';
@@ -313,11 +318,12 @@ function statusnet_settings(&$a,&$s) {
             $s .= '<div class="clear"></div>';
             $s .= '<label id="statusnet-baseapi-label" for="statusnet-baseapi">'. t("Base API Path \x28remember the trailing /\x29") .'</label>';
             $s .= '<input id="statusnet-baseapi" type="text" name="statusnet-baseapi" size="35" /><br />';
-            $s .= '<p></p><div class="clear"></div></div>';
+            $s .= '<div class="clear"></div>';
             $s .= '<label id="statusnet-applicationname-label" for="statusnet-applicationname">'.t('StatusNet application name').'</label>';
             $s .= '<input id="statusnet-applicationname" type="text" name="statusnet-applicationname" size="35" /><br />';
-            $s .= '<p></p><div class="clear"></div></div>';
-            $s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Submit') . '" /></div>';
+            $s .= '<p></p><div class="clear"></div>';
+            $s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>';
+            $s .= '</div>';
 	} else {
 		/***
 		 * ok we have a consumer key pair now look into the OAuth stuff
@@ -343,14 +349,14 @@ function statusnet_settings(&$a,&$s) {
 			$s .= '<input id="statusnet-token" type="hidden" name="statusnet-token" value="'.$token.'" />';
 			$s .= '<input id="statusnet-token2" type="hidden" name="statusnet-token2" value="'.$request_token['oauth_token_secret'].'" />';
 			$s .= '</div><div class="clear"></div>';
-			$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Submit') . '" /></div>';
+			$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>';
 			$s .= '<h4>'.t('Cancel Connection Process').'</h4>';
 			$s .= '<div id="statusnet-cancel-wrapper">';
 			$s .= '<p>'.t('Current StatusNet API is').': '.$api.'</p>';
 			$s .= '<label id="statusnet-cancel-label" for="statusnet-cancel">'. t('Cancel StatusNet Connection') . '</label>';
 			$s .= '<input id="statusnet-cancel" type="checkbox" name="statusnet-disconnect" value="1" />';
 			$s .= '</div><div class="clear"></div>';
-			$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Submit') . '" /></div>';
+			$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>';
 		} else {
 			/***
 			 *  we have an OAuth key / secret pair for the user
@@ -387,10 +393,10 @@ function statusnet_settings(&$a,&$s) {
                         $s .= '<label id="statusnet-disconnect-label" for="statusnet-disconnect">'. t('Clear OAuth configuration') .'</label>';
                         $s .= '<input id="statusnet-disconnect" type="checkbox" name="statusnet-disconnect" value="1" />';
 			$s .= '</div><div class="clear"></div>';
-			$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Submit') . '" /></div>'; 
+			$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="statusnet-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>'; 
 		}
 	}
-        $s .= '</div><div class="clear"></div></div>';
+        $s .= '</div><div class="clear"></div>';
 }
 
 
@@ -442,19 +448,23 @@ function short_link($url) {
 } };
 
 function statusnet_shortenmsg($b, $max_char) {
+	require_once("include/api.php");
 	require_once("include/bbcode.php");
 	require_once("include/html2plain.php");
 
+	$b['body'] = bb_CleanPictureLinks($b['body']);
+
 	// Looking for the first image
+	$cleaned_body = api_clean_plain_items($b['body']);
 	$image = '';
-	if(preg_match("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/is",$b['body'],$matches))
+	if(preg_match("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/is",$cleaned_body,$matches))
 		$image = $matches[3];
 
 	if ($image == '')
-		if(preg_match("/\[img\](.*?)\[\/img\]/is",$b['body'],$matches))
+		if(preg_match("/\[img\](.*?)\[\/img\]/is",$cleaned_body,$matches))
 			$image = $matches[1];
 
-	$multipleimages = (strpos($b['body'], "[img") != strrpos($b['body'], "[img"));
+	$multipleimages = (strpos($cleaned_body, "[img") != strrpos($cleaned_body, "[img"));
 
 	// When saved into the database the content is sent through htmlspecialchars
 	// That means that we have to decode all image-urls
@@ -494,7 +504,7 @@ function statusnet_shortenmsg($b, $max_char) {
 	//$body = preg_replace("/\[share(.*?)\](.*?)\[\/share\]/ism","\n\n$2\n\n",$body);
 
 	// At first convert the text to html
-	$html = bbcode($body, false, false, 2);
+	$html = bbcode(api_clean_plain_items($body), false, false, 2);
 
 	// Then convert it to plain text
 	//$msg = trim($b['title']." \n\n".html2plain($html, 0, true));
@@ -547,8 +557,19 @@ function statusnet_shortenmsg($b, $max_char) {
 		$msglink = $b["plink"];
 
 	// If the message is short enough then don't modify it. (if the link exists in the original message)
-	if ((strlen(trim($origmsg)) <= $max_char) AND (strpos($origmsg, $msglink) OR ($msglink == "")))
+	if ((strlen(trim($origmsg)) <= $max_char) AND (($msglink == "") OR strpos($origmsg, $msglink)))
 		return(array("msg"=>trim($origmsg), "image"=>""));
+
+	// If the message is short enough and contains a picture then post the picture as well
+	if ((strlen(trim($origmsg)) <= ($max_char - 20)) AND strpos($origmsg, $msglink))
+		return(array("msg"=>trim($origmsg), "image"=>$image));
+
+	// If the message is short enough and the link exists in the original message don't modify it as well
+	if ((strlen(trim($origmsg)) <= $max_char) AND strpos($origmsg, $msglink))
+		return(array("msg"=>trim($origmsg), "image"=>""));
+
+	// Preserve the unshortened link
+	$orig_link = $msglink;
 
 	if (strlen($msglink) > 20)
 		$msglink = short_link($msglink);
@@ -569,7 +590,22 @@ function statusnet_shortenmsg($b, $max_char) {
 	while (strpos($msg, "  ") !== false)
 		$msg = str_replace("  ", " ", $msg);
 
-	return(array("msg"=>trim($msg."\n".$msglink), "image"=>$image));
+	//return(array("msg"=>trim($msg."\n".$msglink), "image"=>$image));
+
+	// Looking if the link points to an image
+	$img_str = fetch_url($orig_link);
+
+	$tempfile = tempnam(get_config("system","temppath"), "cache");
+	file_put_contents($tempfile, $img_str);
+	$mime = image_type_to_mime_type(exif_imagetype($tempfile));
+	unlink($tempfile);
+
+	if (($image == $orig_link) OR (substr($mime, 0, 6) == "image/"))
+		return(array("msg"=>trim($msg), "image"=>$orig_link));
+	else if (($image != $orig_link) AND ($image != "") AND (strlen($msg." ".$msglink) <= ($max_char - 20)))
+		return(array("msg"=>trim($msg." ".$msglink)."\n", "image"=>$image));
+	else
+		return(array("msg"=>trim($msg." ".$msglink), "image"=>""));
 }
 
 function statusnet_post_hook(&$a,&$b) {
@@ -697,18 +733,25 @@ function statusnet_post_hook(&$a,&$b) {
 			$msg = $msgarr["msg"];
 			$image = $msgarr["image"];
 			if ($image != "") {
-				$imagedata = file_get_contents($image);
-				$tempfile = tempnam(get_config("system","temppath"), "upload");
-				file_put_contents($tempfile, $imagedata);
-				$postdata = array("status"=>$msg, "media"=>"@".$tempfile);
+				$img_str = fetch_url($image);
+				$tempfile = tempnam(get_config("system","temppath"), "cache");
+				file_put_contents($tempfile, $img_str);
+				$postdata = array("status" => $msg, "media[]" => $tempfile);
 			} else
 				$postdata = array("status"=>$msg);
 		}
 
 		// and now dent it :-)
 		if(strlen($msg)) {
-                    //$result = $dent->post('statuses/update', array('status' => $msg));
-                    $result = $dent->post('statuses/update', $postdata);
+
+		    // New code that is able to post pictures
+		    require_once("addon/statusnet/codebird.php");
+		    $cb = \CodebirdSN\CodebirdSN::getInstance();
+		    $cb->setAPIEndpoint($api);
+		    $cb->setConsumerKey($ckey, $csecret);
+		    $cb->setToken($otoken, $osecret);
+		    $result = $cb->statuses_update($postdata);
+                    //$result = $dent->post('statuses/update', $postdata);
                     logger('statusnet_post send, result: ' . print_r($result, true).
                            "\nmessage: ".$msg, LOGGER_DEBUG."\nOriginal post: ".print_r($b, true)."\nPost Data: ".print_r($postdata, true));
                     if ($result->error) {
@@ -721,9 +764,9 @@ function statusnet_post_hook(&$a,&$b) {
 }
 
 function statusnet_plugin_admin_post(&$a){
-	
+
 	$sites = array();
-	
+
 	foreach($_POST['sitename'] as $id=>$sitename){
 		$sitename=trim($sitename);
 		$apiurl=trim($_POST['apiurl'][$id]);
@@ -780,7 +823,7 @@ function statusnet_plugin_admin(&$a, &$o){
 
 	$t = get_markup_template( "admin.tpl", "addon/statusnet/" );
 	$o = replace_macros($t, array(
-		'$submit' => t('Submit'),
+		'$submit' => t('Save Settings'),
 		'$sites' => $sitesform,
 	));
 }
