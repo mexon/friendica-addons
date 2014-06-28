@@ -56,8 +56,8 @@ function blogger_settings(&$a,&$s) {
     /* Get the current state of our config variables */
 
     $enabled = get_pconfig(local_user(),'blogger','post');
-
     $checked = (($enabled) ? ' checked="checked" ' : '');
+    $css = (($enabled) ? '' : '-disabled');
 
     $def_enabled = get_pconfig(local_user(),'blogger','post_by_default');
 
@@ -70,8 +70,14 @@ function blogger_settings(&$a,&$s) {
 
     /* Add some HTML to the existing form */
 
-    $s .= '<div class="settings-block">';
-    $s .= '<h3>' . t('Blogger Post Settings') . '</h3>';
+    $s .= '<span id="settings_blogger_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_blogger_expanded\'); openClose(\'settings_blogger_inflated\');">';
+    $s .= '<img class="connector'.$css.'" src="images/blogger.png" /><h3 class="connector">'. t('Blogger Export').'</h3>';
+    $s .= '</span>';
+    $s .= '<div id="settings_blogger_expanded" class="settings-block" style="display: none;">';
+    $s .= '<span class="fakelink" onclick="openClose(\'settings_blogger_expanded\'); openClose(\'settings_blogger_inflated\');">';
+    $s .= '<img class="connector'.$css.'" src="images/blogger.png" /><h3 class="connector">'. t('Blogger Export').'</h3>';
+    $s .= '</span>';
+
     $s .= '<div id="blogger-enable-wrapper">';
     $s .= '<label id="blogger-enable-label" for="blogger-checkbox">' . t('Enable Blogger Post Plugin') . '</label>';
     $s .= '<input id="blogger-checkbox" type="checkbox" name="blogger" value="1" ' . $checked . '/>';
@@ -99,7 +105,7 @@ function blogger_settings(&$a,&$s) {
 
     /* provide a submit button */
 
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="blogger-submit" name="blogger-submit" class="settings-submit" value="' . t('Submit') . '" /></div></div>';
+    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="blogger-submit" name="blogger-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
 
 }
 

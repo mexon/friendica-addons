@@ -13,12 +13,12 @@
  * Detailed instructions how to use this plugin can be found at
  * https://github.com/friendica/friendica/wiki/How-to:-Friendica%E2%80%99s-Facebook-connector
  *
- * Vidoes and embeds will not be posted if there is no other content. Links 
- * and images will be converted to a format suitable for the Facebook API and 
- * long posts truncated - with a link to view the full post. 
+ * Vidoes and embeds will not be posted if there is no other content. Links
+ * and images will be converted to a format suitable for the Facebook API and
+ * long posts truncated - with a link to view the full post.
  *
  * Facebook contacts will not be able to view private photos, as they are not able to
- * authenticate to your site to establish identity. We will address this 
+ * authenticate to your site to establish identity. We will address this
  * in a future release.
  */
 
@@ -69,7 +69,7 @@ function fbpost_init(&$a) {
 
 	if(strlen($nick))
 		$r = q("SELECT `uid` FROM `user` WHERE `nickname` = '%s' LIMIT 1",
-				dbesc($nick)
+			dbesc($nick)
 		);
 	if(!(isset($r) && count($r)))
 		return;
@@ -96,7 +96,7 @@ function fbpost_init(&$a) {
 
 		if(strpos($x,'access_token=') !== false) {
 			$token = str_replace('access_token=', '', $x);
- 			if(strpos($token,'&') !== false)
+			if(strpos($token,'&') !== false)
 				$token = substr($token,0,strpos($token,'&'));
 			set_pconfig($uid,'facebook','access_token',$token);
 			set_pconfig($uid,'facebook','post','1');
@@ -134,15 +134,14 @@ function fbpost_post(&$a) {
 	$uid = local_user();
 	if($uid){
 
-
-		$fb_limited = get_config('facebook','crestrict');
-
-
 		$value = ((x($_POST,'post_by_default')) ? intval($_POST['post_by_default']) : 0);
 		set_pconfig($uid,'facebook','post_by_default', $value);
 
 		$value = ((x($_POST,'mirror_posts')) ? intval($_POST['mirror_posts']) : 0);
 		set_pconfig($uid,'facebook','mirror_posts', $value);
+
+		if (!$value)
+			del_pconfig($uid,'facebook','last_created');
 
 		$value = ((x($_POST,'suppress_view_on_friendica')) ? intval($_POST['suppress_view_on_friendica']) : 0);
 		set_pconfig($uid,'facebook','suppress_view_on_friendica', $value);
@@ -151,6 +150,12 @@ function fbpost_post(&$a) {
 		$values = explode("-", $value);
 		set_pconfig($uid,'facebook','post_to_page', $values[0]);
 		set_pconfig($uid,'facebook','page_access_token', $values[1]);
+
+		$result = q("SELECT `installed` FROM `addon` WHERE `name` = 'fbsync' AND `installed`");
+		if (count($result) > 0) {
+			set_pconfig(local_user(),'fbsync','sync',intval($_POST['fbsync']));
+			set_pconfig(local_user(),'fbsync','create_user',intval($_POST['create_user']));
+		}
 
 		info( t('Settings updated.') . EOL);
 	}
@@ -183,20 +188,40 @@ function fbpost_content(&$a) {
 		info( t('Facebook Post disabled') . EOL);
 	}
 
+	require_once("mod/settings.php");
+	settings_init($a);
+
 	$o = '';
-	
+	$accounts = array();
+
 	$fb_installed = false;
 	if (get_pconfig(local_user(),'facebook','post')) {
 		$access_token = get_pconfig(local_user(),'facebook','access_token');
 		if ($access_token) {
-			$s = fetch_url('https://graph.facebook.com/me/feed?access_token=' . $access_token);
+			// fetching the list of accounts to check, if facebook is working
+			// The value is needed several lines below.
+			$url = 'https://graph.facebook.com/me/accounts';
+			$s = fetch_url($url."?access_token=".$access_token, false, $redirects, 10);
 			if($s) {
-				$j = json_decode($s);
-				if (isset($j->data)) $fb_installed = true;
+				$accounts = json_decode($s);
+				if (isset($accounts->data))
+					$fb_installed = true;
+			}
+
+			// I'm not totally sure, if this above will work in every situation,
+			// So this old code will be called as well.
+			if (!$fb_installed) {
+				$url ="https://graph.facebook.com/me/feed";
+				$s = fetch_url($url."?access_token=".$access_token."&limit=1", false, $redirects, 10);
+				if($s) {
+					$j = json_decode($s);
+					if (isset($j->data))
+						$fb_installed = true;
+				}
 			}
 		}
 	}
-	
+
 	$appid = get_config('facebook','appid');
 
 	if(! $appid) {
@@ -207,13 +232,23 @@ function fbpost_content(&$a) {
 	$a->page['htmlhead'] .= '<link rel="stylesheet" type="text/css" href="'
 		. $a->get_baseurl() . '/addon/fbpost/fbpost.css' . '" media="all" />' . "\r\n";
 
-	$o .= '<h3>' . t('Facebook Post') . '</h3>';
+	$result = q("SELECT `installed` FROM `addon` WHERE `name` = 'fbsync' AND `installed`");
+	$fbsync = (count($result) > 0);
 
-	if(! $fb_installed) { 
+	if($fbsync)
+		$title = t('Facebook Import/Export/Mirror');
+	else
+		$title = t('Facebook Export/Mirror');
+
+	$o .= '<img class="connector" src="images/facebook.png" /><h3 class="connector">'.$title.'</h3>';
+
+	if(! $fb_installed) {
 		$o .= '<div id="fbpost-enable-wrapper">';
 
+		//read_stream,publish_stream,manage_pages,photo_upload,user_groups,offline_access
+
 		$o .= '<a href="https://www.facebook.com/dialog/oauth?client_id=' . $appid . '&redirect_uri=' 
-			. $a->get_baseurl() . '/fbpost/' . $a->user['nickname'] . '&scope=read_stream,publish_stream,manage_pages,photo_upload,user_groups,offline_access">' . t('Install Facebook Post connector for this account.') . '</a>';
+			. $a->get_baseurl() . '/fbpost/' . $a->user['nickname'] . '&scope=export_stream,read_stream,publish_stream,manage_pages,photo_upload,user_groups,publish_actions,user_friends,share_item,video_upload,status_update">' . t('Install Facebook Post connector for this account.') . '</a>';
 		$o .= '</div>';
 	}
 
@@ -225,7 +260,7 @@ function fbpost_content(&$a) {
 		$o .= '<div id="fbpost-enable-wrapper">';
 
 		$o .= '<a href="https://www.facebook.com/dialog/oauth?client_id=' . $appid . '&redirect_uri=' 
-			. $a->get_baseurl() . '/fbpost/' . $a->user['nickname'] . '&scope=read_stream,publish_stream,manage_pages,photo_upload,user_groups,offline_access">' . t('Re-authenticate [This is necessary whenever your Facebook password is changed.]') . '</a>';
+			. $a->get_baseurl() . '/fbpost/' . $a->user['nickname'] . '&scope=export_stream,read_stream,publish_stream,manage_pages,photo_upload,user_groups,publish_actions,user_friends,share_item,video_upload,status_update">' . t('Re-authenticate [This is necessary whenever your Facebook password is changed.]') . '</a>';
 		$o .= '</div>';
 
 		$o .= '<div id="fbpost-post-default-form">';
@@ -246,9 +281,9 @@ function fbpost_content(&$a) {
 		$post_to_page = get_pconfig(local_user(),'facebook','post_to_page');
 		$page_access_token = get_pconfig(local_user(),'facebook','page_access_token');
 		$fb_token  = get_pconfig($a->user['uid'],'facebook','access_token');
-		$url = 'https://graph.facebook.com/me/accounts';
-		$x = fetch_url($url."?access_token=".$fb_token);
-		$accounts = json_decode($x);
+		//$url = 'https://graph.facebook.com/me/accounts';
+		//$x = fetch_url($url."?access_token=".$fb_token, false, $redirects, 10);
+		//$accounts = json_decode($x);
 
 		$o .= t("Post to page/group:")."<select name='post_to_page'>";
 		if (intval($post_to_page) == 0)
@@ -265,7 +300,7 @@ function fbpost_content(&$a) {
 		}
 
 		$url = 'https://graph.facebook.com/me/groups';
-		$x = fetch_url($url."?access_token=".$fb_token);
+		$x = fetch_url($url."?access_token=".$fb_token, false, $redirects, 10);
 		$groups = json_decode($x);
 
 		foreach($groups->data as $group) {
@@ -277,8 +312,20 @@ function fbpost_content(&$a) {
 
 		$o .= "</select>";
 
-		$o .= '<p><input type="submit" name="submit" value="' . t('Submit') . '" /></form></div>';
+		if ($fbsync) {
 
+			$o .= '<div class="clear"></div>';
+
+			$sync_enabled = get_pconfig(local_user(),'fbsync','sync');
+			$checked = (($sync_enabled) ? ' checked="checked" ' : '');
+			$o .= '<input type="checkbox" name="fbsync" value="1"' . $checked . '/>' . ' ' . t('Import Facebook newsfeed.') . EOL;
+
+			$create_user = get_pconfig(local_user(),'fbsync','create_user');
+			$checked = (($create_user) ? ' checked="checked" ' : '');
+			$o .= '<input type="checkbox" name="create_user" value="1"' . $checked . '/>' . ' ' . t('Automatically create contacts.') . EOL;
+
+		}
+		$o .= '<p><input type="submit" name="submit" value="' . t('Save Settings') . '" /></form></div>';
 	}
 
 	return $o;
@@ -290,11 +337,18 @@ function fbpost_content(&$a) {
  */
 function fbpost_plugin_settings(&$a,&$b) {
 
-	$b .= '<div class="settings-block">';
-	$b .= '<h3>' . t('Facebook') . '</h3>';
-	$b .= '<a href="fbpost">' . t('Facebook Post Settings') . '</a><br />';
-	$b .= '</div>';
+	$enabled = get_pconfig(local_user(),'facebook','post');
+	$css = (($enabled) ? '' : '-disabled');
 
+	$result = q("SELECT `installed` FROM `addon` WHERE `name` = 'fbsync' AND `installed`");
+	if(count($result) > 0)
+		$title = t('Facebook Import/Export/Mirror');
+	else
+		$title = t('Facebook Export/Mirror');
+
+	$b .= '<div class="settings-block">';
+	$b .= '<a href="fbpost"><img class="connector'.$css.'" src="images/facebook.png" /><h3 class="connector">'.$title.'</h3></a>';
+	$b .= '</div>';
 }
 
 
@@ -306,21 +360,21 @@ function fbpost_plugin_admin(&$a, &$o){
 
 
 	$o = '<input type="hidden" name="form_security_token" value="' . get_form_security_token("fbsave") . '">';
-	
+
 	$o .= '<h4>' . t('Facebook API Key') . '</h4>';
-	
+
 	$appid  = get_config('facebook', 'appid'  );
 	$appsecret = get_config('facebook', 'appsecret' );
-	
+
 	$ret1 = q("SELECT `v` FROM `config` WHERE `cat` = 'facebook' AND `k` = 'appid' LIMIT 1");
 	$ret2 = q("SELECT `v` FROM `config` WHERE `cat` = 'facebook' AND `k` = 'appsecret' LIMIT 1");
 	if ((count($ret1) > 0 && $ret1[0]['v'] != $appid) || (count($ret2) > 0 && $ret2[0]['v'] != $appsecret)) $o .= t('Error: it appears that you have specified the App-ID and -Secret in your .htconfig.php file. As long as they are specified there, they cannot be set using this form.<br><br>');
-	
+
 	$o .= '<label for="fb_appid">' . t('App-ID / API-Key') . '</label><input id="fb_appid" name="appid" type="text" value="' . escape_tags($appid ? $appid : "") . '"><br style="clear: both;">';
 	$o .= '<label for="fb_appsecret">' . t('Application secret') . '</label><input id="fb_appsecret" name="appsecret" type="text" value="' . escape_tags($appsecret ? $appsecret : "") . '"><br style="clear: both;">';
 
 	$o .= '<input type="submit" name="fb_save_keys" value="' . t('Save') . '">';
-	
+
 }
 
 /**
@@ -329,7 +383,7 @@ function fbpost_plugin_admin(&$a, &$o){
 
 function fbpost_plugin_admin_post(&$a){
 	check_form_security_token_redirectOnErr('/admin/plugins/fbpost', 'fbsave');
-	
+
 	if (x($_REQUEST,'fb_save_keys')) {
 		set_config('facebook', 'appid', $_REQUEST['appid']);
 		set_config('facebook', 'appsecret', $_REQUEST['appsecret']);
@@ -357,32 +411,6 @@ function fbpost_jot_nets(&$a,&$b) {
 	}
 }
 
-function fbpost_ShareAttributes($match) {
-
-        $attributes = $match[1];
-
-        $author = "";
-        preg_match("/author='(.*?)'/ism", $attributes, $matches);
-        if ($matches[1] != "")
-                $author = $matches[1];
-
-        preg_match('/author="(.*?)"/ism', $attributes, $matches);
-        if ($matches[1] != "")
-                $author = $matches[1];
-
-        $headline = '<div class="shared_header">';
-
-        $headline .= sprintf(t('%s:'), $author);
-
-        $headline .= "</div>";
-
-	//$text = "<br />".$headline."</strong><blockquote>".$match[2]."</blockquote>";
-	$text = "\n\t".$match[2].":\t";
-
-        return($text);
-}
-
-
 /**
  * @param App $a
  * @param object $b
@@ -390,17 +418,18 @@ function fbpost_ShareAttributes($match) {
  */
 function fbpost_post_hook(&$a,&$b) {
 
+	logger('fbpost_post_hook: Facebook post invoked', LOGGER_DEBUG);
 
 	if($b['deleted'] || ($b['created'] !== $b['edited']))
 		return;
 
-	// Don't transmit answers (have to be cleaned up in the following code)
-	if($b['parent'] != $b['id'])
-		return;
+	logger('fbpost_post_hook: Facebook post first check successful', LOGGER_DEBUG);
 
 	// if post comes from facebook don't send it back
-	if($b['app'] == "Facebook")
+	if(($b['app'] == "Facebook") AND ($b['verb'] != ACTIVITY_LIKE))
 		return;
+
+	logger('fbpost_post_hook: Facebook post accepted', LOGGER_DEBUG);
 
 	/**
 	 * Post to Facebook stream
@@ -409,7 +438,6 @@ function fbpost_post_hook(&$a,&$b) {
 	require_once('include/group.php');
 	require_once('include/html2plain.php');
 
-	logger('Facebook post');
 
 	$reply = false;
 	$likes = false;
@@ -422,14 +450,21 @@ function fbpost_post_hook(&$a,&$b) {
 
 	$linking = ((get_pconfig($b['uid'],'facebook','no_linking')) ? 0 : 1);
 
-	if((! $toplevel) && ($linking)) {
+	if((!$toplevel) && ($linking)) {
 		$r = q("SELECT * FROM `item` WHERE `id` = %d AND `uid` = %d LIMIT 1",
 			intval($b['parent']),
 			intval($b['uid'])
 		);
+		//$r = q("SELECT * FROM `item` WHERE `uri` = '%s' AND `uid` = %d LIMIT 1",
+		//	dbesc($b['parent-uri']),
+		//	intval($b['uid'])
+		//);
+
+		// is it a reply to a facebook post?
+		// A reply to a toplevel post is only allowed for "real" facebook posts
 		if(count($r) && substr($r[0]['uri'],0,4) === 'fb::')
 			$reply = substr($r[0]['uri'],4);
-		elseif(count($r) && substr($r[0]['extid'],0,4) === 'fb::')
+		elseif(count($r) && (substr($r[0]['extid'],0,4) === 'fb::') AND ($r[0]['id'] != $r[0]['parent']))
 			$reply = substr($r[0]['extid'],4);
 		else
 			return;
@@ -446,7 +481,7 @@ function fbpost_post_hook(&$a,&$b) {
 			return;
 
 
-		logger('facebook reply id=' . $reply);
+		logger('fbpost_post_hook: facebook reply id=' . $reply);
 	}
 
 	if(strstr($b['postopts'],'facebook') || ($b['private']) || ($reply)) {
@@ -462,7 +497,8 @@ function fbpost_post_hook(&$a,&$b) {
 
 			$allow_str = dbesc(implode(', ',$recipients));
 			if($allow_str) {
-				$r = q("SELECT `notify` FROM `contact` WHERE `id` IN ( $allow_str ) AND `network` = 'face'"); 
+				logger("fbpost_post_hook: private post to: ".$allow_str, LOGGER_DEBUG);
+				$r = q("SELECT `notify` FROM `contact` WHERE `id` IN ( $allow_str ) AND `network` = 'face'");
 				if(count($r))
 					foreach($r as $rr)
 						$allow_arr[] = $rr['notify'];
@@ -470,7 +506,7 @@ function fbpost_post_hook(&$a,&$b) {
 
 			$deny_str = dbesc(implode(', ',$deny));
 			if($deny_str) {
-				$r = q("SELECT `notify` FROM `contact` WHERE `id` IN ( $deny_str ) AND `network` = 'face'"); 
+				$r = q("SELECT `notify` FROM `contact` WHERE `id` IN ( $deny_str ) AND `network` = 'face'");
 				if(count($r))
 					foreach($r as $rr)
 						$deny_arr[] = $rr['notify'];
@@ -495,8 +531,10 @@ function fbpost_post_hook(&$a,&$b) {
 				return;
 		}
 
-		if($b['verb'] == ACTIVITY_LIKE)
+		if($b['verb'] == ACTIVITY_LIKE) {
 			$likes = true;
+			logger('fbpost_post_hook: liking '.print_r($b, true), LOGGER_DEBUG);
+		}
 
 
 		$appid  = get_config('facebook', 'appid'  );
@@ -504,7 +542,7 @@ function fbpost_post_hook(&$a,&$b) {
 
 		if($appid && $secret) {
 
-			logger('facebook: have appid+secret');
+			logger('fbpost_post_hook: have appid+secret');
 
 			$fb_token  = get_pconfig($b['uid'],'facebook','access_token');
 
@@ -514,145 +552,47 @@ function fbpost_post_hook(&$a,&$b) {
 			// or it's a reply or likes action to an existing facebook post
 
 			if($fb_token && ($toplevel || $b['private'] || $reply)) {
-				logger('facebook: able to post');
+				logger('fbpost_post_hook: able to post');
 				require_once('library/facebook.php');
 				require_once('include/bbcode.php');
 
 				$msg = $b['body'];
 
-				logger('Facebook post: original msg=' . $msg, LOGGER_DATA);
+				logger('fbpost_post_hook: original msg=' . $msg, LOGGER_DATA);
 
-				// make links readable before we strip the code
+				if ($toplevel) {
+					require_once("include/plaintext.php");
+					$msgarr = plaintext($a, $b, 0, false);
+					$msg = $msgarr["text"];
+					$link = $msgarr["url"];
+					$image = $msgarr["image"];
+					$linkname = $msgarr["title"];
 
-				// unless it's a dislike - just send the text as a comment
+					// Fallback - if message is empty
+					if(!strlen($msg))
+						$msg = $linkname;
 
-				// if($b['verb'] == ACTIVITY_DISLIKE)
-				//	$msg = trim(strip_tags(bbcode($msg)));
+					if(!strlen($msg))
+						$msg = $link;
 
-				// Looking for the first image
-				$image = '';
-				if(preg_match("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/is",$b['body'],$matches))
-					$image = $matches[3];
-
-				if ($image == '')
-					if(preg_match("/\[img\](.*?)\[\/img\]/is",$b['body'],$matches))
-						$image = $matches[1];
-
-				// When saved into the database the content is sent through htmlspecialchars
-				// That means that we have to decode all image-urls
-				$image = htmlspecialchars_decode($image);
-
-				// Checking for a bookmark element
-				$body = $b['body'];
-				if (strpos($body, "[bookmark") !== false) {
-					// splitting the text in two parts:
-					// before and after the bookmark
-					$pos = strpos($body, "[bookmark");
-					$body1 = substr($body, 0, $pos);
-					$body2 = substr($body, $pos);
-
-					// Removing the bookmark and all quotes after the bookmark
-					// they are mostly only the content after the bookmark.
-					$body2 = preg_replace("/\[bookmark\=([^\]]*)\](.*?)\[\/bookmark\]/ism",'',$body2);
-					$body2 = preg_replace("/\[quote\=([^\]]*)\](.*?)\[\/quote\]/ism",'',$body2);
-					$body2 = preg_replace("/\[quote\](.*?)\[\/quote\]/ism",'',$body2);
-
-					$body = $body1.$body2;
+					if(!strlen($msg))
+						$msg = $image;
+				} else {
+					require_once("include/bbcode.php");
+					require_once("include/html2plain.php");
+					$msg = bb_CleanPictureLinks($msg);
+					$msg = bbcode($msg, false, false, 2, true);
+					$msg = trim(html2plain($msg, 0));
+					$link = "";
+					$image = "";
+					$linkname = "";
 				}
-
-				// Convert recycle signs
-				$body = str_replace("\t", " ", $body);
-				// recycle 1
-				$recycle = html_entity_decode("&#x2672; ", ENT_QUOTES, 'UTF-8');
-				$body = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', "\n\t$2:\t", $body);
-				// recycle 2 (Test)
-				$recycle = html_entity_decode("&#x25CC; ", ENT_QUOTES, 'UTF-8');
-				$body = preg_replace( '/'.$recycle.'\[url\=(\w+.*?)\](\w+.*?)\[\/url\]/i', "\n\t$2:\t", $body);
-
-				// share element
-				//$body = preg_replace_callback("/\[share(.*?)\]\s?(.*?)\s?\[\/share\]/ism","fbpost_ShareAttributes", $body);
-
-				//$bodyparts = explode("\t", $body);
-				// Doesn't help with multiple repeats - the problem has to be solved later
-				//if (sizeof($bodyparts) == 3) {
-				//	$html = bbcode($bodyparts[2], false, false);
-				//	$test = trim(html2plain($html, 0, true));
-
-				//	if (trim($bodyparts[0]) == "")
-				//		$body = trim($bodyparts[2]);
-				//	else if (trim($test) == "")
-				//		$body = trim($bodyparts[0]);
-				//	else
-				//		$body = trim($bodyparts[0])."\n\n".trim($bodyparts[1])."[quote]".trim($bodyparts[2])."[/quote]";
-				//} else
-					$body = str_replace("\t", "", $body);
-
-				// At first convert the text to html
-				$html = bbcode($body, false, false, 2);
-
-				// Then convert it to plain text
-				$msg = trim($b['title']." \n\n".html2plain($html, 0, true));
-
-				// Removing useless spaces
-				if (substr($msg, -2) == "«")
-					$msg = trim(substr($msg, 0, -2))."«";
-
-				$msg = html_entity_decode($msg,ENT_QUOTES,'UTF-8');
-
-				// Removing multiple newlines
-				while (strpos($msg, "\n\n\n") !== false)
-					$msg = str_replace("\n\n\n", "\n\n", $msg);
-
-				// add any attachments as text urls
-				$arr = explode(',',$b['attach']);
-
-				if(count($arr)) {
-					$msg .= "\n";
-        				foreach($arr as $r) {
-            					$matches = false;
-						$cnt = preg_match('|\[attach\]href=\"(.*?)\" size=\"(.*?)\" type=\"(.*?)\" title=\"(.*?)\"\[\/attach\]|',$r,$matches);
-						if($cnt) {
-							$msg .= "\n".$matches[1];
-						}
-					}
-				}
-
-				$link = '';
-				$linkname = '';
-				// look for bookmark-bbcode and handle it with priority
-				if(preg_match("/\[bookmark\=([^\]]*)\](.*?)\[\/bookmark\]/is",$b['body'],$matches)) {
-					$link = $matches[1];
-					$linkname = $matches[2];
-				}
-
-				// If there is no bookmark element then take the first link
-				if ($link == '') {
-					$links = collecturls($html);
-					if (sizeof($links) > 0) {
-						reset($links);
-						$link = current($links);
-					}
-				}
-
-				// Remove trailing and leading spaces
-				$msg = trim($msg);
-
-
-				// Fallback - if message is empty
-				if(!strlen($msg))
-					$msg = $linkname;
-
-				if(!strlen($msg))
-					$msg = $link;
-
-				if(!strlen($msg))
-					$msg = $image;
 
 				// If there is nothing to post then exit
 				if(!strlen($msg))
 					return;
 
-				logger('Facebook post: msg=' . $msg, LOGGER_DATA);
+				logger('fbpost_post_hook: msg=' . $msg, LOGGER_DATA);
 
 				$video = "";
 
@@ -660,11 +600,11 @@ function fbpost_post_hook(&$a,&$b) {
 					$postvars = array('access_token' => $fb_token);
 				} else {
 					// message, picture, link, name, caption, description, source, place, tags
-					if(trim($link) != "")
-						if (@exif_imagetype($link) != 0) {
-							$image = $link;
-							$link = "";
-						}
+					//if(trim($link) != "")
+					//	if (@exif_imagetype($link) != 0) {
+					//		$image = $link;
+					//		$link = "";
+					//	}
 
 					$postvars = array(
 						'access_token' => $fb_token,
@@ -726,11 +666,13 @@ function fbpost_post_hook(&$a,&$b) {
 						$postvars['message'] = $msg;
 
 					$url = 'https://graph.facebook.com/'.$target.'/photos';
-				} else if (($link != "") or ($image != "") or ($b['title'] == '') or (strlen($msg) < 500)) {
+				//} else if (($link != "") or ($image != "") or ($b['title'] == '') or (strlen($msg) < 500)) {
+				} else {
 					$url = 'https://graph.facebook.com/'.$target.'/feed';
 					if (!get_pconfig($b['uid'],'facebook','suppress_view_on_friendica') and $b['plink'])
 						$postvars['actions'] = '{"name": "' . t('View on Friendica') . '", "link": "' .  $b['plink'] . '"}';
-				} else {
+				}
+/*				} else {
 					// if its only a message and a subject and the message is larger than 500 characters then post it as note
 					$postvars = array(
 						'access_token' => $fb_token,
@@ -738,45 +680,56 @@ function fbpost_post_hook(&$a,&$b) {
 						'subject' => $b['title'],
 					);
 					$url = 'https://graph.facebook.com/'.$target.'/notes';
-				}
+				} */
 
 				// Post to page?
 				if (!$reply and ($target != "me") and $page_access_token)
 					$postvars['access_token'] = $page_access_token;
 
-				logger('facebook: post to ' . $url);
-				logger('facebook: postvars: ' . print_r($postvars,true));
+				logger('fbpost_post_hook: post to ' . $url);
+				logger('fbpost_post_hook: postvars: ' . print_r($postvars,true));
 
 				// "test_mode" prevents anything from actually being posted.
 				// Otherwise, let's do it.
 
-				if(! get_config('facebook','test_mode')) {
+				if(!get_config('facebook','test_mode')) {
 					$x = post_url($url, $postvars);
-					logger('Facebook post returns: ' . $x, LOGGER_DEBUG);
+					logger('fbpost_post_hook: post returns: ' . $x, LOGGER_DEBUG);
 
 					$retj = json_decode($x);
 					if($retj->id) {
-						q("UPDATE `item` SET `extid` = '%s' WHERE `id` = %d LIMIT 1",
+						// Only set the extid when it isn't the toplevel post
+						q("UPDATE `item` SET `extid` = '%s' WHERE `id` = %d AND `parent` != %d",
 							dbesc('fb::' . $retj->id),
+							intval($b['id']),
 							intval($b['id'])
 						);
-					}
-					else {
-						if(! $likes) {
+					} else {
+						// Sometimes posts are accepted from facebook although it telling an error
+						// This leads to endless comment flooding.
+
+						// If it is a special kind of failure the post was receiced
+						// Although facebook said it wasn't received ...
+						if (!$likes AND (($retj->error->type != "OAuthException") OR ($retj->error->code != 2)) AND ($x <> "")) {
+							$r = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self`", intval($b['uid']));
+							if (count($r))
+								$a->contact = $r[0]["id"];
+
 							$s = serialize(array('url' => $url, 'item' => $b['id'], 'post' => $postvars));
 							require_once('include/queue_fn.php');
 							add_to_queue($a->contact,NETWORK_FACEBOOK,$s);
+							logger('fbpost_post_hook: Post failed, requeued.', LOGGER_DEBUG);
 							notice( t('Facebook post failed. Queued for retry.') . EOL);
 						}
 
 						if (isset($retj->error) && $retj->error->type == "OAuthException" && $retj->error->code == 190) {
-							logger('Facebook session has expired due to changed password.', LOGGER_DEBUG);
+							logger('fbpost_post_hook: Facebook session has expired due to changed password.', LOGGER_DEBUG);
 
 							$last_notification = get_pconfig($b['uid'], 'facebook', 'session_expired_mailsent');
 							if (!$last_notification || $last_notification < (time() - FACEBOOK_SESSION_ERR_NOTIFICATION_INTERVAL)) {
 								require_once('include/enotify.php');
 
-								$r = q("SELECT * FROM `user` WHERE `uid` = %d LIMIT 1", intval($b['uid']) );
+								$r = q("SELECT * FROM `user` WHERE `uid` = %d LIMIT 1", intval($b['uid']));
 								notification(array(
 									'uid' => $b['uid'],
 									'type' => NOTIFY_SYSTEM,
@@ -790,7 +743,7 @@ function fbpost_post_hook(&$a,&$b) {
 								));
 
 								set_pconfig($b['uid'], 'facebook', 'session_expired_mailsent', time());
-							} else logger('Facebook: No notification, as the last one was sent on ' . $last_notification, LOGGER_DEBUG);
+							} else logger('fbpost_post_hook: No notification, as the last one was sent on ' . $last_notification, LOGGER_DEBUG);
 						}
 					}
 				}
@@ -805,10 +758,10 @@ function fbpost_post_hook(&$a,&$b) {
  */
 function fbpost_enotify(&$app, &$data) {
 	if (x($data, 'params') && $data['params']['type'] == NOTIFY_SYSTEM && x($data['params'], 'system_type') && $data['params']['system_type'] == 'facebook_connection_invalid') {
-		$data['itemlink'] = '/facebook';
+		$data['itemlink'] = '/fbpost';
 		$data['epreamble'] = $data['preamble'] = t('Your Facebook connection became invalid. Please Re-authenticate.');
 		$data['subject'] = t('Facebook connection became invalid');
-		$data['body'] = sprintf( t("Hi %1\$s,\n\nThe connection between your accounts on %2\$s and Facebook became invalid. This usually happens after you change your Facebook-password. To enable the connection again, you have to %3\$sre-authenticate the Facebook-connector%4\$s."), $data['params']['to_name'], "[url=" . $app->config["system"]["url"] . "]" . $app->config["sitename"] . "[/url]", "[url=" . $app->config["system"]["url"] . "/facebook]", "[/url]");
+		$data['body'] = sprintf( t("Hi %1\$s,\n\nThe connection between your accounts on %2\$s and Facebook became invalid. This usually happens after you change your Facebook-password. To enable the connection again, you have to %3\$sre-authenticate the Facebook-connector%4\$s."), $data['params']['to_name'], "[url=" . $app->config["system"]["url"] . "]" . $app->config["sitename"] . "[/url]", "[url=" . $app->config["system"]["url"] . "/fbpost]", "[/url]");
 	}
 }
 
@@ -864,14 +817,17 @@ function fbpost_queue_hook(&$a,&$b) {
 		if($x['network'] !== NETWORK_FACEBOOK)
 			continue;
 
-		logger('facebook_queue: run');
+		logger('fbpost_queue_hook: run');
 
 		$r = q("SELECT `user`.* FROM `user` LEFT JOIN `contact` on `contact`.`uid` = `user`.`uid` 
 			WHERE `contact`.`self` = 1 AND `contact`.`id` = %d LIMIT 1",
 			intval($x['cid'])
 		);
-		if(! count($r))
+		if(! count($r)) {
+			logger('fbpost_queue_hook: no user found for entry '.print_r($x, true));
+			update_queue_time($x['id']);
 			continue;
+		}
 
 		$user = $r[0];
 
@@ -883,7 +839,7 @@ function fbpost_queue_hook(&$a,&$b) {
 			$fb_token  = get_pconfig($user['uid'],'facebook','access_token');
 
 			if($fb_post && $fb_token) {
-				logger('facebook_queue: able to post');
+				logger('fbpost_queue_hook: able to post');
 				require_once('library/facebook.php');
 
 				$z = unserialize($x['content']);
@@ -892,18 +848,32 @@ function fbpost_queue_hook(&$a,&$b) {
 
 				$retj = json_decode($j);
 				if($retj->id) {
-					q("UPDATE `item` SET `extid` = '%s' WHERE `id` = %d LIMIT 1",
+					// Only set the extid when it isn't the toplevel post
+					q("UPDATE `item` SET `extid` = '%s' WHERE `id` = %d AND `parent` != %d",
 						dbesc('fb::' . $retj->id),
+						intval($item),
 						intval($item)
 					);
-					logger('facebook_queue: success: ' . $j); 
+					logger('fbpost_queue_hook: success: ' . $j);
 					remove_queue_item($x['id']);
+				} else {
+					logger('fbpost_queue_hook: failed: ' . $j);
+
+					// If it is a special kind of failure the post was receiced
+					// Although facebook said it wasn't received ...
+					$ret = json_decode($j);
+					if (($ret->error->type != "OAuthException") OR ($ret->error->code != 2) AND ($j <> ""))
+						update_queue_time($x['id']);
+					else
+						logger('fbpost_queue_hook: Not requeued, since it seems to be received');
 				}
-				else {
-					logger('facebook_queue: failed: ' . $j);
-					update_queue_time($x['id']);
-				}
+			} else {
+				logger('fbpost_queue_hook: No fb_post or fb_token.');
+				update_queue_time($x['id']);
 			}
+		} else {
+			logger('fbpost_queue_hook: No appid or secret.');
+			update_queue_time($x['id']);
 		}
 	}
 }
@@ -932,7 +902,7 @@ function fbpost_get_app_access_token() {
 		logger('fb_get_app_access_token: returned access token: ' . $x, LOGGER_DATA);
 
 		$token = str_replace('access_token=', '', $x);
- 		if(strpos($token,'&') !== false)
+		if(strpos($token,'&') !== false)
 			$token = substr($token,0,strpos($token,'&'));
 
 		if ($token == "") {
@@ -977,6 +947,9 @@ function fbpost_cron($a,$b) {
 }
 
 function fbpost_fetchwall($a, $uid) {
+	require_once("include/oembed.php");
+	require_once('mod/item.php');
+
 	$access_token = get_pconfig($uid,'facebook','access_token');
 	$post_to_page = get_pconfig($uid,'facebook','post_to_page');
 	$lastcreated = get_pconfig($uid,'facebook','last_created');
@@ -1015,6 +988,9 @@ function fbpost_fetchwall($a, $uid) {
 		if (($post_to_page != $item->from->id) AND ((int)$post_to_page != 0))
 			continue;
 
+		if (!strstr($item->id, $item->from->id."_") AND isset($item->to) AND ((int)$post_to_page == 0))
+			continue;
+
 		$_SESSION["authenticated"] = true;
 		$_SESSION["uid"] = $uid;
 
@@ -1028,24 +1004,15 @@ function fbpost_fetchwall($a, $uid) {
 
 		$_REQUEST["body"] = (isset($item->message) ? escape_tags($item->message) : '');
 
-		if(isset($item->name) and isset($item->link))
-			$_REQUEST["body"] .= "\n\n[bookmark=".$item->link."]".$item->name."[/bookmark]";
-		elseif (isset($item->name))
-			$_REQUEST["body"] .= "\n\n[b]" . $item->name."[/b]";
+		$content = "";
+		$type = "";
 
-		/*if(isset($item->caption)) {
-			if(!isset($item->name) and isset($item->link))
-				$_REQUEST["body"] .= "\n\n[bookmark=".$item->link."]".$item->caption."[/bookmark]";
-			//else
-			//	$_REQUEST["body"] .= "[i]" . $item->caption."[/i]\n";
-			}
-
-			if(!isset($item->caption) and !isset($item->name)) {
-				if (isset($item->link))
-					$_REQUEST["body"] .= "\n[url]".$item->link."[/url]\n";
-				else
-					$_REQUEST["body"] .= "\n";
-		}*/
+		if(isset($item->name) and isset($item->link)) {
+			$oembed_data = oembed_fetch_url($item->link);
+			$type = $oembed_data->type;
+			$content = "[bookmark=".$item->link."]".$item->name."[/bookmark]";
+		} elseif (isset($item->name))
+			$content .= "[b]".$item->name."[/b]";
 
 		$quote = "";
 		if(isset($item->description) and ($item->type != "photo"))
@@ -1054,38 +1021,44 @@ function fbpost_fetchwall($a, $uid) {
 		if(isset($item->caption) and ($item->type == "photo"))
 			$quote = $item->caption;
 
-		//if (isset($item->properties))
-		//	foreach ($item->properties as $property)
-		//		$quote .= "\n".$property->name.": [url=".$property->href."]".$property->text."[/url]";
+		// Only import the picture when the message is no video
+		// oembed display a picture of the video as well
+		//if ($item->type != "video") {
+		//if (($item->type != "video") and ($item->type != "photo")) {
+		if (($type == "") OR ($type == "link")) {
+
+			$type = $item->type;
+
+			if(isset($item->picture) && isset($item->link))
+				$content .= "\n".'[url='.$item->link.'][img]'.fpost_cleanpicture($item->picture).'[/img][/url]';
+			else {
+				if (isset($item->picture))
+					$content .= "\n".'[img]'.fpost_cleanpicture($item->picture).'[/img]';
+				// if just a link, it may be a wall photo - check
+				if(isset($item->link))
+					$content .= fbpost_get_photo($uid,$item->link);
+			}
+		}
+
+		if(trim($_REQUEST["body"].$content.$quote) == '') {
+			logger('facebook: empty body '.$item->id.' '.print_r($item, true));
+			continue;
+		}
+
+		if ($content)
+			$_REQUEST["body"] .= "\n";
+
+		if ($type)
+			$_REQUEST["body"] .= "[class=type-".$type."]";
+
+		if ($content)
+			$_REQUEST["body"] .= trim($content);
 
 		if ($quote)
 			$_REQUEST["body"] .= "\n[quote]".$quote."[/quote]";
 
-		// Only import the picture when the message is no video
-		// oembed display a picture of the video as well
-		if ($item->type != "video") {
-		//if (($item->type != "video") and ($item->type != "photo")) {
-			if(isset($item->picture) && isset($item->link))
-				$_REQUEST["body"] .= "\n".'[url='.$item->link.'][img]'.fpost_cleanpicture($item->picture).'[/img][/url]';
-			else {
-				if (isset($item->picture))
-					$_REQUEST["body"] .= "\n".'[img]'.fpost_cleanpicture($item->picture).'[/img]';
-				// if just a link, it may be a wall photo - check
-				if(isset($item->link))
-					$_REQUEST["body"] .= fbpost_get_photo($uid,$item->link);
-			}
-		}
-
-		/*if (($datarray['app'] == "Events") and isset($item->actions))
-			foreach ($item->actions as $action)
-				if ($action->name == "View")
-					$_REQUEST["body"] .= " [url=".$action->link."]".$item->story."[/url]";
-		*/
-
-		if(trim($_REQUEST["body"]) == '') {
-			logger('facebook: empty body '.$item->id.' '.print_r($item, true));
-			continue;
-		}
+		if ($type)
+			$_REQUEST["body"] .= "[/class]";
 
 		$_REQUEST["body"] = trim($_REQUEST["body"]);
 
@@ -1111,8 +1084,6 @@ function fbpost_fetchwall($a, $uid) {
 
 		//print_r($_REQUEST);
 		logger('facebook: posting for user '.$uid);
-
-		require_once('mod/item.php');
 		item_post($a);
 	}
 
@@ -1140,7 +1111,7 @@ function fbpost_get_photo($uid,$link) {
 
 function fpost_cleanpicture($image) {
 
-	if (strpos($image, ".fbcdn.net/") and (substr($image, -6) == "_s.jpg"))
+	if ((strpos($image, ".fbcdn.net/") OR strpos($image, "/fbcdn-photos-")) and (substr($image, -6) == "_s.jpg"))
 		$image = substr($image, 0, -6)."_n.jpg";
 
 	$queryvar = fbpost_parse_query($image);

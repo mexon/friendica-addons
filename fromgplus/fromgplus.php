@@ -10,15 +10,19 @@
 define('FROMGPLUS_DEFAULT_POLL_INTERVAL', 30); // given in minutes
 
 function fromgplus_install() {
-	register_hook('plugin_settings', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings');
-	register_hook('plugin_settings_post', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings_post');
+	register_hook('connector_settings', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings');
+	register_hook('connector_settings_post', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings_post');
 	register_hook('cron', 'addon/fromgplus/fromgplus.php', 'fromgplus_cron');
 }
 
 function fromgplus_uninstall() {
+	unregister_hook('connector_settings', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings');
+	unregister_hook('connector_settings_post', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings_post');
+	unregister_hook('cron', 'addon/fromgplus/fromgplus.php', 'fromgplus_cron');
+
+	// Old hooks
 	unregister_hook('plugin_settings', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings');
 	unregister_hook('plugin_settings_post', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings_post');
-	unregister_hook('cron', 'addon/fromgplus/fromgplus.php', 'fromgplus_cron');
 }
 
 function fromgplus_addon_settings(&$a,&$s) {
@@ -26,11 +30,22 @@ function fromgplus_addon_settings(&$a,&$s) {
 	if(! local_user())
 		return;
 
+	// If "gpluspost" is installed as well, then the settings are displayed there
+	$result = q("SELECT `installed` FROM `addon` WHERE `name` = 'gpluspost' AND `installed`");
+	if (count($result) > 0)
+		return;
+
 	$enable_checked = (intval(get_pconfig(local_user(),'fromgplus','enable')) ? ' checked="checked"' : '');
 	$account = get_pconfig(local_user(),'fromgplus','account');
 
-	$s .= '<div class="settings-block">';
-	$s .= '<h3>' . t('Google+ Import Settings').'</h3>';
+	$s .= '<span id="settings_fromgplus_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_fromgplus_expanded\'); openClose(\'settings_fromgplus_inflated\');">';
+	$s .= '<img class="connector" src="images/googleplus.png" /><h3 class="connector">'. t('Google+ Mirror').'</h3>';
+	$s .= '</span>';
+	$s .= '<div id="settings_fromgplus_expanded" class="settings-block" style="display: none;">';
+	$s .= '<span class="fakelink" onclick="openClose(\'settings_fromgplus_expanded\'); openClose(\'settings_fromgplus_inflated\');">';
+	$s .= '<img class="connector" src="images/googleplus.png" /><h3 class="connector">'. t('Google+ Mirror').'</h3>';
+	$s .= '</span>';
+
 	$s .= '<div id="fromgplus-wrapper">';
 
 	$s .= '<label id="fromgplus-enable-label" for="fromgplus-enable">'.t('Enable Google+ Import').'</label>';
@@ -41,7 +56,7 @@ function fromgplus_addon_settings(&$a,&$s) {
 	$s .= '</div><div class="clear"></div>';
 
 	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="fromgplus-submit" name="fromgplus-submit" 
-class="settings-submit" value="' . t('Submit') . '" /></div>';
+class="settings-submit" value="' . t('Save Settings') . '" /></div>';
 	$s .= '</div>';
 
 	return;
@@ -56,6 +71,10 @@ function fromgplus_addon_settings_post(&$a,&$b) {
 		set_pconfig(local_user(),'fromgplus','account',trim($_POST['fromgplus-account']));
 		$enable = ((x($_POST,'fromgplus-enable')) ? intval($_POST['fromgplus-enable']) : 0);
 		set_pconfig(local_user(),'fromgplus','enable', $enable);
+
+		if (!$enable)
+			del_pconfig(local_user(),'fromgplus','lastdate');
+
 		info( t('Google+ Import Settings saved.') . EOL);
 	}
 }
@@ -96,6 +115,10 @@ function fromgplus_cron($a,$b) {
 function fromgplus_post($a, $uid, $source, $body, $location) {
 
 	//$uid = 2;
+
+	// Don't know what it is. Maybe some trash from the mobile client
+	$trash = html_entity_decode("&#xFEFF;", ENT_QUOTES, 'UTF-8');
+	$body = str_replace($trash, "", $body);
 
 	$body = trim($body);
 
@@ -218,36 +241,41 @@ function fromgplus_cleanupgoogleproxy($fullImage, $image) {
 	return($cleaned);
 }
 
+function fromgplus_cleantext($text) {
+
+	// Don't know what it is. But it is added to the text.
+	$trash = html_entity_decode("&#xFEFF;", ENT_QUOTES, 'UTF-8');
+
+	$text = strip_tags($text);
+	$text = html_entity_decode($text, ENT_QUOTES);
+	$text = trim($text);
+	$text = str_replace(array("\n", "\r", " ", $trash), array("", "", "", ""), $text);
+	return($text);
+}
+
 function fromgplus_handleattachments($item, $displaytext) {
 	$post = "";
 	$quote = "";
+	$type = "";
 
 	foreach ($item->object->attachments as $attachment) {
 		switch($attachment->objectType) {
 			case "video":
-				$post .= "\n\n[bookmark=".$attachment->url."]".fromgplus_html2bbcode($attachment->displayName)."[/bookmark]\n";
-
-				/*$images = cleanupgoogleproxy($attachment->fullImage, $attachment->image);
-				if ($images["preview"] != "")
-					$post .= "\n[url=".$images["full"]."][img]".$images["preview"]."[/img][/url]\n";
-				elseif ($images["full"] != "")
-					$post .= "\n[img]".$images["full"]."[/img]\n";*/
-
+				$post .= "\n[class=type-video][bookmark=".$attachment->url."]".fromgplus_html2bbcode($attachment->displayName)."[/bookmark]\n[/class]";
 				break;
 
 			case "article":
-				$post .= "\n\n[bookmark=".$attachment->url."]".fromgplus_html2bbcode($attachment->displayName)."[/bookmark]\n";
+				$post .= "\n[class=type-link][bookmark=".$attachment->url."]".fromgplus_html2bbcode($attachment->displayName)."[/bookmark]\n";
 
 				$images = fromgplus_cleanupgoogleproxy($attachment->fullImage, $attachment->image);
-				if ($images["preview"] != "")
-					$post .= "\n[url=".$images["full"]."][img]".$images["preview"]."[/img][/url]\n";
-				elseif ($images["full"] != "")
-					$post .= "\n[img]".$images["full"]."[/img]\n";
+				if ($images["full"] != "")
+					$post .= "\n[img]".$images["full"]."[/img]";
 
-				//$post .= "[quote]".trim(fromgplus_html2bbcode($attachment->content))."[/quote]";
 				$quote = trim(fromgplus_html2bbcode($attachment->content));
 				if ($quote != "")
 					$quote = "\n[quote]".$quote."[/quote]";
+
+				$quote .= "[/class]";
 				break;
 
 			case "photo":
@@ -257,7 +285,7 @@ function fromgplus_handleattachments($item, $displaytext) {
 				elseif ($images["full"] != "")
 					$post .= "\n[img]".$images["full"]."[/img]\n";
 
-				if (($attachment->displayName != "") AND ($attachment->displayName != $displaytext))
+				if (($attachment->displayName != "") AND (fromgplus_cleantext($attachment->displayName) != fromgplus_cleantext($displaytext)))
 					$post .= fromgplus_html2bbcode($attachment->displayName)."\n";
 				break;
 
@@ -273,13 +301,23 @@ function fromgplus_handleattachments($item, $displaytext) {
 				break;
 
 			case "album":
-				foreach($attachment->thumbnails as $thumb) {
-					$preview = "/w".$thumb->image->width."-h".$thumb->image->height."/";
-					$preview2 = "/w".$thumb->image->width."-h".$thumb->image->height."-p/";
-					$image = str_replace(array($preview, $preview2), array("/", "/"), $thumb->image->url);
+				$post .= "\n[class=type-link][bookmark=".$attachment->url."]".fromgplus_html2bbcode($attachment->displayName)."[/bookmark]";
 
-					$post .= "\n[url=".$thumb->url."][img]".$image."[/img][/url]\n";
-				}
+				$thumb = $attachment->thumbnails[0];
+				$post .= "\n[img]".$thumb->image->url."[/img]";
+
+				$quote = trim(fromgplus_html2bbcode($thumb->description));
+				if ($quote != "")
+					$quote = "\n[quote]".$quote."[/quote]";
+
+				//foreach($attachment->thumbnails as $thumb) {
+				//	$preview = "/w".$thumb->image->width."-h".$thumb->image->height."/";
+				//	$preview2 = "/w".$thumb->image->width."-h".$thumb->image->height."-p/";
+				//	$image = str_replace(array($preview, $preview2), array("/", "/"), $thumb->image->url);
+
+				//	$post .= "\n[url=".$thumb->url."][img]".$image."[/img][/url]\n";
+				//}
+				$quote .= "[/class]";
 				break;
 			case "audio":
 				$post .= "\n\n[bookmark=".$attachment->url."]".fromgplus_html2bbcode($attachment->displayName)."[/bookmark]\n";
@@ -294,16 +332,22 @@ function fromgplus_handleattachments($item, $displaytext) {
 function fromgplus_fetch($a, $uid) {
 	$maxfetch = 20;
 
+	// Special blank to identify postings from the googleplus connector
+	$blank = html_entity_decode("&#x00A0;", ENT_QUOTES, 'UTF-8');
+
 	$account = get_pconfig($uid,'fromgplus','account');
 	$key = get_config('fromgplus','key');
 
 	$result = fetch_url("https://www.googleapis.com/plus/v1/people/".$account."/activities/public?alt=json&pp=1&key=".$key."&maxResults=".$maxfetch);
 	//$result = file_get_contents("google.txt");
+	//$result = file_get_contents("addon/fromgplus/album.txt");
 	//file_put_contents("google.txt", $result);
 
 	$activities = json_decode($result);
 
 	$initiallastdate = get_pconfig($uid,'fromgplus','lastdate');
+
+	$first_time = ($initiallastdate == "");
 
 	$lastdate = 0;
 
@@ -319,7 +363,19 @@ function fromgplus_fetch($a, $uid) {
 		if ($lastdate < strtotime($item->published))
 			$lastdate = strtotime($item->published);
 
+		if ($first_time)
+			continue;
+
 		if ($item->access->description == "Public")
+
+			// Loop prevention - ignore postings from HootSuite
+			if ($item->provider->title == "HootSuite")
+				continue;
+
+			// Loop prevention through the special blank from the googleplus connector
+			if (strstr($item->object->content, $blank))
+				continue;
+
 			switch($item->object->objectType) {
 				case "note":
 					$post = fromgplus_html2bbcode($item->object->content);
@@ -333,9 +389,7 @@ function fromgplus_fetch($a, $uid) {
 					else
 						$location = "";
 
-					// Loop prevention - should be made better
-					if ($item->provider->title != "HootSuite")
-						fromgplus_post($a, $uid, "Google+", $post, $location);
+					fromgplus_post($a, $uid, "Google+", $post, $location);
 					//fromgplus_post($a, $uid, $item->provider->title, $post, $location);
 
 					break;
@@ -343,7 +397,7 @@ function fromgplus_fetch($a, $uid) {
 				case "activity":
 					$post = fromgplus_html2bbcode($item->annotation)."\n";
 
-					if (intval(get_config('system','new_share'))) {
+					if (!intval(get_config('system','old_share'))) {
 						$post .= "[share author='".str_replace("'", "&#039;",$item->object->actor->displayName).
 								"' profile='".$item->object->actor->url.
 								"' avatar='".$item->object->actor->image->url.
@@ -369,9 +423,7 @@ function fromgplus_fetch($a, $uid) {
 					else
 						$location = "";
 
-					// Loop prevention - should be made better
-					if ($item->provider->title != "HootSuite")
-						fromgplus_post($a, $uid, "Google+", $post, $location);
+					fromgplus_post($a, $uid, "Google+", $post, $location);
 					//fromgplus_post($a, $uid, $item->provider->title, $post, $location);
 					break;
 			}

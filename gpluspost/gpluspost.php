@@ -13,6 +13,7 @@ function gpluspost_install() {
 	register_hook('jot_networks',         'addon/gpluspost/gpluspost.php', 'gpluspost_jot_nets');
 	register_hook('connector_settings',      'addon/gpluspost/gpluspost.php', 'gpluspost_settings');
 	register_hook('connector_settings_post', 'addon/gpluspost/gpluspost.php', 'gpluspost_settings_post');
+	register_hook('queue_predeliver', 'addon/gpluspost/gpluspost.php', 'gpluspost_queue_hook');
 }
 
 
@@ -22,6 +23,7 @@ function gpluspost_uninstall() {
 	unregister_hook('jot_networks',     'addon/gpluspost/gpluspost.php', 'gpluspost_jot_nets');
 	unregister_hook('connector_settings',      'addon/gpluspost/gpluspost.php', 'gpluspost_settings');
 	unregister_hook('connector_settings_post', 'addon/gpluspost/gpluspost.php', 'gpluspost_settings_post');
+	unregister_hook('queue_predeliver', 'addon/gpluspost/gpluspost.php', 'gpluspost_queue_hook');
 }
 
 function gpluspost_jot_nets(&$a,&$b) {
@@ -37,13 +39,26 @@ function gpluspost_jot_nets(&$a,&$b) {
     }
 }
 
+function gpluspost_nextscripts() {
+	$a = get_app();
+	return file_exists($a->get_basepath()."/addon/gpluspost/postToGooglePlus.php");
+}
+
 function gpluspost_settings(&$a,&$s) {
 
 	if(! local_user())
 		return;
 
+	$result = q("SELECT `installed` FROM `addon` WHERE `name` = 'fromgplus' AND `installed`");
+	$fromgplus_enabled = count($result) > 0;
+
+	/* Add our stylesheet to the page so we can make our settings look nice */
+
+	$a->page['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . $a->get_baseurl() . '/addon/gpluspost/gpluspost.css' . '" media="all" />' . "\r\n";
+
 	$enabled = get_pconfig(local_user(),'gpluspost','post');
 	$checked = (($enabled) ? ' checked="checked" ' : '');
+	$css = (($enabled) ? '' : '-disabled');
 
 	$def_enabled = get_pconfig(local_user(),'gpluspost','post_by_default');
 	$def_checked = (($def_enabled) ? ' checked="checked" ' : '');
@@ -54,12 +69,56 @@ function gpluspost_settings(&$a,&$s) {
 	$skip_enabled = get_pconfig(local_user(),'gpluspost','skip_without_link');
 	$skip_checked = (($skip_enabled) ? ' checked="checked" ' : '');
 
-	$s .= '<div class="settings-block">';
-	$s .= '<h3>' . t('Google+ Post Settings') . '</h3>';
+	$mirror_enable_checked = (intval(get_pconfig(local_user(),'fromgplus','enable')) ? ' checked="checked"' : '');
+	$mirror_account = get_pconfig(local_user(),'fromgplus','account');
+
+	$username = get_pconfig(local_user(), 'gpluspost', 'username');
+	$password = get_pconfig(local_user(), 'gpluspost', 'password');
+	$page = get_pconfig(local_user(), 'gpluspost', 'page');
+
+	if ($fromgplus_enabled)
+		$title = "Google+ Export/Mirror";
+	else
+		$title = "Google+ Export";
+
+	$s .= '<span id="settings_gpluspost_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_gpluspost_expanded\'); openClose(\'settings_gpluspost_inflated\');">';
+	$s .= '<img class="connector'.$css.'" src="images/googleplus.png" /><h3 class="connector">'. t($title).'</h3>';
+	$s .= '</span>';
+	$s .= '<div id="settings_gpluspost_expanded" class="settings-block" style="display: none;">';
+	$s .= '<span class="fakelink" onclick="openClose(\'settings_gpluspost_expanded\'); openClose(\'settings_gpluspost_inflated\');">';
+	$s .= '<img class="connector'.$css.'" src="images/googleplus.png" /><h3 class="connector">'. t($title).'</h3>';
+	$s .= '</span>';
 	$s .= '<div id="gpluspost-enable-wrapper">';
+
 	$s .= '<label id="gpluspost-enable-label" for="gpluspost-checkbox">' . t('Enable Google+ Post Plugin') . '</label>';
 	$s .= '<input id="gpluspost-checkbox" type="checkbox" name="gpluspost" value="1" ' . $checked . '/>';
 	$s .= '</div><div class="clear"></div>';
+
+	if (gpluspost_nextscripts()) {
+		/*
+		// To-Do: Option to check the credentials if requested
+		if (($username != "") AND ($password != "")) {
+			require_once("addon/googleplus/postToGooglePlus.php");
+			$loginError = doConnectToGooglePlus2($username, $password);
+			if ($loginError)
+				$s .= '<p>Login Error. Please enter the correct credentials.</p>';
+		}*/
+
+		$s .= '<div id="gpluspost-username-wrapper">';
+		$s .= '<label id="gpluspost-username-label" for="gpluspost-username">' . t('Google+ username') . '</label>';
+		$s .= '<input id="gpluspost-username" type="text" name="username" value="' . $username . '" />';
+		$s .= '</div><div class="clear"></div>';
+
+		$s .= '<div id="gpluspost-password-wrapper">';
+		$s .= '<label id="gpluspost-password-label" for="gpluspost-password">' . t('Google+ password') . '</label>';
+		$s .= '<input id="gpluspost-password" type="password" name="password" value="' . $password . '" />';
+		$s .= '</div><div class="clear"></div>';
+
+		$s .= '<div id="gpluspost-page-wrapper">';
+		$s .= '<label id="gpluspost-page-label" for="gpluspost-page">' . t('Google+ page number') . '</label>';
+		$s .= '<input id="gpluspost-page" type="text" name="page" value="' . $page . '" />';
+		$s .= '</div><div class="clear"></div>';
+	}
 
 	$s .= '<div id="gpluspost-bydefault-wrapper">';
 	$s .= '<label id="gpluspost-bydefault-label" for="gpluspost-bydefault">' . t('Post to Google+ by default') . '</label>';
@@ -71,16 +130,36 @@ function gpluspost_settings(&$a,&$s) {
 	$s .= '<input id="gpluspost-noloopprevention" type="checkbox" name="gpluspost_noloopprevention" value="1" ' . $noloop_checked . '/>';
 	$s .= '</div><div class="clear"></div>';
 
-	$s .= '<div id="gpluspost-skipwithoutlink-wrapper">';
-	$s .= '<label id="gpluspost-skipwithoutlink-label" for="gpluspost-skipwithoutlink">' . t('Skip messages without links') . '</label>';
-	$s .= '<input id="gpluspost-skipwithoutlink" type="checkbox" name="gpluspost_skipwithoutlink" value="1" ' . $skip_checked . '/>';
-	$s .= '</div><div class="clear"></div>';
+	if (!gpluspost_nextscripts()) {
+		$s .= '<div id="gpluspost-skipwithoutlink-wrapper">';
+		$s .= '<label id="gpluspost-skipwithoutlink-label" for="gpluspost-skipwithoutlink">' . t('Skip messages without links') . '</label>';
+		$s .= '<input id="gpluspost-skipwithoutlink" type="checkbox" name="gpluspost_skipwithoutlink" value="1" ' . $skip_checked . '/>';
+		$s .= '</div><div class="clear"></div>';
+	}
+
+	if ($fromgplus_enabled) {
+		$s .= '<div id="gpluspost-mirror-wrapper">';
+		$s .= '<label id="gpluspost-mirror-label" for="gpluspost-mirror">'.t('Mirror all public posts').'</label>';
+		$s .= '<input id="gpluspost-mirror" type="checkbox" name="fromgplus-enable" value="1"'.$mirror_enable_checked.' />';
+		$s .= '</div><div class="clear"></div>';
+		$s .= '<div id="gpluspost-mirroraccount-wrapper">';
+		$s .= '<label id="gpluspost-account-label" for="gpluspost-account">'.t('Mirror Google Account ID').' </label>';
+		$s .= '<input id="gpluspost-account" type="text" name="fromgplus-account" value="'.$mirror_account.'" />';
+		$s .= '</div><div class="clear"></div>';
+	}
 
 	/* provide a submit button */
 
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="gpluspost-submit" name="gpluspost-submit" class="settings-submit" value="' . t('Submit') . '" /></div>';
-	$s .= 'Register an account at <a href="https://hootsuite.com">Hootsuite</a>, add your G+ page and add the feed-url there.<br />';
-	$s .= 'Feed-url: '.$a->get_baseurl().'/gpluspost/'.urlencode($a->user["nickname"]).'</div>';
+	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="gpluspost-submit" name="gpluspost-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>';
+
+	if (gpluspost_nextscripts()) {
+		$s .= "<p>If the plugin doesn't work or if it stopped, please login to Google+, then unlock your account by following this <a href='https://www.google.com/accounts/UnlockCaptcha'>link</a>. ";
+		$s .= 'At this page please click on "Continue". Then your posts should arrive in several minutes.</p>';
+	} else {
+		$s .= '<p>Register an account at <a href="https://hootsuite.com">Hootsuite</a>, add your G+ page and add the feed-url there.<br />';
+		$s .= 'Feed-url: '.$a->get_baseurl().'/gpluspost/'.urlencode($a->user["nickname"]).'</p>';
+	}
+	$s .= '</div>';
 }
 
 function gpluspost_settings_post(&$a,&$b) {
@@ -89,7 +168,24 @@ function gpluspost_settings_post(&$a,&$b) {
 		set_pconfig(local_user(),'gpluspost','post',intval($_POST['gpluspost']));
 		set_pconfig(local_user(),'gpluspost','post_by_default',intval($_POST['gpluspost_bydefault']));
 		set_pconfig(local_user(),'gpluspost','no_loop_prevention',intval($_POST['gpluspost_noloopprevention']));
-		set_pconfig(local_user(),'gpluspost','skip_without_link',intval($_POST['gpluspost_skipwithoutlink']));
+
+		if (!gpluspost_nextscripts()) {
+			set_pconfig(local_user(),'gpluspost','skip_without_link',intval($_POST['gpluspost_skipwithoutlink']));
+		} else {
+			set_pconfig(local_user(),'gpluspost','username',trim($_POST['username']));
+			set_pconfig(local_user(),'gpluspost','password',trim($_POST['password']));
+			set_pconfig(local_user(),'gpluspost','page',trim($_POST['page']));
+		}
+
+		$result = q("SELECT `installed` FROM `addon` WHERE `name` = 'fromgplus' AND `installed`");
+		if (count($result) > 0) {
+			set_pconfig(local_user(),'fromgplus','account',trim($_POST['fromgplus-account']));
+			$enable = ((x($_POST,'fromgplus-enable')) ? intval($_POST['fromgplus-enable']) : 0);
+			set_pconfig(local_user(),'fromgplus','enable', $enable);
+
+			if (!$enable)
+				del_pconfig(local_user(),'fromgplus','lastdate');
+		}
 	}
 }
 
@@ -137,6 +233,7 @@ function gpluspost_send(&$a,&$b) {
 	if (!get_pconfig($b["uid"],'gpluspost','no_loop_prevention') and ($b['app'] == "Google+"))
 		return;
 
+	// Always do the export via RSS-Feed (even if NextScripts is enabled), since it doesn't hurt
 	$itemlist = get_pconfig($b["uid"],'gpluspost','itemlist');
 	$items = explode(",", $itemlist);
 
@@ -151,6 +248,145 @@ function gpluspost_send(&$a,&$b) {
 	logger('gpluspost_send: new itemlist: '.$itemlist." for uid ".$b["uid"]);
 
 	set_pconfig($b["uid"],'gpluspost','itemlist', $itemlist);
+
+	// Posting via NextScripts
+	if (gpluspost_nextscripts()) {
+		$username = get_pconfig($b['uid'],'gpluspost','username');
+		$password = get_pconfig($b['uid'],'gpluspost','password');
+		$page = get_pconfig($b['uid'],'gpluspost','page');
+
+		$success = false;
+
+		if($username && $password) {
+			require_once("addon/gpluspost/postToGooglePlus.php");
+			require_once("include/plaintext.php");
+
+			$item = $b;
+
+			// Markup for Google+
+			if  ($item["title"] != "")
+				$item["title"] = "*".$item["title"]."*";
+
+			$item["body"] = preg_replace("(\[b\](.*?)\[\/b\])ism",'*$1*',$item["body"]);
+			$item["body"] = preg_replace("(\[i\](.*?)\[\/i\])ism",'_$1_',$item["body"]);
+			$item["body"] = preg_replace("(\[s\](.*?)\[\/s\])ism",'-$1-',$item["body"]);
+
+			$data = plaintext($a, $item, 0, false);
+
+			logger('gpluspost_send: data: '.print_r($data, true), LOGGER_DEBUG);
+
+			$loginError = doConnectToGooglePlus2($username, $password);
+			if (!$loginError) {
+				if ($data["url"] != "")
+					$lnk = doGetGoogleUrlInfo2($data["url"]);
+				elseif ($data["image"] != "")
+					$lnk = array('img'=>$data["image"]);
+				else
+					$lnk = "";
+
+				// Send a special blank to identify the post through the "fromgplus" addon
+				$blank = html_entity_decode("&#x00A0;", ENT_QUOTES, 'UTF-8');
+
+				doPostToGooglePlus2($data["text"].$blank, $lnk, $page);
+
+				$success = true;
+
+				logger('gpluspost_send: '.$b['uid'].' success', LOGGER_DEBUG);
+			} else
+				logger('gpluspost_send: '.$b['uid'].' failed '.$loginError, LOGGER_DEBUG);
+
+			if (!$success) {
+				logger('gpluspost_send: requeueing '.$b['uid'], LOGGER_DEBUG);
+
+				$r = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self`", $b['uid']);
+				if (count($r))
+					$a->contact = $r[0]["id"];
+
+				$s = serialize(array('url' => $url, 'item' => $b['id'], 'post' => $data));
+				require_once('include/queue_fn.php');
+				add_to_queue($a->contact,NETWORK_GPLUS,$s);
+				notice(t('Google+ post failed. Queued for retry.').EOL);
+			}
+		} else
+				logger('gpluspost_send: '.$b['uid'].' missing username or password', LOGGER_DEBUG);
+	}
+
+}
+
+function gpluspost_queue_hook(&$a,&$b) {
+
+	$qi = q("SELECT * FROM `queue` WHERE `network` = '%s'",
+		dbesc(NETWORK_GPLUS)
+	);
+	if(! count($qi))
+		return;
+
+	require_once('include/queue_fn.php');
+
+	foreach($qi as $x) {
+		if($x['network'] !== NETWORK_GPLUS)
+			continue;
+
+		logger('gpluspost_queue: run');
+
+		$r = q("SELECT `user`.* FROM `user` LEFT JOIN `contact` on `contact`.`uid` = `user`.`uid` 
+			WHERE `contact`.`self` = 1 AND `contact`.`id` = %d LIMIT 1",
+			intval($x['cid'])
+		);
+		if(! count($r))
+			continue;
+
+		$userdata = $r[0];
+
+		//logger('gpluspost_queue: fetching userdata '.print_r($userdata, true));
+
+		$username = get_pconfig($userdata['uid'],'gpluspost','username');
+		$password = get_pconfig($userdata['uid'],'gpluspost','password');
+		$page = get_pconfig($userdata['uid'],'gpluspost','page');
+
+		$success = false;
+
+		if($username && $password) {
+			require_once("addon/googleplus/postToGooglePlus.php");
+
+			logger('gpluspost_queue: able to post for user '.$username);
+
+			$z = unserialize($x['content']);
+
+			$data = $z['post'];
+			// $z['url']
+
+			logger('gpluspost_send: data: '.print_r($data, true), LOGGER_DATA);
+
+			$loginError = doConnectToGooglePlus2($username, $password);
+			if (!$loginError) {
+				if ($data["url"] != "")
+					$lnk = doGetGoogleUrlInfo2($data["url"]);
+				elseif ($data["image"] != "")
+					$lnk = array('img'=>$data["image"]);
+				else
+					$lnk = "";
+
+				// Send a special blank to identify the post through the "fromgplus" addon
+				$blank = html_entity_decode("&#x00A0;", ENT_QUOTES, 'UTF-8');
+
+				doPostToGooglePlus2($data["text"].$blank, $lnk, $page);
+
+				logger('gpluspost_queue: send '.$userdata['uid'].' success', LOGGER_DEBUG);
+
+				$success = true;
+
+				remove_queue_item($x['id']);
+			} else
+				logger('gpluspost_queue: send '.$userdata['uid'].' failed '.$loginError, LOGGER_DEBUG);
+		} else
+			logger('gpluspost_queue: send '.$userdata['uid'].' missing username or password', LOGGER_DEBUG);
+
+		if (!$success) {
+			logger('gpluspost_queue: delayed');
+			update_queue_time($x['id']);
+		}
+	}
 }
 
 function gpluspost_module() {}
@@ -204,101 +440,25 @@ function gpluspost_init() {
 	killme();
 }
 
-function gpluspost_original_url($url, $depth=1) {
-
-	if ($depth > 10)
-		return($url);
-
-	$siteinfo = array();
-	$ch = curl_init();
-	curl_setopt($ch, CURLOPT_URL, $url);
-	curl_setopt($ch, CURLOPT_HEADER, 1);
-	curl_setopt($ch, CURLOPT_NOBODY, 0);
-	curl_setopt($ch, CURLOPT_TIMEOUT, 3);
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($ch,CURLOPT_USERAGENT,'Opera/9.64(Windows NT 5.1; U; de) Presto/2.1.1');
-
-	$header = curl_exec($ch);
-	$curl_info = @curl_getinfo($ch);
-	$http_code = $curl_info['http_code'];
-	curl_close($ch);
-
-	if ((($curl_info['http_code'] == "301") OR ($curl_info['http_code'] == "302"))
-		AND (($curl_info['redirect_url'] != "") OR ($curl_info['location'] != ""))) {
-		if ($curl_info['redirect_url'] != "")
-			return(gpluspost_original_url($curl_info['redirect_url'], ++$depth));
-		else
-			return(gpluspost_original_url($curl_info['location'], ++$depth));
-	}
-
-	$pos = strpos($header, "\r\n\r\n");
-
-	if ($pos)
-		$body = trim(substr($header, $pos));
-	else
-		$body = $header;
-
-	$doc = new DOMDocument();
-	@$doc->loadHTML($body);
-
-	$xpath = new DomXPath($doc);
-
-	$list = $xpath->query("//meta[@content]");
-	foreach ($list as $node) {
-		$attr = array();
-		if ($node->attributes->length)
-			foreach ($node->attributes as $attribute)
-				$attr[$attribute->name] = $attribute->value;
-
-		if (@$attr["http-equiv"] == 'refresh') {
-			$path = $attr["content"];
-			$pathinfo = explode(";", $path);
-			$content = "";
-			foreach ($pathinfo AS $value)
-				if (substr(strtolower($value), 0, 4) == "url=")
-					return(gpluspost_original_url(substr($value, 4), ++$depth));
-		}
-	}
-
-	return($url);
-}
-
-function gpluspost_ShareAttributes($match) {
-
-        $attributes = $match[1];
-
-        $author = "";
-        preg_match("/author='(.*?)'/ism", $attributes, $matches);
-        if ($matches[1] != "")
-                $author = $matches[1];
-
-        preg_match('/author="(.*?)"/ism', $attributes, $matches);
-        if ($matches[1] != "")
-                $author = $matches[1];
-
-        $headline = '<div class="shared_header">';
-
-        $headline .= sprintf(t('%s:'), $author);
-
-        $headline .= "</div>";
-
-        //$text = "<br />".$headline."</strong><blockquote>".$match[2]."</blockquote>";
-	//$text = "\n\t".$match[2].":\t";
-	$text = html_entity_decode("&#x2672; ", ENT_QUOTES, 'UTF-8').$author.": ".$match[2];
-
-        return($text);
-}
-
 function gpluspost_feeditem($pid, $uid) {
 	global $a;
 
+	require_once('include/api.php');
 	require_once('include/bbcode.php');
 	require_once("include/html2plain.php");
+	require_once("include/network.php");
 
 	$skipwithoutlink = get_pconfig($uid,'gpluspost','skip_without_link');
 
 	$items = q("SELECT `uri`, `plink`, `author-link`, `author-name`, `created`, `edited`, `id`, `title`, `body` from `item` WHERE id=%d", intval($pid));
 	foreach ($items AS $item) {
+
+		$item['body'] = bb_CleanPictureLinks($item['body']);
+
+		$item['body'] = bb_remove_share_information($item['body'], true);
+
+		if ($item["title"] != "")
+			$item['body'] = "*".$item["title"]."*\n\n".$item['body'];
 
 		// Looking for the first image
 		$image = '';
@@ -323,10 +483,17 @@ function gpluspost_feeditem($pid, $uid) {
 		$multiplelinks = (strpos($item['body'], "[bookmark") != strrpos($item['body'], "[bookmark"));
 
 		$body = $item['body'];
-		$body = preg_replace_callback("/\[share(.*?)\]\s?(.*?)\s?\[\/share\]/ism","gpluspost_ShareAttributes", $body);
 
-		$html = bbcode($body, false, false);
+		$body = preg_replace("(\[b\](.*?)\[\/b\])ism",'*$1*',$body);
+		$body = preg_replace("(\[i\](.*?)\[\/i\])ism",'_$1_',$body);
+		$body = preg_replace("(\[s\](.*?)\[\/s\])ism",'-$1-',$body);
+
+		// At first convert the text to html
+		$html = bbcode(api_clean_plain_items($body), false, false, 2);
+
+		// Then convert it to plain text
 		$msg = trim(html2plain($html, 0, true));
+		$msg = html_entity_decode($msg,ENT_QUOTES,'UTF-8');
 
 		// If there is no bookmark element then take the first link
 		if ($link == '') {
@@ -376,12 +543,17 @@ function gpluspost_feeditem($pid, $uid) {
 
 		$title = trim(str_replace($msglink, "", $title));
 
-		$msglink = gpluspost_original_url($msglink);
+		$msglink = original_url($msglink);
 
 		if ($uid == 0)
 			$title = $item["author-name"].": ".$title;
 
 		$msglink = htmlspecialchars(html_entity_decode($msglink));
+
+		if (strpos($msg, $msglink) == 0)
+			$msg .= "\n".$msglink;
+
+		$msg = nl2br($msg);
 
 		$title = str_replace("&", "&amp;", $title);
 		//$html = str_replace("&", "&amp;", $html);
@@ -396,7 +568,7 @@ function gpluspost_feeditem($pid, $uid) {
 		echo "\t\t<author>\n\t\t\t<name><![CDATA[".$item["author-name"]."]]></name>\n";
 		echo "\t\t\t<uri>".$item["author-link"]."</uri>\n\t\t</author>\n";
 		//echo '<content type="image/png" src="http://media.example.org/the_beach.png"/>';
-		echo "\t\t".'<content type="html" xml:space="preserve" xml:base="'.$item["plink"].'"><![CDATA['.$html."]]></content>\n";
+		echo "\t\t".'<content type="html" xml:space="preserve" xml:base="'.$item["plink"].'"><![CDATA['.$msg."]]></content>\n";
 		echo "\t</entry>\n";
 	}
 }

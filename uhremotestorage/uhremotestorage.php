@@ -4,6 +4,7 @@
  * Description: Expose in user XRD the link to external user's unhosted-enabled storage
  * Version: 1.0
  * Author: Fabio Comuni <http://kirgroup.com/profile/fabrixxm>
+ * Status: Unsupported
  */
  
  function uhremotestorage_install() {
@@ -86,7 +87,7 @@ function uhremotestorage_settings($a, &$s){
 		'$auth'	=> array( 'unhoestedauth', t('OAuth end-point'), $auth, 'If your are using ownCloud, your OAuth endpoint will be like <tt>http://<i>HOST</i>/apps/remoteStorage/auth.php/<i>USER</i></tt>'),
 		'$api'	=> array( 'unhoestedapi', t('Api'), $api, 'If your are using ownCloud, your api will be <tt>WebDAV</tt>', $arr_api),
 		
-		'$submit' => t('Submit'),
+		'$submit' => t('Save Settings'),
 	));
 	
 }

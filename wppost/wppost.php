@@ -46,24 +46,27 @@ function wppost_jot_nets(&$a,&$b) {
 
 function wppost_settings(&$a,&$s) {
 
-    if(! local_user())
-        return;
+	if(! local_user())
+		return;
 
-    /* Add our stylesheet to the page so we can make our settings look nice */
+	/* Add our stylesheet to the page so we can make our settings look nice */
 
-    $a->page['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . $a->get_baseurl() . '/addon/wppost/wppost.css' . '" media="all" />' . "\r\n";
+	$a->page['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . $a->get_baseurl() . '/addon/wppost/wppost.css' . '" media="all" />' . "\r\n";
 
-    /* Get the current state of our config variables */
+	/* Get the current state of our config variables */
 
-    $enabled = get_pconfig(local_user(),'wppost','post');
+	$enabled = get_pconfig(local_user(),'wppost','post');
+	$checked = (($enabled) ? ' checked="checked" ' : '');
 
-    $checked = (($enabled) ? ' checked="checked" ' : '');
+	$css = (($enabled) ? '' : '-disabled');
 
-    $def_enabled = get_pconfig(local_user(),'wppost','post_by_default');
-    $back_enabled = get_pconfig(local_user(),'wppost','backlink');
+	$def_enabled = get_pconfig(local_user(),'wppost','post_by_default');
+	$back_enabled = get_pconfig(local_user(),'wppost','backlink');
+	$shortcheck_enabled = get_pconfig(local_user(),'wppost','shortcheck');
 
-    $def_checked = (($def_enabled) ? ' checked="checked" ' : '');
-    $back_checked = (($back_enabled) ? ' checked="checked" ' : '');
+	$def_checked = (($def_enabled) ? ' checked="checked" ' : '');
+	$back_checked = (($back_enabled) ? ' checked="checked" ' : '');
+	$shortcheck_checked = (($shortcheck_enabled) ? ' checked="checked" ' : '');
 
 	$wp_username = get_pconfig(local_user(), 'wppost', 'wp_username');
 	$wp_password = get_pconfig(local_user(), 'wppost', 'wp_password');
@@ -72,8 +75,13 @@ function wppost_settings(&$a,&$s) {
 
     /* Add some HTML to the existing form */
 
-    $s .= '<div class="settings-block">';
-    $s .= '<h3>' . t('WordPress Post Settings') . '</h3>';
+    $s .= '<span id="settings_wppost_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_wppost_expanded\'); openClose(\'settings_wppost_inflated\');">';
+    $s .= '<img class="connector'.$css.'" src="images/wordpress.png" /><h3 class="connector">'. t('Wordpress Export').'</h3>';
+    $s .= '</span>';
+    $s .= '<div id="settings_wppost_expanded" class="settings-block" style="display: none;">';
+    $s .= '<span class="fakelink" onclick="openClose(\'settings_wppost_expanded\'); openClose(\'settings_wppost_inflated\');">';
+    $s .= '<img class="connector'.$css.'" src="images/wordpress.png" /><h3 class="connector">'. t('Wordpress Export').'</h3>';
+    $s .= '</span>';
     $s .= '<div id="wppost-enable-wrapper">';
     $s .= '<label id="wppost-enable-label" for="wppost-checkbox">' . t('Enable WordPress Post Plugin') . '</label>';
     $s .= '<input id="wppost-checkbox" type="checkbox" name="wppost" value="1" ' . $checked . '/>';
@@ -102,12 +110,16 @@ function wppost_settings(&$a,&$s) {
     $s .= '<div id="wppost-backlink-wrapper">';
     $s .= '<label id="wppost-backlink-label" for="wppost-backlink">' . t('Provide a backlink to the Friendica post') . '</label>';
     $s .= '<input id="wppost-backlink" type="checkbox" name="wp_backlink" value="1" ' . $back_checked . '/>';
+    $s .= '</div><div class="clear"></div>';
 
+    $s .= '<div id="wppost-shortcheck-wrapper">';
+    $s .= '<label id="wppost-shortcheck-label" for="wppost-shortcheck">' . t("Don't post messages that are too short") . '</label>';
+    $s .= '<input id="wppost-shortcheck" type="checkbox" name="wp_shortcheck" value="1" '.$shortcheck_checked.'/>';
     $s .= '</div><div class="clear"></div>';
 
     /* provide a submit button */
 
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="wppost-submit" name="wppost-submit" class="settings-submit" value="' . t('Submit') . '" /></div></div>';
+    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="wppost-submit" name="wppost-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
 
 }
 
@@ -122,6 +134,7 @@ function wppost_settings_post(&$a,&$b) {
 		set_pconfig(local_user(),'wppost','wp_password',trim($_POST['wp_password']));
 		set_pconfig(local_user(),'wppost','wp_blog',trim($_POST['wp_blog']));
 		set_pconfig(local_user(),'wppost','backlink',trim($_POST['wp_backlink']));
+		set_pconfig(local_user(),'wppost','shortcheck',trim($_POST['wp_shortcheck']));
 
 	}
 
@@ -160,14 +173,14 @@ function wppost_post_local(&$a,&$b) {
 
 function wppost_send(&$a,&$b) {
 
-    if($b['deleted'] || $b['private'] || ($b['created'] !== $b['edited']))
-        return;
+	if($b['deleted'] || $b['private'] || ($b['created'] !== $b['edited']))
+		return;
 
-    if(! strstr($b['postopts'],'wppost'))
-        return;
+	if(! strstr($b['postopts'],'wppost'))
+		return;
 
-    if($b['parent'] != $b['id'])
-        return;
+	if($b['parent'] != $b['id'])
+		return;
 
 
 	$wp_username = xmlify(get_pconfig($b['uid'],'wppost','wp_username'));
@@ -178,8 +191,31 @@ function wppost_send(&$a,&$b) {
 
 		require_once('include/bbcode.php');
 		require_once('include/html2plain.php');
+		require_once('include/plaintext.php');
 
 		$wptitle = trim($b['title']);
+
+		if (intval(get_pconfig($b['uid'],'wppost','shortcheck'))) {
+			// Checking, if its a post that is worth a blog post
+			$postentry = false;
+			$siteinfo = get_attached_data($b["body"]);
+
+			// Is it a link to an aricle, a video or a photo?
+			if (isset($siteinfo["type"]))
+				if (in_array($siteinfo["type"], array("link", "audio", "video", "photo")))
+					$postentry = true;
+
+			// Does it have a title?
+			if ($wptitle != "")
+				$postentry = true;
+
+			// Is it larger than 500 characters?
+			if (strlen($b['body']) > 500)
+				$postentry = true;
+
+			if (!$postentry)
+				return;
+		}
 
 		// If the title is empty then try to guess
 		if ($wptitle == '') {
@@ -189,7 +225,10 @@ function wppost_send(&$a,&$b) {
 
 			// If no bookmark is found then take the first line
 			if ($wptitle == '') {
-				$title = html2plain(bbcode($b['body'], false, false), 0, true)."\n";
+				// Remove the share element before fetching the first line
+				$title = trim(preg_replace("/\[share.*?\](.*?)\[\/share\]/ism","\n$1\n",$b['body']));
+
+				$title = html2plain(bbcode($title, false, false), 0, true)."\n";
 				$pos = strpos($title, "\n");
 				$trailer = "";
 				if (($pos == 0) or ($pos > 100)) {
@@ -202,7 +241,7 @@ function wppost_send(&$a,&$b) {
 		}
 
 		$title = '<title>' . (($wptitle) ? $wptitle : t('Post from Friendica')) . '</title>';
-		$post = bbcode($b['body'], false, false);
+		$post = bbcode($b['body'], false, false, 4);
 
 		// If a link goes to youtube then remove the stuff around it. Wordpress detects youtube links and embeds it
 		$post = preg_replace('/<a.*?href="(https?:\/\/www.youtube.com\/.*?)".*?>(.*?)<\/a>/ism',"\n$1\n",$post);

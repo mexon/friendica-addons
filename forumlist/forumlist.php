@@ -74,7 +74,7 @@ function forumlist_network_mod_init($a,$b) {
 
 	if(count($contacts)) {
 		foreach($contacts as $contact) {
-			$forumlist .= '<div><a href="' . $a->get_baseurl() . '/redir/' . $contact["id"] . '" title="' . $contact['url'] . '" class="label sparkle" target="external-link"><img class="forumlist-img" height="20" width="20" src="' . $contact['micro'] .'" alt="' . $contact['url'] . '" /></a> <a href="' . $a->get_baseurl() . '/network?f=&cid=' . $contact['id'] . '" >' . $contact["name"]."</a></div>";
+			$forumlist .= '<div><a href="' . $a->get_baseurl() . '/redir/' . $contact["id"] . '" title="' . $contact['url'] . '" class="label sparkle" target="_blank"><img class="forumlist-img" height="20" width="20" src="' . $contact['micro'] .'" alt="' . $contact['url'] . '" /></a> <a href="' . $a->get_baseurl() . '/network?f=&cid=' . $contact['id'] . '" >' . $contact["name"]."</a></div>";
 		}
 	}
 	else {
@@ -154,12 +154,17 @@ function forumlist_plugin_settings(&$a,&$s) {
 
 	$network = intval(get_pconfig(local_user(),'forumlist','show_on_network'));
 	$network_checked = (($network) ? ' checked="checked" ' : '');
-	
-	
-	/* Add some HTML to the existing form */
 
-	$s .= '<div class="settings-block">';
-	$s .= '<h3>' . t('Forumlist Settings') . '</h3>';
+
+	/* Add some HTML to the existing form */
+	$s .= '<span id="settings_forumlist_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_forumlist_expanded\'); openClose(\'settings_forumlist_inflated\');">';
+	$s .= '<h3>' . t('Forumlist') . '</h3>';
+	$s .= '</span>';
+	$s .= '<div id="settings_forumlist_expanded" class="settings-block" style="display: none;">';
+	$s .= '<span class="fakelink" onclick="openClose(\'settings_forumlist_expanded\'); openClose(\'settings_forumlist_inflated\');">';
+	$s .= '<h3>' . t('Forumlist') . '</h3>';
+	$s .= '</span>';
+
 	$s .= '<div id="forumlist-settings-wrapper">';
 	$s .= '<label id="forumlist-random-label" for="forumlist-random">' . t('Randomise forum list') . '</label>';
 	$s .= '<input id="forumlist-random" type="checkbox" name="forumlist_random" value="1" ' . $randomise_checked . '/>';
@@ -175,7 +180,7 @@ function forumlist_plugin_settings(&$a,&$s) {
 
 	/* provide a submit button */
 
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="forumlist-settings-submit" class="settings-submit" value="' . t('Submit') . '" /></div></div>';
+	$s .= '<div class="settings-submit-wrapper" ><input type="submit" name="forumlist-settings-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
 
 }
 
