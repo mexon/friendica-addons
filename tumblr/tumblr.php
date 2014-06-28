@@ -3,27 +3,28 @@
 /**
  * Name: Tumblr Post Connector
  * Description: Post to Tumblr
- * Version: 1.0
+ * Version: 2.0
  * Author: Mike Macgirvin <http://macgirvin.com/profile/mike>
+ * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
  */
 
 require_once('library/OAuth1.php');
 require_once('addon/tumblr/tumblroauth/tumblroauth.php');
 
 function tumblr_install() {
-    register_hook('post_local',           'addon/tumblr/tumblr.php', 'tumblr_post_local');
-    register_hook('notifier_normal',      'addon/tumblr/tumblr.php', 'tumblr_send');
-    register_hook('jot_networks',         'addon/tumblr/tumblr.php', 'tumblr_jot_nets');
-    register_hook('connector_settings',      'addon/tumblr/tumblr.php', 'tumblr_settings');
-    register_hook('connector_settings_post', 'addon/tumblr/tumblr.php', 'tumblr_settings_post');
+	register_hook('post_local',           'addon/tumblr/tumblr.php', 'tumblr_post_local');
+	register_hook('notifier_normal',      'addon/tumblr/tumblr.php', 'tumblr_send');
+	register_hook('jot_networks',         'addon/tumblr/tumblr.php', 'tumblr_jot_nets');
+	register_hook('connector_settings',      'addon/tumblr/tumblr.php', 'tumblr_settings');
+	register_hook('connector_settings_post', 'addon/tumblr/tumblr.php', 'tumblr_settings_post');
 
 }
 function tumblr_uninstall() {
-    unregister_hook('post_local',       'addon/tumblr/tumblr.php', 'tumblr_post_local');
-    unregister_hook('notifier_normal',  'addon/tumblr/tumblr.php', 'tumblr_send');
-    unregister_hook('jot_networks',     'addon/tumblr/tumblr.php', 'tumblr_jot_nets');
-    unregister_hook('connector_settings',      'addon/tumblr/tumblr.php', 'tumblr_settings');
-    unregister_hook('connector_settings_post', 'addon/tumblr/tumblr.php', 'tumblr_settings_post');
+	unregister_hook('post_local',       'addon/tumblr/tumblr.php', 'tumblr_post_local');
+	unregister_hook('notifier_normal',  'addon/tumblr/tumblr.php', 'tumblr_send');
+	unregister_hook('jot_networks',     'addon/tumblr/tumblr.php', 'tumblr_jot_nets');
+	unregister_hook('connector_settings',      'addon/tumblr/tumblr.php', 'tumblr_settings');
+	unregister_hook('connector_settings_post', 'addon/tumblr/tumblr.php', 'tumblr_settings_post');
 }
 
 function tumblr_module() {}
@@ -51,6 +52,25 @@ function tumblr_content(&$a) {
 		$o = tumblr_connect($a);
 
 	return $o;
+}
+
+function tumblr_plugin_admin(&$a, &$o){
+        $t = get_markup_template( "admin.tpl", "addon/tumblr/" );
+
+        $o = replace_macros($t, array(
+                '$submit' => t('Save Settings'),
+                                                                // name, label, value, help, [extra values]
+                '$consumer_key' => array('consumer_key', t('Consumer Key'),  get_config('tumblr', 'consumer_key' ), ''),
+                '$consumer_secret' => array('consumer_secret', t('Consumer Secret'),  get_config('tumblr', 'consumer_secret' ), ''),
+        ));
+}
+
+function tumblr_plugin_admin_post(&$a){
+        $consumer_key     =       ((x($_POST,'consumer_key'))              ? notags(trim($_POST['consumer_key']))   : '');
+        $consumer_secret =       ((x($_POST,'consumer_secret'))   ? notags(trim($_POST['consumer_secret'])): '');
+        set_config('tumblr','consumer_key',$consumer_key);
+        set_config('tumblr','consumer_secret',$consumer_secret);
+        info( t('Settings updated.'). EOL );
 }
 
 function tumblr_connect($a) {
@@ -84,22 +104,22 @@ function tumblr_connect($a) {
 
 	// Check the HTTP Code.  It should be a 200 (OK), if it's anything else then something didn't work.
 	switch ($tum_oauth->http_code) {
-	  case 200:
-	    // Ask Tumblr to give us a special address to their login page
-	    $url = $tum_oauth->getAuthorizeURL($token);
+		case 200:
+			// Ask Tumblr to give us a special address to their login page
+			$url = $tum_oauth->getAuthorizeURL($token);
 
-		// Redirect the user to the login URL given to us by Tumblr
-	    header('Location: ' . $url);
+			// Redirect the user to the login URL given to us by Tumblr
+			header('Location: ' . $url);
 
-		// That's it for our side.  The user is sent to a Tumblr Login page and
-		// asked to authroize our app.  After that, Tumblr sends the user back to
-		// our Callback URL (callback.php) along with some information we need to get
-		// an access token.
+			// That's it for our side.  The user is sent to a Tumblr Login page and
+			// asked to authroize our app.  After that, Tumblr sends the user back to
+			// our Callback URL (callback.php) along with some information we need to get
+			// an access token.
 
-	    break;
-	default:
-	    // Give an error message
-	    $o = 'Could not connect to Tumblr. Refresh the page or try again later.';
+			break;
+		default:
+			// Give an error message
+			$o = 'Could not connect to Tumblr. Refresh the page or try again later.';
 	}
 	return($o);
 }
@@ -132,9 +152,9 @@ function tumblr_callback($a) {
 
 	// Make sure nothing went wrong.
 	if (200 == $tum_oauth->http_code) {
-	  // good to go
+		// good to go
 	} else {
-	  return('Unable to authenticate');
+		return('Unable to authenticate');
 	}
 
 	// What's next?  Now that we have an Access Token and Secret, we can make an API call.
@@ -147,96 +167,96 @@ function tumblr_callback($a) {
 }
 
 function tumblr_jot_nets(&$a,&$b) {
-    if(! local_user())
-        return;
+	if(! local_user())
+		return;
 
-    $tmbl_post = get_pconfig(local_user(),'tumblr','post');
-    if(intval($tmbl_post) == 1) {
-        $tmbl_defpost = get_pconfig(local_user(),'tumblr','post_by_default');
-        $selected = ((intval($tmbl_defpost) == 1) ? ' checked="checked" ' : '');
-        $b .= '<div class="profile-jot-net"><input type="checkbox" name="tumblr_enable"' . $selected . ' value="1" /> '
-            . t('Post to Tumblr') . '</div>';
-    }
+	$tmbl_post = get_pconfig(local_user(),'tumblr','post');
+	if(intval($tmbl_post) == 1) {
+		$tmbl_defpost = get_pconfig(local_user(),'tumblr','post_by_default');
+		$selected = ((intval($tmbl_defpost) == 1) ? ' checked="checked" ' : '');
+		$b .= '<div class="profile-jot-net"><input type="checkbox" name="tumblr_enable"' . $selected . ' value="1" /> '
+			. t('Post to Tumblr') . '</div>';
+	}
 }
 
 
 function tumblr_settings(&$a,&$s) {
 
-    if(! local_user())
-        return;
+	if(! local_user())
+		return;
 
-    /* Add our stylesheet to the page so we can make our settings look nice */
+	/* Add our stylesheet to the page so we can make our settings look nice */
 
-    $a->page['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . $a->get_baseurl() . '/addon/tumblr/tumblr.css' . '" media="all" />' . "\r\n";
+	$a->page['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . $a->get_baseurl() . '/addon/tumblr/tumblr.css' . '" media="all" />' . "\r\n";
 
-    /* Get the current state of our config variables */
+	/* Get the current state of our config variables */
 
-    $enabled = get_pconfig(local_user(),'tumblr','post');
+	$enabled = get_pconfig(local_user(),'tumblr','post');
+	$checked = (($enabled) ? ' checked="checked" ' : '');
+	$css = (($enabled) ? '' : '-disabled');
 
-    $checked = (($enabled) ? ' checked="checked" ' : '');
+	$def_enabled = get_pconfig(local_user(),'tumblr','post_by_default');
 
-    $def_enabled = get_pconfig(local_user(),'tumblr','post_by_default');
+	$def_checked = (($def_enabled) ? ' checked="checked" ' : '');
 
-    $def_checked = (($def_enabled) ? ' checked="checked" ' : '');
+	/* Add some HTML to the existing form */
 
-    /* Add some HTML to the existing form */
+	$s .= '<span id="settings_tumblr_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_tumblr_expanded\'); openClose(\'settings_tumblr_inflated\');">';
+	$s .= '<img class="connector'.$css.'" src="images/tumblr.png" /><h3 class="connector">'. t('Tumblr Export').'</h3>';
+	$s .= '</span>';
+	$s .= '<div id="settings_tumblr_expanded" class="settings-block" style="display: none;">';
+	$s .= '<span class="fakelink" onclick="openClose(\'settings_tumblr_expanded\'); openClose(\'settings_tumblr_inflated\');">';
+	$s .= '<img class="connector'.$css.'" src="images/tumblr.png" /><h3 class="connector">'. t('Tumblr Export').'</h3>';
+	$s .= '</span>';
 
-    $s .= '<span id="settings_tumblr_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_tumblr_expanded\'); openClose(\'settings_tumblr_inflated\');">';
-    $s .= '<h3>' . t('Tumblr Post Settings') . '</h3>';
-    $s .= '</span>';
-    $s .= '<div id="settings_tumblr_expanded" class="settings-block" style="display: none;">';
-    $s .= '<span class="fakelink" onclick="openClose(\'settings_tumblr_expanded\'); openClose(\'settings_tumblr_inflated\');">';
-    $s .= '<h3>' . t('Tumblr Post Settings') . '</h3>';
-    $s .= '</span>';
+	$s .= '<div id="tumblr-username-wrapper">';
+	$s .= '<a href="'.$a->get_baseurl().'/tumblr/connect">'.t("(Re-)Authenticate your tumblr page").'</a>';
+	$s .= '</div><div class="clear"></div>';
 
-    $s .= '<div id="tumblr-username-wrapper">';
-    $s .= '<a href="'.$a->get_baseurl().'/tumblr/connect">'.t("(Re-)Authenticate your tumblr page").'</a>';
-    $s .= '</div><div class="clear"></div>';
+	$s .= '<div id="tumblr-enable-wrapper">';
+	$s .= '<label id="tumblr-enable-label" for="tumblr-checkbox">' . t('Enable Tumblr Post Plugin') . '</label>';
+	$s .= '<input id="tumblr-checkbox" type="checkbox" name="tumblr" value="1" ' . $checked . '/>';
+	$s .= '</div><div class="clear"></div>';
 
-    $s .= '<div id="tumblr-enable-wrapper">';
-    $s .= '<label id="tumblr-enable-label" for="tumblr-checkbox">' . t('Enable Tumblr Post Plugin') . '</label>';
-    $s .= '<input id="tumblr-checkbox" type="checkbox" name="tumblr" value="1" ' . $checked . '/>';
-    $s .= '</div><div class="clear"></div>';
+	$s .= '<div id="tumblr-bydefault-wrapper">';
+	$s .= '<label id="tumblr-bydefault-label" for="tumblr-bydefault">' . t('Post to Tumblr by default') . '</label>';
+	$s .= '<input id="tumblr-bydefault" type="checkbox" name="tumblr_bydefault" value="1" ' . $def_checked . '/>';
+	$s .= '</div><div class="clear"></div>';
 
-    $s .= '<div id="tumblr-bydefault-wrapper">';
-    $s .= '<label id="tumblr-bydefault-label" for="tumblr-bydefault">' . t('Post to Tumblr by default') . '</label>';
-    $s .= '<input id="tumblr-bydefault" type="checkbox" name="tumblr_bydefault" value="1" ' . $def_checked . '/>';
-    $s .= '</div><div class="clear"></div>';
+	$oauth_token = get_pconfig(local_user(), "tumblr", "oauth_token");
+	$oauth_token_secret = get_pconfig(local_user(), "tumblr", "oauth_token_secret");
 
-    $oauth_token = get_pconfig(local_user(), "tumblr", "oauth_token");
-    $oauth_token_secret = get_pconfig(local_user(), "tumblr", "oauth_token_secret");
+	$s .= '<div id="tumblr-page-wrapper">';
+	if (($oauth_token != "") and ($oauth_token_secret != "")) {
 
-    $s .= '<div id="tumblr-page-wrapper">';
-    if (($oauth_token != "") and ($oauth_token_secret != "")) {
+		$page = get_pconfig(local_user(),'tumblr','page');
+		$consumer_key = get_config('tumblr','consumer_key');
+		$consumer_secret = get_config('tumblr','consumer_secret');
 
-	$page = get_pconfig(local_user(),'tumblr','page');
-	$consumer_key = get_config('tumblr','consumer_key');
-	$consumer_secret = get_config('tumblr','consumer_secret');
+		$tum_oauth = new TumblrOAuth($consumer_key, $consumer_secret, $oauth_token, $oauth_token_secret);
 
-	$tum_oauth = new TumblrOAuth($consumer_key, $consumer_secret, $oauth_token, $oauth_token_secret);
+		$userinfo = $tum_oauth->get('user/info');
 
-	$userinfo = $tum_oauth->get('user/info');
+		$blogs = array();
 
-	$blogs = array();
+		$s .= '<label id="tumblr-page-label" for="tumblr-page">' . t('Post to page:') . '</label>';
+		$s .= '<select name="tumblr_page" id="tumblr-page">';
+		foreach($userinfo->response->user->blogs as $blog) {
+			$blogurl = substr(str_replace(array("http://", "https://"), array("", ""), $blog->url), 0, -1);
+			if ($page == $blogurl)
+				$s .= "<option value='".$blogurl."' selected>".$blogurl."</option>";
+			else
+				$s .= "<option value='".$blogurl."'>".$blogurl."</option>";
+		}
 
-	$s .= '<label id="tumblr-page-label" for="tumblr-page">' . t('Post to page:') . '</label>';
-	$s .= '<select name="tumblr_page" id="tumblr-page">';
-	foreach($userinfo->response->user->blogs as $blog) {
-		$blogurl = substr(str_replace(array("http://", "https://"), array("", ""), $blog->url), 0, -1);
-		if ($page == $blogurl)
-			$s .= "<option value='".$blogurl."' selected>".$blogurl."</option>";
-		else
-			$s .= "<option value='".$blogurl."'>".$blogurl."</option>";
-	}
+		$s .= "</select>";
+	} else
+		$s .= t("You are not authenticated to tumblr");
+	$s .= '</div><div class="clear"></div>';
 
-	$s .= "</select>";
-    } else
-	$s .= t("You are not authenticated to tumblr");
-    $s .= '</div><div class="clear"></div>';
+	/* provide a submit button */
 
-    /* provide a submit button */
-
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="tumblr-submit" name="tumblr-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
+	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="tumblr-submit" name="tumblr-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
 
 }
 
@@ -266,19 +286,19 @@ function tumblr_post_local(&$a,&$b) {
 	if($b['private'] || $b['parent'])
 		return;
 
-    $tmbl_post   = intval(get_pconfig(local_user(),'tumblr','post'));
+	$tmbl_post   = intval(get_pconfig(local_user(),'tumblr','post'));
 
 	$tmbl_enable = (($tmbl_post && x($_REQUEST,'tumblr_enable')) ? intval($_REQUEST['tumblr_enable']) : 0);
 
 	if($_REQUEST['api_source'] && intval(get_pconfig(local_user(),'tumblr','post_by_default')))
 		$tmbl_enable = 1;
 
-    if(! $tmbl_enable)
-       return;
+	if(! $tmbl_enable)
+		return;
 
-    if(strlen($b['postopts']))
-       $b['postopts'] .= ',';
-     $b['postopts'] .= 'tumblr';
+	if(strlen($b['postopts']))
+		$b['postopts'] .= ',';
+	$b['postopts'] .= 'tumblr';
 }
 
 
@@ -286,14 +306,14 @@ function tumblr_post_local(&$a,&$b) {
 
 function tumblr_send(&$a,&$b) {
 
-    if($b['deleted'] || $b['private'] || ($b['created'] !== $b['edited']))
-        return;
+	if($b['deleted'] || $b['private'] || ($b['created'] !== $b['edited']))
+		return;
 
-    if(! strstr($b['postopts'],'tumblr'))
-        return;
+	if(! strstr($b['postopts'],'tumblr'))
+		return;
 
-    if($b['parent'] != $b['id'])
-        return;
+	if($b['parent'] != $b['id'])
+		return;
 
 	$oauth_token = get_pconfig($b['uid'], "tumblr", "oauth_token");
 	$oauth_token_secret = get_pconfig($b['uid'], "tumblr", "oauth_token_secret");
@@ -316,53 +336,67 @@ function tumblr_send(&$a,&$b) {
 		if(count($tag_arr))
 			$tags = implode(',',$tag_arr);
 
-		$link = "";
-		$video = false;
 		$title = trim($b['title']);
+		require_once('include/plaintext.php');
 
-		// Checking for a bookmark
-		if(preg_match("/\[bookmark\=([^\]]*)\](.*?)\[\/bookmark\]/is",$b['body'],$matches)) {
-			$link = $matches[1];
-			if ($title == '')
-				$title = html_entity_decode($matches[2],ENT_QUOTES,'UTF-8');
-
-			$body = $b['body'];
-			// splitting the text in two parts:
-			// before and after the bookmark
-			$pos = strpos($body, "[bookmark");
-			$body1 = substr($body, 0, $pos);
-			$body2 = substr($body, $pos);
-
-			// Removing the bookmark
-			$body2 = preg_replace("/\[bookmark\=([^\]]*)\](.*?)\[\/bookmark\]/ism",'',$body2);
-			$body = $body1.$body2;
-
-			$video = ((stristr($link,'youtube')) || (stristr($link,'youtu.be')) || (stristr($mtch[1],'vimeo')));
-		}
+		$siteinfo = get_attached_data($b["body"]);
 
 		$params = array(
-			'format' => 'html',
+			'state' => 'published',
+			'tags' => $tags,
 			'tweet' => 'off',
-			'tags' => $tags);
+			'format' => 'html');
 
-		if (($link != '') and $video) {
-			$params['type'] = "video";
-			$params['embed'] = $link;
-			if ($title != '')
-				$params['caption'] = '<h1><a href="'.$link.'">'.$title.
-							"</a></h1><p>".bbcode($body, false, false, 4)."</p>";
-			else
+		if (!isset($siteinfo["type"]))
+			$siteinfo["type"] = "";
+
+		if (($title == "") AND isset($siteinfo["title"]))
+			$title = $siteinfo["title"];
+
+		if (isset($siteinfo["text"]))
+			$body = $siteinfo["text"];
+		else
+			$body = bb_remove_share_information($b["body"]);
+
+		switch ($siteinfo["type"]) {
+			case "photo":
+				$params['type'] = "photo";
 				$params['caption'] = bbcode($body, false, false, 4);
-		} else if (($link != '') and !$video) {
-			$params['type'] = "link";
-			$params['title'] = $title;
-			$params['url'] = $link;
-			$params['description'] = bbcode($b["body"], false, false, 4);
-		} else {
-			$params['type'] = "text";
-			$params['title'] = $title;
-			$params['body'] = bbcode($b['body'], false, false, 4);
+
+				if (isset($siteinfo["url"]))
+					$params['link'] = $siteinfo["url"];
+
+				$params['source'] = $siteinfo["image"];
+				break;
+			case "link":
+				$params['type'] = "link";
+				$params['title'] = $title;
+				$params['url'] = $siteinfo["url"];
+				$params['description'] = bbcode($body, false, false, 4);
+				break;
+			case "audio":
+				$params['type'] = "audio";
+				$params['external_url'] = $siteinfo["url"];
+				$params['caption'] = bbcode($body, false, false, 4);
+				break;
+			case "video":
+				$params['type'] = "video";
+				$params['embed'] = $siteinfo["url"];
+				$params['caption'] = bbcode($body, false, false, 4);
+				break;
+			default:
+				$params['type'] = "text";
+				$params['title'] = $title;
+				$params['body'] = bbcode($b['body'], false, false, 4);
+				break;
 		}
+
+		if (isset($params['caption']) AND (trim($title) != ""))
+			$params['caption'] = '<h1>'.$title."</h1>".
+						"<p>".$params['caption']."</p>";
+
+		if (trim($params['caption']) == "")
+			$params['caption'] = bbcode("[quote]".$siteinfo["description"]."[/quote]", false, false, 4);
 
 		$consumer_key = get_config('tumblr','consumer_key');
 		$consumer_secret = get_config('tumblr','consumer_secret');
@@ -371,9 +405,8 @@ function tumblr_send(&$a,&$b) {
 
 		// Make an API call with the TumblrOAuth instance.
 		$x = $tum_oauth->post($tmbl_blog,$params);
-
 		$ret_code = $tum_oauth->http_code;
-
+		//print_r($params);
 		if($ret_code == 201)
 			logger('tumblr_send: success');
 		elseif($ret_code == 403)

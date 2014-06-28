@@ -512,8 +512,8 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $item['body'] .= "\n\n" . t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
     $item['body'] .=  $item['plink'];
     $item['body'] .= ']' . $item['plink'] . '[/url]';
-    q("UPDATE `item` SET `body` = '%s', `edited` = '%s' WHERE `id` = %d",
-      dbesc($item['body']), dbesc(datetime_convert('UTC', 'UTC')), intval($item['id']));
+    q("UPDATE `item` SET `body` = '%s' WHERE `id` = %d",
+      dbesc($item['body']), intval($item['id']));
 }
 
 function retrieve_images(&$item) {

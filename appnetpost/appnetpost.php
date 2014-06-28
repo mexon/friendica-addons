@@ -5,6 +5,7 @@
  * Description: Posts to app.net with the help of ifttt.com
  * Version: 0.1
  * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
+ * Status: Unsupported
  */
 
 function appnetpost_install() {
@@ -49,15 +50,17 @@ function appnetpost_settings(&$a,&$s) {
 	$enabled = get_pconfig(local_user(),'appnetpost','post');
 	$checked = (($enabled) ? ' checked="checked" ' : '');
 
+	$css = (($enabled) ? '' : '-disabled');
+
 	$def_enabled = get_pconfig(local_user(),'appnetpost','post_by_default');
 	$def_checked = (($def_enabled) ? ' checked="checked" ' : '');
 
 	$s .= '<span id="settings_appnetpost_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_appnetpost_expanded\'); openClose(\'settings_appnetpost_inflated\');">';
-	$s .= '<h3>' . t('App.net Post Settings') . '</h3>';
+	$s .= '<img class="connector'.$css.'" src="images/appnet.png" /><h3 class="connector">'. t('App.net Export').'</h3>';
 	$s .= '</span>';
 	$s .= '<div id="settings_appnetpost_expanded" class="settings-block" style="display: none;">';
 	$s .= '<span class="fakelink" onclick="openClose(\'settings_appnetpost_expanded\'); openClose(\'settings_appnetpost_inflated\');">';
-	$s .= '<h3>' . t('App.net Post Settings') . '</h3>';
+	$s .= '<img class="connector'.$css.'" src="images/appnet.png" /><h3 class="connector">'. t('App.net Export').'</h3>';
 	$s .= '</span>';
 
 	$s .= '<div id="appnetpost-enable-wrapper">';
@@ -72,7 +75,7 @@ function appnetpost_settings(&$a,&$s) {
 
 	/* provide a submit button */
 
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="appnetpost-submit" name="appnetpost-submit" class="settings-submit" value="' . t('Submit') . '" /></div>';
+	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="appnetpost-submit" name="appnetpost-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>';
 	$s .= '<p>Register an account at <a href="https://ifttt.com">IFTTT</a> and create a recipe with the following values:';
 	$s .= '<ul><li>If: New feed item (via RSS)</li>';
 	$s .= '<li>Then: Post an update (via app.net)</li>';
@@ -196,94 +199,12 @@ function appnetpost_init() {
 	killme();
 }
 
-function appnetpost_original_url($url, $depth=1) {
-
-	if ($depth > 10)
-		return($url);
-
-	$siteinfo = array();
-	$ch = curl_init();
-	curl_setopt($ch, CURLOPT_URL, $url);
-	curl_setopt($ch, CURLOPT_HEADER, 1);
-	curl_setopt($ch, CURLOPT_NOBODY, 0);
-	curl_setopt($ch, CURLOPT_TIMEOUT, 3);
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($ch,CURLOPT_USERAGENT,'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.8; rv:24.0) Gecko/20100101 Firefox/24.0');
-
-	$header = curl_exec($ch);
-	$curl_info = @curl_getinfo($ch);
-	$http_code = $curl_info['http_code'];
-	curl_close($ch);
-
-	if ((($curl_info['http_code'] == "301") OR ($curl_info['http_code'] == "302"))
-		AND (($curl_info['redirect_url'] != "") OR ($curl_info['location'] != ""))) {
-		if ($curl_info['redirect_url'] != "")
-			return(appnetpost_original_url($curl_info['redirect_url'], ++$depth));
-		else
-			return(appnetpost_original_url($curl_info['location'], ++$depth));
-	}
-
-	$pos = strpos($header, "\r\n\r\n");
-
-	if ($pos)
-		$body = trim(substr($header, $pos));
-	else
-		$body = $header;
-
-	$doc = new DOMDocument();
-	@$doc->loadHTML($body);
-
-	$xpath = new DomXPath($doc);
-
-	$list = $xpath->query("//meta[@content]");
-	foreach ($list as $node) {
-		$attr = array();
-		if ($node->attributes->length)
-			foreach ($node->attributes as $attribute)
-				$attr[$attribute->name] = $attribute->value;
-
-		if (@$attr["http-equiv"] == 'refresh') {
-			$path = $attr["content"];
-			$pathinfo = explode(";", $path);
-			$content = "";
-			foreach ($pathinfo AS $value)
-				if (substr(strtolower($value), 0, 4) == "url=")
-					return(appnetpost_original_url(substr($value, 4), ++$depth));
-		}
-	}
-
-	return($url);
-}
-
-if (! function_exists( 'short_link' )) {
-function short_link($url) {
-	require_once('library/slinky.php');
-	$slinky = new Slinky( $url );
-	$yourls_url = get_config('yourls','url1');
-	if ($yourls_url) {
-		$yourls_username = get_config('yourls','username1');
-		$yourls_password = get_config('yourls', 'password1');
-		$yourls_ssl = get_config('yourls', 'ssl1');
-		$yourls = new Slinky_YourLS();
-		$yourls->set( 'username', $yourls_username );
-		$yourls->set( 'password', $yourls_password );
-		$yourls->set( 'ssl', $yourls_ssl );
-		$yourls->set( 'yourls-url', $yourls_url );
-		$slinky->set_cascade( array( $yourls, new Slinky_UR1ca(), new Slinky_Trim(), new Slinky_IsGd(), new Slinky_TinyURL() ) );
-	} else {
-		// setup a cascade of shortening services
-		// try to get a short link from these services
-		// in the order ur1.ca, trim, id.gd, tinyurl
-		$slinky->set_cascade( array( new Slinky_UR1ca(), new Slinky_Trim(), new Slinky_IsGd(), new Slinky_TinyURL() ) );
-	}
-	return $slinky->short();
-} };
-
 function appnetpost_feeditem($pid, $uid) {
 	global $a;
 
 	require_once('include/bbcode.php');
 	require_once("include/html2plain.php");
+	require_once("include/network.php");
 
 	$items = q("SELECT `uri`, `plink`, `author-link`, `author-name`, `created`, `edited`, `id`, `title`, `body` from `item` WHERE id=%d", intval($pid));
 	foreach ($items AS $item) {
@@ -387,7 +308,7 @@ function appnetpost_feeditem($pid, $uid) {
 		if ($title == "")
 			continue;
 
-		//$origlink = appnetpost_original_url($origlink);
+		//$origlink = original_url($origlink);
 
 		$html = nl2br($title);
 
