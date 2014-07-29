@@ -34,8 +34,14 @@ function showmore_addon_settings(&$a,&$s) {
 	if(!$chars)
 		$chars = '1100';
 
-	$s .= '<div class="settings-block">';
+	$s .= '<span id="settings_showmore_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_showmore_expanded\'); openClose(\'settings_showmore_inflated\');">';
 	$s .= '<h3>' . t('"Show more" Settings').'</h3>';
+	$s .= '</span>';
+	$s .= '<div id="settings_showmore_expanded" class="settings-block" style="display: none;">';
+	$s .= '<span class="fakelink" onclick="openClose(\'settings_showmore_expanded\'); openClose(\'settings_showmore_inflated\');">';
+	$s .= '<h3>' . t('"Show more" Settings').'</h3>';
+	$s .= '</span>';
+
 	$s .= '<div id="showmore-wrapper">';
 
 	$s .= '<label id="showmore-enable-label" for="showmore-enable">'.t('Enable Show More').'</label>';
@@ -45,7 +51,7 @@ function showmore_addon_settings(&$a,&$s) {
 	$s .= '<input id="showmore-words" type="text" name="showmore-chars" value="'.$chars.'" />';
 	$s .= '</div><div class="clear"></div>';
 
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="showmore-submit" name="showmore-submit" class="settings-submit" value="' . t('Submit') . '" /></div>';
+	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="showmore-submit" name="showmore-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>';
 //	$s .= '<div class="showmore-desc">' . t('Use /expression/ to provide regular expressions') . '</div>';
 	$s .= '</div>';
 

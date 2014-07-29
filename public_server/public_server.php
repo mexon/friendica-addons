@@ -3,7 +3,7 @@
 /**
  * Name: public_server
  * Description: Friendica plugin/addon with functions suitable for a public server.
- * Version: 1.0
+ * Version: 1.1
  * Author: Keith Fernie <http://friendika.me4.it/profile/keith>
  */
 
@@ -36,7 +36,7 @@ function public_server_register_account($a,$b) {
 	if(! $days)
 		return;
 
-	$r = q("UPDATE user set account_expires_on = '%s', expire = %d where uid = %d limit 1",
+	$r = q("UPDATE user set account_expires_on = '%s', expire = %d where uid = %d",
 		dbesc(datetime_convert('UTC','UTC','now +' . $days . ' days')),
 		intval($days_posts),
 		intval($uid)
@@ -66,7 +66,7 @@ function public_server_cron($a,$b) {
 				'source_photo' => $a->get_baseurl() . '/images/person-80.jpg',
 			));
 
-			q("update user set expire_notification_sent = '%s' where uid = %d limit 1",
+			q("update user set expire_notification_sent = '%s' where uid = %d",
 				dbesc(datetime_convert()),
 				intval($rr['uid'])
 			);
@@ -85,7 +85,7 @@ function public_server_cron($a,$b) {
 		$r = q("select uid from user where account_expired = 0 and login_date = '0000-00-00 00:00:00' and register_date <  UTC_TIMESTAMP() - INTERVAL %d DAY and account_expires_on = '0000-00-00 00:00:00'",intval($nologin));
 		if(count($r)) {
 			foreach($r as $rr)
-				q("update user set account_expires_on = '%s' where uid = %d limit 1",
+				q("update user set account_expires_on = '%s' where uid = %d",
 					dbesc(datetime_convert('UTC','UTC','now +' . '6 days')),
 					intval($rr['uid'])
 			);
@@ -98,7 +98,7 @@ function public_server_cron($a,$b) {
 		$r = q("select uid from user where account_expired = 0 and login_date < UTC_TIMESTAMP() - INTERVAL %d DAY and account_expires_on = '0000-00-00 00:00:00' and `page-flags` = 0",intval($flagusers));
 		if(count($r)) {
 			foreach($r as $rr)
-				q("update user set account_expires_on = '%s' where uid = %d limit 1",
+				q("update user set account_expires_on = '%s' where uid = %d",
 					dbesc(datetime_convert('UTC','UTC','now +' . '6 days')),
 					intval($rr['uid'])
 				);
@@ -111,7 +111,7 @@ function public_server_cron($a,$b) {
 		$r = q("select uid from user where account_expired = 0 and login_date < UTC_TIMESTAMP() - INTERVAL %d DAY and account_expires_on = '0000-00-00 00:00:00' and expire = 0 and `page-flags` = 0",intval($flagposts));
 		if(count($r)) {
 			foreach($r as $rr)
-				q("update user set expire = %d where uid = %d limit 1",
+				q("update user set expire = %d where uid = %d",
 					intval($flagpostsexpire),
 					intval($rr['uid'])
 				);
@@ -136,8 +136,41 @@ function public_server_login($a,$b) {
 	$days = get_config('public_server','expiredays');
 	if(! $days)
 		return;
-	$r = q("UPDATE user set account_expires_on = '%s' where uid = %d and account_expires_on > '0000-00-00 00:00:00' limit 1",
+	$r = q("UPDATE user set account_expires_on = '%s' where uid = %d and account_expires_on > '0000-00-00 00:00:00'",
 	dbesc(datetime_convert('UTC','UTC','now +' . $days . ' days')),
 	local_user()
 	);
 }
+
+function public_server_plugin_admin_post ( &$a ) {
+    check_form_security_token_redirectOnErr('/admin/plugins/publicserver', 'publicserver');
+    $expiredays = (( x($_POST, 'expiredays') ) ? notags(trim($_POST['expiredays'] )) : '');
+    $expireposts = (( x($_POST, 'expireposts') ) ? notags(trim($_POST['expireposts'] )) : '');
+    $nologin = (( x($_POST, 'nologin') ) ? notags(trim($_POST['nologin'] )) : '');
+    $flagusers = (( x($_POST, 'flagusers') ) ? notags(trim($_POST['flagusers'] )) : '');
+    $flagposts = (( x($_POST, 'flagposts') ) ? notags(trim($_POST['flagposts'] )) : '');
+    $flagpostsexpire = (( x($_POST, 'flagpostsexpire') ) ? notags(trim($_POST['flagpostsexpire'] )) : '');
+    set_config( 'public_server','expiredays',$expiredays );
+    set_config( 'public_server','expireposts',$expireposts );
+    set_config( 'public_server','nologin',$nologin );
+    set_config( 'public_server','flagusers',$flagusers);
+    set_config( 'public_server','flagposts',$flagposts );
+    set_config( 'public_server','flagpostsexpire',$flagpostsexpire );
+    info( t('Settings saved').EOL );
+}
+function public_server_plugin_admin ( &$a, &$o) {
+    $token = get_form_security_token("publicserver");
+    $t = get_markup_template( "admin.tpl", "addon/public_server");
+    $o = replace_macros($t, array(
+	'$submit' => t('Save Settings'),
+	'$form_security_token' => $token,
+	'$infotext' => t('Set any of these options to 0 to deactivate it.'),
+	'$expiredays' => Array( "expiredays","Expire Days", intval(get_config('public_server', 'expiredays')), "When an account is created on the site, it is given a hard "),
+	'$expireposts' => Array( "expireposts", "Expire Posts", intval(get_config('public_server','expireposts')), "Set the default days for posts to expire here"),
+	'$nologin' => Array( "nologin", "No Login", intval(get_config('public_server','nologin')), "Remove users who have never logged in after nologin days "),
+	'$flagusers' => Array( "flagusers", "Flag users", intval(get_config('public_server','flagusers')), "Remove users who last logged in over flagusers days ago"),
+	'$flagposts' => Array( "flagposts", "Flag posts", intval(get_config('public_server','flagposts')), "For users who last logged in over flagposts days ago set post expiry days to flagpostsexpire "),
+	'$flagpostsexpire' => Array( "flagpostsexpire", "Flag posts expire", intval(get_config('public_server','flagpostsexpire'))),
+    ));
+}
+

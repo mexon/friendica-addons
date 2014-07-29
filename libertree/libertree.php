@@ -50,8 +50,8 @@ function libertree_settings(&$a,&$s) {
     /* Get the current state of our config variables */
 
     $enabled = get_pconfig(local_user(),'libertree','post');
-
     $checked = (($enabled) ? ' checked="checked" ' : '');
+    $css = (($enabled) ? '' : '-disabled');
 
     $def_enabled = get_pconfig(local_user(),'libertree','post_by_default');
 
@@ -63,8 +63,14 @@ function libertree_settings(&$a,&$s) {
 
     /* Add some HTML to the existing form */
 
-    $s .= '<div class="settings-block">';
-    $s .= '<h3>' . t('libertree Post Settings') . '</h3>';
+    $s .= '<span id="settings_libertree_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_libertree_expanded\'); openClose(\'settings_libertree_inflated\');">';
+    $s .= '<img class="connector'.$css.'" src="images/libertree.png" /><h3 class="connector">'. t('libertree Export').'</h3>';
+    $s .= '</span>';
+    $s .= '<div id="settings_libertree_expanded" class="settings-block" style="display: none;">';
+    $s .= '<span class="fakelink" onclick="openClose(\'settings_libertree_expanded\'); openClose(\'settings_libertree_inflated\');">';
+    $s .= '<img class="connector'.$css.'" src="images/libertree.png" /><h3 class="connector">'. t('libertree Export').'</h3>';
+    $s .= '</span>';
+
     $s .= '<div id="libertree-enable-wrapper">';
     $s .= '<label id="libertree-enable-label" for="libertree-checkbox">' . t('Enable Libertree Post Plugin') . '</label>';
     $s .= '<input id="libertree-checkbox" type="checkbox" name="libertree" value="1" ' . $checked . '/>';
@@ -87,7 +93,7 @@ function libertree_settings(&$a,&$s) {
 
     /* provide a submit button */
 
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="libertree-submit" name="libertree-submit" class="settings-submit" value="' . t('Submit') . '" /></div></div>';
+    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="libertree-submit" name="libertree-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
 
 }
 
@@ -153,8 +159,11 @@ function libertree_send(&$a,&$b) {
 	$ltree_api_token = get_pconfig($b['uid'],'libertree','libertree_api_token');
 	$ltree_url = get_pconfig($b['uid'],'libertree','libertree_url');
 	$ltree_blog = "$ltree_url/api/v1/posts/create/?token=$ltree_api_token";
-	//$ltree_source = "Friendica";
-	$ltree_source = "[".$a->config['sitename']."](".$a->get_baseurl().")";
+	if (isset($a->config['sitename']) AND ($a->config['sitename'] != ""))
+		$ltree_source = $a->config['sitename'];
+	else
+		$ltree_source = "Friendica";
+
 	if($ltree_url && $ltree_api_token && $ltree_blog && $ltree_source) {
 
 		require_once('include/bb2diaspora.php');

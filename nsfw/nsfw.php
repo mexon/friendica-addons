@@ -74,8 +74,14 @@ function nsfw_addon_settings(&$a,&$s) {
 	if(! $words)
 		$words = 'nsfw,';
 
-    $s .= '<div class="settings-block">';
-    $s .= '<h3>' . t('Not Safe For Work (General Purpose Content Filter) settings') . '</h3>';
+    $s .= '<span id="settings_nsfw_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_nsfw_expanded\'); openClose(\'settings_nsfw_inflated\');">';
+    $s .= '<h3>' . t('Not Safe For Work (General Purpose Content Filter)') . '</h3>';
+    $s .= '</span>';
+    $s .= '<div id="settings_nsfw_expanded" class="settings-block" style="display: none;">';
+    $s .= '<span class="fakelink" onclick="openClose(\'settings_nsfw_expanded\'); openClose(\'settings_nsfw_inflated\');">';
+    $s .= '<h3>' . t('Not Safe For Work (General Purpose Content Filter)') . '</h3>';
+    $s .= '</span>';
+
     $s .= '<div id="nsfw-wrapper">';
     $s .= '<p>' . t ('This plugin looks in posts for the words/text you specify below, and collapses any content containing those keywords so it is not displayed at inappropriate times, such as sexual innuendo that may be improper in a work setting. It is polite and recommended to tag any content containing nudity with #NSFW.  This filter can also match any other word/text you specify, and can thereby be used as a general purpose content filter.') . '</p>';
     $s .= '<label id="nsfw-enable-label" for="nsfw-enable">' . t('Enable Content filter') . ' </label>';
@@ -85,7 +91,7 @@ function nsfw_addon_settings(&$a,&$s) {
     $s .= '<input id="nsfw-words" type="text" name="nsfw-words" value="' . $words .'" />';
     $s .= '</div><div class="clear"></div>';
 
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="nsfw-submit" name="nsfw-submit" class="settings-submit" value="' . t('Submit') . '" /></div>';
+    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="nsfw-submit" name="nsfw-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div>';
 	$s .= '<div class="nsfw-desc">' . t('Use /expression/ to provide regular expressions') . '</div></div>';
 
 	return;

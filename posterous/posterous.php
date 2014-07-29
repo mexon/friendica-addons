@@ -6,6 +6,7 @@
  * Version: 1.0
  * Author: Mike Macgirvin <http://macgirvin.com/profile/mike>
  * Author: Tony Baldwin <https://free-haven.org/u/tony>
+ * Status: Unsupported
  */
 
 function posterous_install() {
@@ -100,7 +101,7 @@ function posterous_settings(&$a,&$s) {
 
     /* provide a submit button */
 
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="posterous-submit" name="posterous-submit" class="settings-submit" value="' . t('Submit') . '" /></div></div>';
+    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="posterous-submit" name="posterous-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
 
 }
 

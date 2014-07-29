@@ -66,8 +66,14 @@ function dwpost_settings(&$a,&$s) {
 
     /* Add some HTML to the existing form */
 
-    $s .= '<div class="settings-block">';
-    $s .= '<h3>' . t('Dreamwidth Post Settings') . '</h3>';
+    $s .= '<span id="settings_dwpost_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_dwpost_expanded\'); openClose(\'settings_dwpost_inflated\');">';
+    $s .= '<img class="connector" src="images/dreamwidth.png" /><h3 class="connector">'. t("Dreamwidth Export").'</h3>';
+    $s .= '</span>';
+    $s .= '<div id="settings_dwpost_expanded" class="settings-block" style="display: none;">';
+    $s .= '<span class="fakelink" onclick="openClose(\'settings_dwpost_expanded\'); openClose(\'settings_dwpost_inflated\');">';
+    $s .= '<img class="connector" src="images/dreamwidth.png" /><h3 class="connector">'. t("Dreamwidth Export").'</h3>';
+    $s .= '</span>';
+
     $s .= '<div id="dwpost-enable-wrapper">';
     $s .= '<label id="dwpost-enable-label" for="dwpost-checkbox">' . t('Enable dreamwidth Post Plugin') . '</label>';
     $s .= '<input id="dwpost-checkbox" type="checkbox" name="dwpost" value="1" ' . $checked . '/>';
@@ -90,7 +96,7 @@ function dwpost_settings(&$a,&$s) {
 
     /* provide a submit button */
 
-    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="dwpost-submit" name="dwpost-submit" class="settings-submit" value="' . t('Submit') . '" /></div></div>';
+    $s .= '<div class="settings-submit-wrapper" ><input type="submit" id="dwpost-submit" name="dwpost-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
 
 }
 
