@@ -12,6 +12,7 @@
  - Use embedded pictures for the attachment information (large attachment)
  - Sound links must be handled
  - https://alpha.app.net/sr_rolando/post/32365203 - double pictures
+ - https://alpha.app.net/opendev/post/34396399 - location data
 */
 
 define('APPNET_DEFAULT_POLL_INTERVAL', 5); // given in minutes
@@ -23,6 +24,7 @@ function appnet_install() {
 	register_hook('cron',			'addon/appnet/appnet.php', 'appnet_cron');
 	register_hook('connector_settings',	'addon/appnet/appnet.php', 'appnet_settings');
 	register_hook('connector_settings_post','addon/appnet/appnet.php', 'appnet_settings_post');
+	register_hook('prepare_body', 		'addon/appnet/appnet.php', 'appnet_prepare_body');
 }
 
 
@@ -31,8 +33,9 @@ function appnet_uninstall() {
 	unregister_hook('notifier_normal',  'addon/appnet/appnet.php', 'appnet_send');
 	unregister_hook('jot_networks',     'addon/appnet/appnet.php', 'appnet_jot_nets');
 	unregister_hook('cron',			'addon/appnet/appnet.php', 'appnet_cron');
-	unregister_hook('connector_settings',      'addon/appnet/appnet.php', 'appnet_settings');
+	unregister_hook('connector_settings',	'addon/appnet/appnet.php', 'appnet_settings');
 	unregister_hook('connector_settings_post', 'addon/appnet/appnet.php', 'appnet_settings_post');
+	unregister_hook('prepare_body', 	'addon/appnet/appnet.php', 'appnet_prepare_body');
 }
 
 function appnet_module() {}
@@ -713,7 +716,8 @@ function appnet_fetchstream($a, $uid) {
 					'to_email'     => $user['email'],
 					'uid'          => $user['uid'],
 					'item'         => $postarray,
-					'link'         => $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item,
+					//'link'         => $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item,
+					'link'         => $a->get_baseurl().'/display/'.get_item_guid($item),
 					'source_name'  => $postarray['author-name'],
 					'source_link'  => $postarray['author-link'],
 					'source_photo' => $postarray['author-avatar'],
@@ -767,7 +771,8 @@ function appnet_fetchstream($a, $uid) {
 				'to_email'     => $user['email'],
 				'uid'          => $user['uid'],
 				'item'         => $postarray,
-				'link'         => $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item,
+				//'link'         => $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item,
+				'link'         => $a->get_baseurl().'/display/'.get_item_guid($item),
 				'source_name'  => $postarray['author-name'],
 				'source_link'  => $postarray['author-link'],
 				'source_photo' => $postarray['author-avatar'],
@@ -825,13 +830,15 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 	if (isset($post["reply_to"]) AND ($post["reply_to"] != "")) {
 		$postarray['thr-parent'] = "adn::".$post["reply_to"];
 
-		// Complete the thread if the parent doesn't exists
+		// Complete the thread (if the parent doesn't exists)
 		if ($threadcompletion) {
-			$r = q("SELECT * FROM `item` WHERE `uri` = '%s' AND `uid` = %d LIMIT 1",
-				dbesc($postarray['thr-parent']),
-				intval($uid)
-				);
-			if (!count($r)) {
+			//$r = q("SELECT * FROM `item` WHERE `uri` = '%s' AND `uid` = %d LIMIT 1",
+			//	dbesc($postarray['thr-parent']),
+			//	intval($uid)
+			//	);
+			//if (!count($r)) {
+				logger("appnet_createpost: completing thread ".$post["thread_id"]." for user ".$uid, LOGGER_DEBUG);
+
 				require_once("addon/appnet/AppDotNet.php");
 
 				$token = get_pconfig($uid,'appnet','token');
@@ -850,14 +857,24 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 					logger("appnet_createpost: Error fetching thread for user ".$uid." ".appnet_error($e->getMessage()));
 				}
 				$thread = array_reverse($thread);
+
+				logger("appnet_createpost: fetched ".count($thread)." items for thread ".$post["thread_id"]." for user ".$uid, LOGGER_DEBUG);
+
 				foreach ($thread AS $tpost) {
-					$threadpost = appnet_createpost($a, $uid, $tpost, $me, $user, $ownid, $createuser, false);
+					$threadpost = appnet_createpost($a, $uid, $tpost, $me, $user, $ownid, false, false);
 					$item = item_store($threadpost);
+					logger("appnet_createpost: stored post ".$post["id"]." thread ".$post["thread_id"]." in item ".$item, LOGGER_DEBUG);
 				}
-			}
+			//}
 		}
-	} else
+		// Don't create accounts of people who just comment something
+		$createuser = false;
+
+		$postarray['object-type'] = ACTIVITY_OBJ_COMMENT;
+	} else {
 		$postarray['thr-parent'] = $postarray['uri'];
+		$postarray['object-type'] = ACTIVITY_OBJ_NOTE;
+	}
 
 	$postarray['plink'] = $post["canonical_url"];
 
@@ -942,6 +959,10 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 			$page_info = "\n[url=".$photo["url"]."][img]".$photo["large"]."[/img][/url]";
 		elseif ($photo["url"] != "")
 			$page_info = "\n[img]".$photo["url"]."[/img]";
+
+		if ($photo["url"] != "")
+			$postarray['object-type'] = ACTIVITY_OBJ_IMAGE;
+
 	} else
 		$photo = array("url" => "", "large" => "");
 
@@ -1040,8 +1061,10 @@ function appnet_fetchcontact($a, $uid, $contact, $me, $create_user) {
 		intval($uid), dbesc("adn::".$contact["id"]));
 
 	if(!count($r) AND !$create_user)
-		return($me);
+		return($me["id"]);
 
+	if ($contact["canonical_url"] == "")
+		return($me["id"]);
 
 	if (count($r) AND ($r[0]["readonly"] OR $r[0]["blocked"])) {
 		logger("appnet_fetchcontact: Contact '".$r[0]["nick"]."' is blocked or readonly.", LOGGER_DEBUG);
@@ -1049,6 +1072,13 @@ function appnet_fetchcontact($a, $uid, $contact, $me, $create_user) {
 	}
 
 	if(!count($r)) {
+
+		if ($contact["name"] == "")
+			$contact["name"] = $contact["username"];
+
+		if ($contact["username"] == "")
+			$contact["username"] = $contact["name"];
+
 		// create contact record
 		q("INSERT INTO `contact` (`uid`, `created`, `url`, `nurl`, `addr`, `alias`, `notify`, `poll`,
 					`name`, `nick`, `photo`, `network`, `rel`, `priority`,
@@ -1155,6 +1185,43 @@ function appnet_fetchcontact($a, $uid, $contact, $me, $create_user) {
 	}
 
 	return($r[0]["id"]);
+}
+
+function appnet_prepare_body(&$a,&$b) {
+        if ($b["item"]["network"] != NETWORK_APPNET)
+                return;
+
+        if ($b["preview"]) {
+                $max_char = 256;
+                require_once("include/plaintext.php");
+                $item = $b["item"];
+                $item["plink"] = $a->get_baseurl()."/display/".$a->user["nickname"]."/".$item["parent"];
+
+                $r = q("SELECT `author-link` FROM item WHERE item.uri = '%s' AND item.uid = %d LIMIT 1",
+                        dbesc($item["thr-parent"]),
+                        intval(local_user()));
+
+                if(count($r)) {
+                        $orig_post = $r[0];
+
+	                $nicknameplain = preg_replace("=https?://alpha.app.net/(.*)=ism", "$1", $orig_post["author-link"]);
+	                $nickname = "@[url=".$orig_post["author-link"]."]".$nicknameplain."[/url]";
+	                $nicknameplain = "@".$nicknameplain;
+
+	                if ((strpos($item["body"], $nickname) === false) AND (strpos($item["body"], $nicknameplain) === false))
+	                        $item["body"] = $nickname." ".$item["body"];
+                }
+
+
+
+                $msgarr = plaintext($a, $item, $max_char, true);
+		$msg = appnet_create_entities($a, $item, $msgarr);
+
+		require_once("library/markdown.php");
+		$msg = Markdown($msg);
+
+                $b['html'] = $msg;
+        }
 }
 
 function appnet_cron($a,$b) {

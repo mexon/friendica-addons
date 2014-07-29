@@ -73,6 +73,7 @@ function twitter_install() {
 	register_hook('queue_predeliver', 'addon/twitter/twitter.php', 'twitter_queue_hook');
 	register_hook('follow', 'addon/twitter/twitter.php', 'twitter_follow');
 	register_hook('expire', 'addon/twitter/twitter.php', 'twitter_expire');
+	register_hook('prepare_body', 'addon/twitter/twitter.php', 'twitter_prepare_body');
 	logger("installed twitter");
 }
 
@@ -87,6 +88,7 @@ function twitter_uninstall() {
 	unregister_hook('queue_predeliver', 'addon/twitter/twitter.php', 'twitter_queue_hook');
 	unregister_hook('follow', 'addon/twitter/twitter.php', 'twitter_follow');
 	unregister_hook('expire', 'addon/twitter/twitter.php', 'twitter_expire');
+	unregister_hook('prepare_body', 'addon/twitter/twitter.php', 'twitter_prepare_body');
 
 	// old setting - remove only
 	unregister_hook('post_local_end', 'addon/twitter/twitter.php', 'twitter_post_hook');
@@ -462,7 +464,7 @@ function twitter_post_hook(&$a,&$b) {
 
 		$max_char = 140;
 		require_once("include/plaintext.php");
-		$msgarr = plaintext($a, $b, $max_char, true);
+		$msgarr = plaintext($a, $b, $max_char, true, 8);
 		$msg = $msgarr["text"];
 
 		if (($msg == "") AND isset($msgarr["title"]))
@@ -472,7 +474,7 @@ function twitter_post_hook(&$a,&$b) {
 
 		if (isset($msgarr["url"]))
 			$msg .= "\n".$msgarr["url"];
-		elseif (isset($msgarr["image"]))
+		elseif (isset($msgarr["image"]) AND ($msgarr["type"] != "video"))
 			$image = $msgarr["image"];
 
 		// and now tweet it :-)
@@ -650,6 +652,45 @@ function twitter_expire($a,$b) {
 	}
 
 	logger('twitter_expire: expire_end');
+}
+
+function twitter_prepare_body(&$a,&$b) {
+	if ($b["item"]["network"] != NETWORK_TWITTER)
+		return;
+
+	if ($b["preview"]) {
+		$max_char = 140;
+		require_once("include/plaintext.php");
+		$item = $b["item"];
+		$item["plink"] = $a->get_baseurl()."/display/".$a->user["nickname"]."/".$item["parent"];
+
+		$r = q("SELECT `author-link` FROM item WHERE item.uri = '%s' AND item.uid = %d LIMIT 1",
+			dbesc($item["thr-parent"]),
+			intval(local_user()));
+
+		if(count($r)) {
+			$orig_post = $r[0];
+
+			$nicknameplain = preg_replace("=https?://twitter.com/(.*)=ism", "$1", $orig_post["author-link"]);
+			$nickname = "@[url=".$orig_post["author-link"]."]".$nicknameplain."[/url]";
+			$nicknameplain = "@".$nicknameplain;
+
+			if ((strpos($item["body"], $nickname) === false) AND (strpos($item["body"], $nicknameplain) === false))
+				$item["body"] = $nickname." ".$item["body"];
+		}
+
+
+		$msgarr = plaintext($a, $item, $max_char, true, 8);
+		$msg = $msgarr["text"];
+
+		if (isset($msgarr["url"]))
+			$msg .= " ".$msgarr["url"];
+
+		if (isset($msgarr["image"]))
+			$msg .= " ".$msgarr["image"];
+
+                $b['html'] = nl2br(htmlspecialchars($msg));
+	}
 }
 
 function twitter_fetchtimeline($a, $uid) {
@@ -1202,6 +1243,7 @@ function twitter_createpost($a, $uid, $post, $self, $create_user, $only_existing
 		if (count($r)) {
 			$postarray['thr-parent'] = $r[0]["uri"];
 			$postarray['parent-uri'] = $r[0]["parent-uri"];
+			$postarray['object-type'] = ACTIVITY_OBJ_COMMENT;
 		} else {
 			$r = q("SELECT * FROM `item` WHERE `extid` = '%s' AND `uid` = %d LIMIT 1",
 					dbesc($parent),
@@ -1210,9 +1252,11 @@ function twitter_createpost($a, $uid, $post, $self, $create_user, $only_existing
 			if (count($r)) {
 				$postarray['thr-parent'] = $r[0]['uri'];
 				$postarray['parent-uri'] = $r[0]['parent-uri'];
+				$postarray['object-type'] = ACTIVITY_OBJ_COMMENT;
 			} else {
 				$postarray['thr-parent'] = $postarray['uri'];
 				$postarray['parent-uri'] = $postarray['uri'];
+				$postarray['object-type'] = ACTIVITY_OBJ_NOTE;
 			}
 		}
 
@@ -1232,8 +1276,12 @@ function twitter_createpost($a, $uid, $post, $self, $create_user, $only_existing
 			} else
 				return(array());
 		}
-	} else
+		// Don't create accounts of people who just comment something
+		$create_user = false;
+	} else {
 		$postarray['parent-uri'] = $postarray['uri'];
+		$postarray['object-type'] = ACTIVITY_OBJ_NOTE;
+	}
 
 	if ($contactid == 0) {
 		$contactid = twitter_fetch_contact($uid, $post->user, $create_user);
@@ -1274,6 +1322,7 @@ function twitter_createpost($a, $uid, $post, $self, $create_user, $only_existing
 					//$postarray['body'] = str_replace($media->url, "\n\n[img]".$media->media_url_https."[/img]\n", $postarray['body']);
 					//$has_picture = true;
 					$postarray['body'] = str_replace($media->url, "", $postarray['body']);
+					$postarray['object-type'] = ACTIVITY_OBJ_IMAGE;
 					$picture = $media->media_url_https;
 					break;
 				default:
@@ -1315,6 +1364,7 @@ function twitter_createpost($a, $uid, $post, $self, $create_user, $only_existing
 						//$postarray['body'] = str_replace($media->url, "\n\n[img]".$media->media_url_https."[/img]\n", $postarray['body']);
 						//$has_picture = true;
 						$postarray['body'] = str_replace($media->url, "", $postarray['body']);
+						$postarray['object-type'] = ACTIVITY_OBJ_IMAGE;
 						$picture = $media->media_url_https;
 						break;
 					default:
@@ -1402,7 +1452,8 @@ function twitter_checknotification($a, $uid, $own_id, $top_item, $postarray) {
 				'to_email'     => $user[0]['email'],
 				'uid'          => $user[0]['uid'],
 				'item'         => $postarray,
-				'link'             => $a->get_baseurl() . '/display/' . $user[0]['nickname'] . '/' . $top_item,
+				//'link'             => $a->get_baseurl() . '/display/' . $user[0]['nickname'] . '/' . $top_item,
+				'link'         => $a->get_baseurl().'/display/'.get_item_guid($top_item),
 				'source_name'  => $postarray['author-name'],
 				'source_link'  => $postarray['author-link'],
 				'source_photo' => $postarray['author-avatar'],
@@ -1563,7 +1614,8 @@ function twitter_fetchhometimeline($a, $uid) {
 					'to_email'     => $u[0]['email'],
 					'uid'          => $u[0]['uid'],
 					'item'         => $postarray,
-					'link'         => $a->get_baseurl() . '/display/' . $u[0]['nickname'] . '/' . $item,
+					//'link'         => $a->get_baseurl() . '/display/' . $u[0]['nickname'] . '/' . $item,
+					'link'         => $a->get_baseurl().'/display/'.get_item_guid($item),
 					'source_name'  => $postarray['author-name'],
 					'source_link'  => $postarray['author-link'],
 					'source_photo' => $postarray['author-avatar'],
