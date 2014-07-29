@@ -250,7 +250,9 @@ function retrieve_resource($resource) {
     unlink($cookiejar);
     $resource['http-code'] = $a->get_curl_code();
     $resource['type'] = $a->get_curl_content_type();
-    $resource['redirect-url'] = $a->get_curl_redirect_url();
+    if (method_exists($a, 'edd_debug')) {
+        $resource['redirect-url'] = $a->get_curl_redirect_url();
+    }
     logger('retrieve_resource: got code ' . $resource['http-code'] .
            ' retrieving resource ' . $resource['id'] .
            ' final url ' . $resource['redirect-url'], LOGGER_DEBUG);
