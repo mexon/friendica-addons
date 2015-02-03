@@ -174,7 +174,8 @@ function mailstream_sender($item) {
 }
 
 function mailstream_decode_subject($subject) {
-    $replacement = trim(html_entity_decode(strip_tags(bbcode($item['body']))));
+    $replacement = trim(html_entity_decode(strip_tags(bbcode($subject))));
+    $replacement = preg_replace_callback("/(&#[0-9]+;)/", function($m) { return mb_convert_encoding($m[1], "UTF-8", "HTML-ENTITIES"); }, $replacement);
     return $replacement ? $replacement : $subject;
 }
 
