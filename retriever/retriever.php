@@ -183,6 +183,9 @@ function retriever_retrieve_items($max_items) {
         $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
                dbesc(implode($schedule_clauses, ' OR ')),
                intval($retrieve_items));
+        if (!is_array($r)) {
+            break;
+        }
         if (count($r) == 0) {
             break;
         }
