@@ -474,12 +474,13 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     }
 
     $encoding = retriever_get_encoding($resource);
-    $doc = new DOMDocument('1.0', $encoding);
+    $content = mb_convert_encoding($resource['data'], 'HTML-ENTITIES', $encoding);
+    $doc = new DOMDocument('1.0', 'UTF-8');
     if (strpos($resource['type'], 'html') !== false) {
-        @$doc->loadHTML($resource['data']);
+        @$doc->loadHTML($content);
     }
     else {
-        $doc->loadXML($resource['data']);
+        $doc->loadXML($content);
     }
 
     $components = parse_url($resource['redirect-url']);
