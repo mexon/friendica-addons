@@ -248,7 +248,7 @@ function retrieve_resource($resource) {
     logger('retrieve_resource: ' . ($resource['num-tries'] + 1) .
            ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
     $redirects;
-    $cookiejar = tempnam ('/tmp', 'cookiejar-retriever');
+    $cookiejar = tempnam ('/tmp', 'cookiejar-retriever-');
     $resource['data'] = fetch_url($resource['url'], $resource['binary'], $redirects, 0, Null, $cookiejar, true);
     unlink($cookiejar);
     $resource['http-code'] = $a->get_curl_code();
