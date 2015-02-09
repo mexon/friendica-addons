@@ -315,7 +315,7 @@ function jappixmini_settings(&$a, &$s) {
     $s .= ' <input id="jappixmini-server" type="text" name="jappixmini-server" value="'.$server.'" />';
     $s .= '<br />';
 
-    if (defaultbosh == "") {
+    if ($defaultbosh == "") {
 	$s .= '<label for="jappixmini-bosh">'.t('Jabber BOSH host').'</label>';
 	$s .= ' <input id="jappixmini-bosh" type="text" name="jappixmini-bosh" value="'.$bosh.'" />';
 	$s .= '<br />';
@@ -485,7 +485,8 @@ function jappixmini_script(&$a,&$s) {
 		dbesc($dfrn_id),
 		dbesc($dfrn_id)
 	);
-	$name = $r[0]["name"];
+	if (count($r))
+		$name = $r[0]["name"];
 
         $value = $row['v'];
         $pos = strpos($value, ":");

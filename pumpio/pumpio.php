@@ -433,8 +433,8 @@ function pumpio_send(&$a,&$b) {
 
 		$title = trim($b['title']);
 
-		if ($title != '')
-			$title = "<h4>".$title."</h4>";
+		//if ($title != '')
+		//	$title = "<h4>".$title."</h4>";
 
 		$content = bbcode($b['body'], false, false, 4);
 
@@ -454,7 +454,10 @@ function pumpio_send(&$a,&$b) {
 		if (!$iscomment) {
 			$params["object"] = array(
 						'objectType' => "note",
-						'content' => $title.$content);
+						'content' => $content);
+
+			if ($title != "")
+				$params["object"]["displayName"] = $title;
 
 			if (count($receiver["to"]))
 				$params["to"] = $receiver["to"];
@@ -477,8 +480,11 @@ function pumpio_send(&$a,&$b) {
 
 			$params["object"] = array(
 						'objectType' => "comment",
-						'content' => $title.$content,
+						'content' => $content,
 						'inReplyTo' => $inReplyTo);
+
+			if ($title != "")
+				$params["object"]["displayName"] = $title;
 		}
 
 		$client = new oauth_client_class;
@@ -521,7 +527,7 @@ function pumpio_send(&$a,&$b) {
 	}
 }
 
-function pumpio_action(&$a, $uid, $uri, $action, $content) {
+function pumpio_action(&$a, $uid, $uri, $action, $content = "") {
 
 	// Don't do likes and other stuff if you don't import the timeline
 	if (!get_pconfig($uid,'pumpio','import'))
@@ -618,9 +624,23 @@ function pumpio_cron(&$a,$b) {
 		}
 	}
 
+	$abandon_days = intval(get_config('system','account_abandon_days'));
+	if ($abandon_days < 1)
+		$abandon_days = 0;
+
+	$abandon_limit = date("Y-m-d H:i:s", time() - $abandon_days * 86400);
+
 	$r = q("SELECT * FROM `pconfig` WHERE `cat` = 'pumpio' AND `k` = 'import' AND `v` = '1' ORDER BY RAND() ");
 	if(count($r)) {
 		foreach($r as $rr) {
+			if ($abandon_days != 0) {
+				$user = q("SELECT `login_date` FROM `user` WHERE uid=%d AND `login_date` >= '%s'", $rr['uid'], $abandon_limit);
+				if (!count($user)) {
+					logger('abandoned account: timeline from user '.$rr['uid'].' will not be imported');
+					continue;
+				}
+			}
+
 			logger('pumpio: importing timeline from user '.$rr['uid']);
 			pumpio_fetchinbox($a, $rr['uid']);
 
@@ -711,7 +731,7 @@ function pumpio_fetchtimeline(&$a, $uid) {
 					if ($receiver->id == "http://activityschema.org/collection/public")
 						$public = true;
 
-			if ($public AND !strstr($post->generator->displayName, $application_name)) {
+			if ($public AND !stristr($post->generator->displayName, $application_name)) {
 				require_once('include/html2bbcode.php');
 
 				$_SESSION["authenticated"] = true;
@@ -805,7 +825,8 @@ function pumpio_dounlike(&$a, $uid, $self, $post, $own_id) {
 		logger("pumpio_dounlike: not found. User ".$own_id." ".$uid." Contact: ".$contactid." Url ".$orig_post['uri']);
 }
 
-function pumpio_dolike(&$a, $uid, $self, $post, $own_id) {
+function pumpio_dolike(&$a, $uid, $self, $post, $own_id, $threadcompletion = true) {
+	require_once('include/items.php');
 
 	// Searching for the liked post
 	// Two queries for speed issues
@@ -827,6 +848,10 @@ function pumpio_dolike(&$a, $uid, $self, $post, $own_id) {
 		else
 			$orig_post = $r[0];
 	}
+
+	// thread completion
+	if ($threadcompletion)
+		pumpio_fetchallcomments($a, $uid, $post->object->id);
 
 	$contactid = 0;
 
@@ -908,6 +933,12 @@ function pumpio_get_contact($uid, $contact) {
 			dbesc($contact->image->url),
 			dbesc(normalise_link($contact->url)));
 
+	if (DB_UPDATE_VERSION >= "1177")
+		q("UPDATE `unique_contacts` SET `location` = '%s', `about` = '%s' WHERE url = '%s'",
+			dbesc($contact->location->displayName),
+			dbesc($contact->summary),
+			dbesc(normalise_link($contact->url)));
+
 	$r = q("SELECT * FROM `contact` WHERE `uid` = %d AND `url` = '%s' LIMIT 1",
 		intval($uid), dbesc($contact->url));
 
@@ -973,10 +1004,19 @@ function pumpio_get_contact($uid, $contact) {
 		dbesc(datetime_convert()),
 		intval($contact_id)
 		);
+
+                if (DB_UPDATE_VERSION >= "1177")
+			q("UPDATE `contact` SET `location` = '%s',
+						`about` = '%s'
+					WHERE `id` = %d",
+				dbesc($contact->location->displayName),
+				dbesc($contact->summary),
+				intval($contact_id)
+			);
 	} else {
 		// update profile photos once every two weeks as we have no notification of when they change.
-
-		$update_photo = (($r[0]['avatar-date'] < datetime_convert('','','now -14 days')) ? true : false);
+		//$update_photo = (($r[0]['avatar-date'] < datetime_convert('','','now -14 days')) ? true : false);
+                $update_photo = ($r[0]['avatar-date'] < datetime_convert('','','now -12 hours'));
 
 		// check that we have all the photos, this has been known to fail on occasion
 
@@ -1005,6 +1045,15 @@ function pumpio_get_contact($uid, $contact) {
 			dbesc($contact->preferredUsername),
 			intval($r[0]['id'])
 			);
+
+			if (DB_UPDATE_VERSION >= "1177")
+				q("UPDATE `contact` SET `location` = '%s',
+							`about` = '%s'
+						WHERE `id` = %d",
+					dbesc($contact->location->displayName),
+					dbesc($contact->summary),
+					intval($r[0]['id'])
+				);
 		}
 
 	}
@@ -1032,7 +1081,7 @@ function pumpio_dodelete(&$a, $uid, $self, $post, $own_id) {
 		return drop_item($r[0]["id"], $false);
 }
 
-function pumpio_dopost(&$a, $client, $uid, $self, $post, $own_id, $threadcompletion = false) {
+function pumpio_dopost(&$a, $client, $uid, $self, $post, $own_id, $threadcompletion = true) {
 	require_once('include/items.php');
 	require_once('include/html2bbcode.php');
 
@@ -1094,6 +1143,11 @@ function pumpio_dopost(&$a, $client, $uid, $self, $post, $own_id, $threadcomplet
 			$contact_id = $self[0]['id'];
 
 		$postarray['parent-uri'] = $post->object->id;
+
+		if (!$public) {
+			$postarray['private'] = 1;
+			$postarray['allow_cid'] = '<' . $self[0]['id'] . '>';
+		}
 	} else {
 		$contact_id = 0;
 
@@ -1139,7 +1193,7 @@ function pumpio_dopost(&$a, $client, $uid, $self, $post, $own_id, $threadcomplet
 		$reply->published = $post->object->inReplyTo->published;
 		$reply->received = $post->object->inReplyTo->updated;
 		$reply->url = $post->object->inReplyTo->url;
-		pumpio_dopost($a, $client, $uid, $self, $reply, $own_id);
+		pumpio_dopost($a, $client, $uid, $self, $reply, $own_id, false);
 
 		$postarray['parent-uri'] = $post->object->inReplyTo->id;
 	}
@@ -1167,10 +1221,6 @@ function pumpio_dopost(&$a, $client, $uid, $self, $post, $own_id, $threadcomplet
 
 	$postarray['created'] = datetime_convert('UTC','UTC',$post->published);
 	$postarray['edited'] = datetime_convert('UTC','UTC',$post->received);
-	if (!$public) {
-		$postarray['private'] = 1;
-		$postarray['allow_cid'] = '<' . $self[0]['id'] . '>';
-	}
 
 	if ($post->verb == "share") {
 		if (!intval(get_config('system','wall-to-wall_share'))) {
@@ -1243,8 +1293,7 @@ function pumpio_dopost(&$a, $client, $uid, $self, $post, $own_id, $threadcomplet
 					'to_email'     => $user[0]['email'],
 					'uid'          => $user[0]['uid'],
 					'item'         => $postarray,
-					//'link'             => $a->get_baseurl() . '/display/' . $user[0]['nickname'] . '/' . $top_item,
-					'link'         => $a->get_baseurl().'/display/'.get_item_guid($top_item),
+					'link'         => $a->get_baseurl().'/display/'.urlencode(get_item_guid($top_item)),
 					'source_name'  => $postarray['author-name'],
 					'source_link'  => $postarray['author-link'],
 					'source_photo' => $postarray['author-avatar'],
@@ -1277,6 +1326,13 @@ function pumpio_fetchinbox(&$a, $uid) {
 	$self = q("SELECT * FROM `contact` WHERE `self` = 1 AND `uid` = %d LIMIT 1",
 		intval($uid));
 
+	$lastitems = q("SELECT uri FROM `item` WHERE `network` = '%s' AND `uid` = %d AND
+ 			`extid` != '' AND `id` = `parent`
+			ORDER BY `commented` DESC LIMIT 10",
+				dbesc(NETWORK_PUMPIO),
+				intval($uid)
+			);
+
 	$client = new oauth_client_class;
 	$client->oauth_version = '1.0a';
 	$client->authorization_header = true;
@@ -1302,9 +1358,12 @@ function pumpio_fetchinbox(&$a, $uid) {
 	    if (count($posts))
 		    foreach ($posts as $post) {
 			    $last_id = $post->id;
-			    pumpio_dopost($a, $client, $uid, $self, $post, $own_id);
+			    pumpio_dopost($a, $client, $uid, $self, $post, $own_id, true);
 		    }
 	}
+
+	foreach ($lastitems AS $item)
+		pumpio_fetchallcomments($a, $uid, $item["uri"]);
 
 	set_pconfig($uid,'pumpio','last_id', $last_id);
 }
@@ -1513,33 +1572,23 @@ function pumpio_fetchallcomments(&$a, $uid, $id) {
 	$hostname = get_pconfig($uid, 'pumpio','host');
 	$username = get_pconfig($uid, "pumpio", "user");
 
-	$own_id = "https://".$hostname."/".$username;
+	logger("pumpio_fetchallcomments: completing comment for user ".$uid." post id ".$id);
 
-	logger("pumpio_fetchallcomments: completing comment for user ".$uid." url ".$url);
+	$own_id = "https://".$hostname."/".$username;
 
 	$self = q("SELECT * FROM `contact` WHERE `self` = 1 AND `uid` = %d LIMIT 1",
 		intval($uid));
 
-	// Fetching the original post - Two queries for speed issues
-	$r = q("SELECT extid FROM `item` WHERE `uri` = '%s' AND `uid` = %d LIMIT 1",
-			dbesc($url),
+	// Fetching the original post
+	$r = q("SELECT `extid` FROM `item` WHERE `uri` = '%s' AND `uid` = %d AND `extid` != '' LIMIT 1",
+			dbesc($id),
 			intval($uid)
 		);
 
-	if (!count($r)) {
-		$r = q("SELECT extid FROM `item` WHERE `extid` = '%s' AND `uid` = %d LIMIT 1",
-				dbesc($url),
-				intval($uid)
-			);
+	if (!count($r))
+		return false;
 
-		if (!count($r))
-			return false;
-	}
-
-	if ($r[0]["extid"])
-		$url = $r[0]["extid"];
-	else
-		$url = $id;
+	$url = $r[0]["extid"];
 
 	$client = new oauth_client_class;
 	$client->oauth_version = '1.0a';
@@ -1558,6 +1607,22 @@ function pumpio_fetchallcomments(&$a, $uid, $id) {
 	if (!$success)
 		return;
 
+	if ($item->likes->totalItems != 0) {
+		foreach ($item->likes->items AS $post) {
+			$like = new stdClass;
+			$like->object = new stdClass;
+			$like->object->id = $item->id;
+			$like->actor = new stdClass;
+			$like->actor->displayName = $item->displayName;
+			$like->actor->preferredUsername = $item->preferredUsername;
+			$like->actor->url = $item->url;
+			$like->actor->image = $item->image;
+			$like->generator = new stdClass;
+			$like->generator->displayName = "pumpio";
+			pumpio_dolike($a, $uid, $self, $post, $own_id, false);
+		}
+	}
+
 	if ($item->replies->totalItems == 0)
 		return;
 
@@ -1567,7 +1632,7 @@ function pumpio_fetchallcomments(&$a, $uid, $id) {
 
 		// Checking if the comment already exists - Two queries for speed issues
 		$r = q("SELECT extid FROM `item` WHERE `uri` = '%s' AND `uid` = %d LIMIT 1",
-				dbesc($url),
+				dbesc($item->id),
 				intval($uid)
 			);
 
@@ -1575,18 +1640,21 @@ function pumpio_fetchallcomments(&$a, $uid, $id) {
 			continue;
 
 		$r = q("SELECT extid FROM `item` WHERE `extid` = '%s' AND `uid` = %d LIMIT 1",
-				dbesc($url),
+				dbesc($item->id),
 				intval($uid)
 			);
 
 		if (count($r))
 			continue;
 
+		$post = new stdClass;
 		$post->verb = "post";
 		$post->actor = $item->author;
 		$post->published = $item->published;
 		$post->received = $item->updated;
+		$post->generator = new stdClass;
 		$post->generator->displayName = "pumpio";
+		// To-Do: Check for public post
 
 		unset($item->author);
 		unset($item->published);
@@ -1594,17 +1662,13 @@ function pumpio_fetchallcomments(&$a, $uid, $id) {
 
 		$post->object = $item;
 
-		logger("pumpio_fetchallcomments: posting comment ".$post->object->id);
+		logger("pumpio_fetchallcomments: posting comment ".$post->object->id." ".print_r($post, true));
 		pumpio_dopost($a, $client, $uid, $self, $post, $own_id, false);
 	}
 }
 
 /*
-Bugs:
- - refresh after post doesn't always happen
-
 To-Do:
  - edit own notes
  - delete own notes
-
 */

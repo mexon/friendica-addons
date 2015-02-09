@@ -4,6 +4,7 @@
  * Name: Privacy Image Cache
  * Version: 0.1
  * Author: Tobias Hößl <https://github.com/CatoTH/>
+ * Status: Unsupported
  */
 
 define("PRIVACY_IMAGE_CACHE_DEFAULT_TIME", 86400); // 1 Day
@@ -307,8 +308,8 @@ function privacy_image_cache_img_cb($matches) {
 		$matches[2] = urldecode($queryvar['url']);
 
 	// if fetching facebook pictures don't fetch the thumbnail but the big one
-	if (((strpos($matches[2], ".fbcdn.net/") OR strpos($matches[2], "/fbcdn-photos-"))) and (substr($matches[2], -6) == "_s.jpg"))
-		$matches[2] = substr($matches[2], 0, -6)."_n.jpg";
+	//if (((strpos($matches[2], ".fbcdn.net/") OR strpos($matches[2], "/fbcdn-photos-"))) and (substr($matches[2], -6) == "_s.jpg"))
+	//	$matches[2] = substr($matches[2], 0, -6)."_n.jpg";
 
 	// following line changed per bug #431
 	if (privacy_image_cache_is_local_image($matches[2]))

@@ -690,7 +690,11 @@ function appnet_fetchstream($a, $uid) {
 	}
 	catch (AppDotNetException $e) {
 		logger("appnet_fetchstream: Error fetching stream for user ".$uid." ".appnet_error($e->getMessage()));
+		return;
 	}
+
+	if (!is_array($stream))
+		$stream = array();
 
 	$stream = array_reverse($stream);
 	foreach ($stream AS $post) {
@@ -716,8 +720,7 @@ function appnet_fetchstream($a, $uid) {
 					'to_email'     => $user['email'],
 					'uid'          => $user['uid'],
 					'item'         => $postarray,
-					//'link'         => $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item,
-					'link'         => $a->get_baseurl().'/display/'.get_item_guid($item),
+					'link'         => $a->get_baseurl().'/display/'.urlencode(get_item_guid($item)),
 					'source_name'  => $postarray['author-name'],
 					'source_link'  => $postarray['author-link'],
 					'source_photo' => $postarray['author-avatar'],
@@ -745,23 +748,45 @@ function appnet_fetchstream($a, $uid) {
 	}
 	catch (AppDotNetException $e) {
 		logger("appnet_fetchstream: Error fetching mentions for user ".$uid." ".appnet_error($e->getMessage()));
+		return;
 	}
+
+	if (!is_array($mentions))
+		$mentions = array();
 
 	$mentions = array_reverse($mentions);
 	foreach ($mentions AS $post) {
 		$postarray = appnet_createpost($a, $uid, $post, $me, $user, $ownid, false);
 
-		if (isset($postarray["id"]))
+		if (isset($postarray["id"])) {
 			$item = $postarray["id"];
-		elseif (isset($postarray["body"])) {
+			$parent_id = $postarray['parent'];
+		} elseif (isset($postarray["body"])) {
 			$item = item_store($postarray);
+			$parent_id = 0;
 			logger('appnet_fetchstream: User '.$uid.' posted mention item '.$item);
-		} else
+		} else {
 			$item = 0;
+			$parent_id = 0;
+		}
+
+		// Fetch the parent and id
+		if (($parent_id == 0) AND ($postarray['uri'] != "")) {
+			$r = q("SELECT `id`, `parent` FROM `item` WHERE `uri` = '%s' AND `uid` = %d LIMIT 1",
+				dbesc($postarray['uri']),
+				intval($uid)
+			);
+
+			if (count($r)) {
+				$item = $r[0]['id'];
+				$parent_id = $r[0]['parent'];
+			}
+		}
 
 		$lastid = $post["id"];
 
-		if (($item != 0) AND ($postarray['contact-id'] != $me["id"])) {
+		//if (($item != 0) AND ($postarray['contact-id'] != $me["id"])) {
+		if ($item != 0) {
 			require_once('include/enotify.php');
 			notification(array(
 				'type'         => NOTIFY_TAGSELF,
@@ -771,13 +796,13 @@ function appnet_fetchstream($a, $uid) {
 				'to_email'     => $user['email'],
 				'uid'          => $user['uid'],
 				'item'         => $postarray,
-				//'link'         => $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item,
-				'link'         => $a->get_baseurl().'/display/'.get_item_guid($item),
+				'link'         => $a->get_baseurl().'/display/'.urlencode(get_item_guid($item)),
 				'source_name'  => $postarray['author-name'],
 				'source_link'  => $postarray['author-link'],
 				'source_photo' => $postarray['author-avatar'],
 				'verb'         => ACTIVITY_TAG,
-				'otype'        => 'item'
+				'otype'        => 'item',
+				'parent'       => $parent_id,
 			));
 		}
 	}
@@ -793,7 +818,7 @@ function appnet_fetchstream($a, $uid) {
 */
 }
 
-function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $threadcompletion = true) {
+function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $threadcompletion = true, $nodupcheck = false) {
 	require_once('include/items.php');
 
 	if ($post["machine_only"])
@@ -808,25 +833,33 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 	$postarray['wall'] = 0;
 	$postarray['verb'] = ACTIVITY_POST;
 	$postarray['network'] =  dbesc(NETWORK_APPNET);
-	$postarray['uri'] = "adn::".$post["id"];
+	if (is_array($post["repost_of"])) {
+		// You can't reply to reposts. So use the original id and thread-id
+		$postarray['uri'] = "adn::".$post["repost_of"]["id"];
+		$postarray['parent-uri'] = "adn::".$post["repost_of"]["thread_id"];
+	} else {
+		$postarray['uri'] = "adn::".$post["id"];
+		$postarray['parent-uri'] = "adn::".$post["thread_id"];
+	}
 
-	$r = q("SELECT * FROM `item` WHERE `uri` = '%s' AND `uid` = %d LIMIT 1",
-		dbesc($postarray['uri']),
-		intval($uid)
-		);
+	if (!$nodupcheck) {
+		$r = q("SELECT * FROM `item` WHERE `uri` = '%s' AND `uid` = %d LIMIT 1",
+			dbesc($postarray['uri']),
+			intval($uid)
+			);
 
-	if (count($r))
-		return($r[0]);
+		if (count($r))
+			return($r[0]);
 
-	$r = q("SELECT * FROM `item` WHERE `extid` = '%s' AND `uid` = %d LIMIT 1",
-		dbesc($postarray['uri']),
-		intval($uid)
-		);
+		$r = q("SELECT * FROM `item` WHERE `extid` = '%s' AND `uid` = %d LIMIT 1",
+			dbesc($postarray['uri']),
+			intval($uid)
+			);
 
-	if (count($r))
-		return($r[0]);
+		if (count($r))
+			return($r[0]);
+	}
 
-	$postarray['parent-uri'] = "adn::".$post["thread_id"];
 	if (isset($post["reply_to"]) AND ($post["reply_to"] != "")) {
 		$postarray['thr-parent'] = "adn::".$post["reply_to"];
 
@@ -876,8 +909,6 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 		$postarray['object-type'] = ACTIVITY_OBJ_NOTE;
 	}
 
-	$postarray['plink'] = $post["canonical_url"];
-
 	if (($post["user"]["id"] != $ownid) OR ($postarray['thr-parent'] == $postarray['uri'])) {
 		$postarray['owner-name'] = $post["user"]["name"];
 		$postarray['owner-link'] = $post["user"]["canonical_url"];
@@ -906,6 +937,8 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 		$content = $post;
 	}
 
+	$postarray['plink'] = $content["canonical_url"];
+
 	if (is_array($content["entities"])) {
 		$converted = appnet_expand_entities($a, $content["text"], $content["entities"]);
 		$postarray['body'] = $converted["body"];
@@ -919,7 +952,7 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 			$links[$url] = $link["url"];
 		}
 
-	if (sizeof($content["annotations"]))
+	/* if (sizeof($content["annotations"]))
 		foreach($content["annotations"] AS $annotation) {
 			if ($annotation[type] == "net.app.core.oembed") {
 				if (isset($annotation["value"]["embeddable_url"])) {
@@ -928,7 +961,6 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 						unset($links[$url]);
 				}
 			} elseif ($annotation[type] == "com.friendica.post") {
-				// Nur zum Testen deaktiviert
 				//$links = array();
 				//if (isset($annotation["value"]["post-title"]))
 				//	$postarray['title'] = $annotation["value"]["post-title"];
@@ -949,7 +981,7 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 					$postarray['author-avatar'] = $annotation["value"]["author-avatar"];
 			}
 
-		}
+		} */
 
 	$page_info = "";
 
@@ -968,14 +1000,15 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 
 	if (sizeof($links)) {
 		$link = array_pop($links);
-		$url = "[url=".$link."]".$link."[/url]";
-
-		$removedlink = trim(str_replace($url, "", $postarray['body']));
-
-		if (($removedlink == "") OR strstr($postarray['body'], $removedlink))
-			$postarray['body'] = $removedlink;
+		$url = str_replace(array('/', '.'), array('\/', '\.'), $link);
 
 		$page_info = add_page_info($link, false, $photo["url"]);
+
+		if (trim($page_info) != "") {
+			$removedlink = preg_replace("/\[url\=".$url."\](.*?)\[\/url\]/ism", '', $postarray['body']);
+			if (($removedlink == "") OR strstr($postarray['body'], $removedlink))
+				$postarray['body'] = $removedlink;
+		}
 	}
 
 	$postarray['body'] .= $page_info;
@@ -1057,6 +1090,30 @@ function appnet_expand_annotations($a, $annotations) {
 }
 
 function appnet_fetchcontact($a, $uid, $contact, $me, $create_user) {
+
+	$r = q("SELECT id FROM unique_contacts WHERE url='%s' LIMIT 1",
+			dbesc(normalise_link($contact["canonical_url"])));
+
+	if (count($r) == 0)
+		q("INSERT INTO unique_contacts (url, name, nick, avatar) VALUES ('%s', '%s', '%s', '%s')",
+			dbesc(normalise_link($contact["canonical_url"])),
+			dbesc($contact["name"]),
+			dbesc($contact["username"]),
+			dbesc($contact["avatar_image"]["url"]));
+	else
+		q("UPDATE unique_contacts SET name = '%s', nick = '%s', avatar = '%s' WHERE url = '%s'",
+			dbesc($contact["name"]),
+			dbesc($contact["username"]),
+			dbesc($contact["avatar_image"]["url"]),
+			dbesc(normalise_link($contact["canonical_url"])));
+
+	if (DB_UPDATE_VERSION >= "1177")
+		q("UPDATE `unique_contacts` SET `location` = '%s', `about` = '%s' WHERE url = '%s'",
+			dbesc(""),
+			dbesc($contact["description"]["text"]),
+			dbesc(normalise_link($contact["canonical_url"])));
+
+
 	$r = q("SELECT * FROM `contact` WHERE `uid` = %d AND `alias` = '%s' LIMIT 1",
 		intval($uid), dbesc("adn::".$contact["id"]));
 
@@ -1140,6 +1197,14 @@ function appnet_fetchcontact($a, $uid, $contact, $me, $create_user) {
 			intval($contact_id)
 		);
 
+		if (DB_UPDATE_VERSION >= "1177")
+			q("UPDATE `contact` SET `location` = '%s',
+						`about` = '%s'
+					WHERE `id` = %d",
+				dbesc(""),
+				dbesc($contact["description"]["text"]),
+				intval($contact_id)
+			);
 	} else {
 		// update profile photos once every two weeks as we have no notification of when they change.
 
@@ -1181,6 +1246,14 @@ function appnet_fetchcontact($a, $uid, $contact, $me, $create_user) {
 				dbesc($contact["username"]),
 				intval($r[0]['id'])
 			);
+			if (DB_UPDATE_VERSION >= "1177")
+				q("UPDATE `contact` SET `location` = '%s',
+							`about` = '%s'
+						WHERE `id` = %d",
+					dbesc(""),
+					dbesc($contact["description"]["text"]),
+					intval($r[0]['id'])
+				);
 		}
 	}
 
@@ -1240,9 +1313,23 @@ function appnet_cron($a,$b) {
 	}
 	logger('appnet_cron: cron_start');
 
+	$abandon_days = intval(get_config('system','account_abandon_days'));
+	if ($abandon_days < 1)
+		$abandon_days = 0;
+
+	$abandon_limit = date("Y-m-d H:i:s", time() - $abandon_days * 86400);
+
 	$r = q("SELECT * FROM `pconfig` WHERE `cat` = 'appnet' AND `k` = 'import' AND `v` = '1' ORDER BY RAND()");
 	if(count($r)) {
 		foreach($r as $rr) {
+			if ($abandon_days != 0) {
+				$user = q("SELECT `login_date` FROM `user` WHERE uid=%d AND `login_date` >= '%s'", $rr['uid'], $abandon_limit);
+				if (!count($user)) {
+					logger('abandoned account: timeline from user '.$rr['uid'].' will not be imported');
+					continue;
+				}
+			}
+
 			logger('appnet_cron: importing timeline from user '.$rr['uid']);
 			appnet_fetchstream($a, $rr["uid"]);
 		}

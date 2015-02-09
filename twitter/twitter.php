@@ -438,6 +438,9 @@ function twitter_post_hook(&$a,&$b) {
 		return;
 
 	// if post comes from twitter don't send it back
+	if($b['extid'] == NETWORK_TWITTER)
+		return;
+
 	if($b['app'] == "Twitter")
 		return;
 
@@ -572,7 +575,7 @@ function twitter_plugin_admin(&$a, &$o){
 								// name, label, value, help, [extra values]
 		'$consumerkey' => array('consumerkey', t('Consumer key'),  get_config('twitter', 'consumerkey' ), ''),
 		'$consumersecret' => array('consumersecret', t('Consumer secret'),  get_config('twitter', 'consumersecret' ), ''),
-		'$applicationname' => array('applicationname', t('Name of the Twitter Application'), get_config('twitter','application_name'),t('set this to avoid mirroring postings from ~friendica back to ~friendica'))
+		'$applicationname' => array('applicationname', t('Name of the Twitter Application'), get_config('twitter','application_name'),t('Set this to the exact name you gave the app on twitter.com/apps to avoid mirroring postings from ~friendica back to ~friendica'))
 	));
 }
 
@@ -600,10 +603,23 @@ function twitter_cron($a,$b) {
 		}
 	}
 
+	$abandon_days = intval(get_config('system','account_abandon_days'));
+	if ($abandon_days < 1)
+		$abandon_days = 0;
+
+	$abandon_limit = date("Y-m-d H:i:s", time() - $abandon_days * 86400);
 
 	$r = q("SELECT * FROM `pconfig` WHERE `cat` = 'twitter' AND `k` = 'import' AND `v` = '1' ORDER BY RAND()");
 	if(count($r)) {
 		foreach($r as $rr) {
+			if ($abandon_days != 0) {
+				$user = q("SELECT `login_date` FROM `user` WHERE uid=%d AND `login_date` >= '%s'", $rr['uid'], $abandon_limit);
+				if (!count($user)) {
+					logger('abandoned account: timeline from user '.$rr['uid'].' will not be imported');
+					continue;
+				}
+			}
+
 			logger('twitter: importing timeline from user '.$rr['uid']);
 			twitter_fetchhometimeline($a, $rr["uid"]);
 
@@ -735,7 +751,7 @@ function twitter_fetchtimeline($a, $uid) {
 		if ($first_time)
 			continue;
 
-		if (!strpos($post->source, $application_name)) {
+		if (!stristr($post->source, $application_name)) {
 			$_SESSION["authenticated"] = true;
 			$_SESSION["uid"] = $uid;
 
@@ -743,7 +759,9 @@ function twitter_fetchtimeline($a, $uid) {
 			$_REQUEST["type"] = "wall";
 			$_REQUEST["api_source"] = true;
 			$_REQUEST["profile_uid"] = $uid;
-			$_REQUEST["source"] = "Twitter";
+			//$_REQUEST["source"] = "Twitter";
+			$_REQUEST["source"] = $post->source;
+			$_REQUEST["extid"] = NETWORK_TWITTER;
 
 			//$_REQUEST["date"] = $post->created_at;
 
@@ -890,6 +908,16 @@ function twitter_queue_hook(&$a,&$b) {
 }
 
 function twitter_fetch_contact($uid, $contact, $create_user) {
+	require_once("include/Photo.php");
+
+	if ($contact->id_str == "")
+		return(-1);
+
+	$avatar = str_replace("_normal.", ".", $contact->profile_image_url_https);
+
+	$info = get_photo_info($avatar);
+	if (!$info)
+		$avatar = $contact->profile_image_url_https;
 
 	// Check if the unique contact is existing
 	// To-Do: only update once a while
@@ -901,12 +929,18 @@ function twitter_fetch_contact($uid, $contact, $create_user) {
 			dbesc(normalise_link("https://twitter.com/".$contact->screen_name)),
 			dbesc($contact->name),
 			dbesc($contact->screen_name),
-			dbesc($contact->profile_image_url_https));
+			dbesc($avatar));
 	else
 		q("UPDATE unique_contacts SET name = '%s', nick = '%s', avatar = '%s' WHERE url = '%s'",
 			dbesc($contact->name),
 			dbesc($contact->screen_name),
-			dbesc($contact->profile_image_url_https),
+			dbesc($avatar),
+			dbesc(normalise_link("https://twitter.com/".$contact->screen_name)));
+
+	if (DB_UPDATE_VERSION >= "1177")
+		q("UPDATE `unique_contacts` SET `location` = '%s', `about` = '%s' WHERE url = '%s'",
+			dbesc($contact->location),
+			dbesc($contact->description),
 			dbesc(normalise_link("https://twitter.com/".$contact->screen_name)));
 
 	$r = q("SELECT * FROM `contact` WHERE `uid` = %d AND `alias` = '%s' LIMIT 1",
@@ -925,7 +959,7 @@ function twitter_fetch_contact($uid, $contact, $create_user) {
 		q("INSERT INTO `contact` ( `uid`, `created`, `url`, `nurl`, `addr`, `alias`, `notify`, `poll`,
 					`name`, `nick`, `photo`, `network`, `rel`, `priority`,
 					`writable`, `blocked`, `readonly`, `pending` )
-					VALUES ( %d, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d, 0, 0, 0 ) ",
+					VALUES ( %d, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d, 0, 0, 0) ",
 			intval($uid),
 			dbesc(datetime_convert()),
 			dbesc("https://twitter.com/".$contact->screen_name),
@@ -936,7 +970,7 @@ function twitter_fetch_contact($uid, $contact, $create_user) {
 			dbesc("twitter::".$contact->id_str),
 			dbesc($contact->name),
 			dbesc($contact->screen_name),
-			dbesc($contact->profile_image_url_https),
+			dbesc($avatar),
 			dbesc(NETWORK_TWITTER),
 			intval(CONTACT_IS_FRIEND),
 			intval(1),
@@ -964,7 +998,7 @@ function twitter_fetch_contact($uid, $contact, $create_user) {
 
 		require_once("Photo.php");
 
-		$photos = import_profile_photo($contact->profile_image_url_https,$uid,$contact_id);
+		$photos = import_profile_photo($avatar,$uid,$contact_id);
 
 		q("UPDATE `contact` SET `photo` = '%s',
 					`thumb` = '%s',
@@ -982,6 +1016,15 @@ function twitter_fetch_contact($uid, $contact, $create_user) {
 			intval($contact_id)
 		);
 
+		if (DB_UPDATE_VERSION >= "1177")
+			q("UPDATE `contact` SET `location` = '%s',
+						`about` = '%s'
+					WHERE `id` = %d",
+				dbesc($contact->location),
+				dbesc($contact->description),
+				intval($contact_id)
+			);
+
 	} else {
 		// update profile photos once every two weeks as we have no notification of when they change.
 
@@ -996,7 +1039,7 @@ function twitter_fetch_contact($uid, $contact, $create_user) {
 
 			require_once("Photo.php");
 
-			$photos = import_profile_photo($contact->profile_image_url_https, $uid, $r[0]['id']);
+			$photos = import_profile_photo($avatar, $uid, $r[0]['id']);
 
 			q("UPDATE `contact` SET `photo` = '%s',
 						`thumb` = '%s',
@@ -1023,6 +1066,15 @@ function twitter_fetch_contact($uid, $contact, $create_user) {
 				dbesc($contact->screen_name),
 				intval($r[0]['id'])
 			);
+
+			if (DB_UPDATE_VERSION >= "1177")
+				q("UPDATE `contact` SET `location` = '%s',
+							`about` = '%s'
+						WHERE `id` = %d",
+					dbesc($contact->location),
+					dbesc($contact->description),
+					intval($r[0]['id'])
+				);
 		}
 	}
 
@@ -1142,7 +1194,7 @@ function twitter_expand_entities($a, $body, $item, $no_tags = false, $picture) {
 		if (($footerlink != "") AND (trim($footer) != "")) {
 			$removedlink = trim(str_replace($footerlink, "", $body));
 
-			if (strstr($body, $removedlink))
+			if (($removedlink == "") OR strstr($body, $removedlink))
 				$body = $removedlink;
 
 			$body .= $footer;
@@ -1243,6 +1295,7 @@ function twitter_createpost($a, $uid, $post, $self, $create_user, $only_existing
 		if (count($r)) {
 			$postarray['thr-parent'] = $r[0]["uri"];
 			$postarray['parent-uri'] = $r[0]["parent-uri"];
+			$postarray['parent'] = $r[0]["parent"];
 			$postarray['object-type'] = ACTIVITY_OBJ_COMMENT;
 		} else {
 			$r = q("SELECT * FROM `item` WHERE `extid` = '%s' AND `uid` = %d LIMIT 1",
@@ -1252,6 +1305,7 @@ function twitter_createpost($a, $uid, $post, $self, $create_user, $only_existing
 			if (count($r)) {
 				$postarray['thr-parent'] = $r[0]['uri'];
 				$postarray['parent-uri'] = $r[0]['parent-uri'];
+				$postarray['parent'] = $r[0]['parent'];
 				$postarray['object-type'] = ACTIVITY_OBJ_COMMENT;
 			} else {
 				$postarray['thr-parent'] = $postarray['uri'];
@@ -1404,6 +1458,8 @@ function twitter_createpost($a, $uid, $post, $self, $create_user, $only_existing
 
 function twitter_checknotification($a, $uid, $own_id, $top_item, $postarray) {
 
+	// this whole function doesn't seem to work. Needs complete check
+
 	$user = q("SELECT * FROM `contact` WHERE `uid` = %d AND `self` LIMIT 1",
 			intval($uid)
 		);
@@ -1452,8 +1508,7 @@ function twitter_checknotification($a, $uid, $own_id, $top_item, $postarray) {
 				'to_email'     => $user[0]['email'],
 				'uid'          => $user[0]['uid'],
 				'item'         => $postarray,
-				//'link'             => $a->get_baseurl() . '/display/' . $user[0]['nickname'] . '/' . $top_item,
-				'link'         => $a->get_baseurl().'/display/'.get_item_guid($top_item),
+				'link'         => $a->get_baseurl().'/display/'.urlencode(get_item_guid($top_item)),
 				'source_name'  => $postarray['author-name'],
 				'source_link'  => $postarray['author-link'],
 				'source_photo' => $postarray['author-avatar'],
@@ -1593,6 +1648,9 @@ function twitter_fetchhometimeline($a, $uid) {
 
 			$item = item_store($postarray);
 
+			if (!isset($postarray["parent"]) OR ($postarray["parent"] == 0))
+				$postarray["parent"] = $item;
+
 			logger('twitter_fetchhometimeline: User '.$self["nick"].' posted mention timeline item '.$item);
 
 			if ($item == 0) {
@@ -1600,9 +1658,12 @@ function twitter_fetchhometimeline($a, $uid) {
 					dbesc($postarray['uri']),
 					intval($uid)
 				);
-				if (count($r))
+				if (count($r)) {
 					$item = $r[0]['id'];
-			}
+					$parent_id = $r[0]['parent'];
+				}
+			} else
+				$parent_id = $postarray['parent'];
 
 			if ($item != 0) {
 				require_once('include/enotify.php');
@@ -1614,13 +1675,13 @@ function twitter_fetchhometimeline($a, $uid) {
 					'to_email'     => $u[0]['email'],
 					'uid'          => $u[0]['uid'],
 					'item'         => $postarray,
-					//'link'         => $a->get_baseurl() . '/display/' . $u[0]['nickname'] . '/' . $item,
-					'link'         => $a->get_baseurl().'/display/'.get_item_guid($item),
+					'link'         => $a->get_baseurl().'/display/'.urlencode(get_item_guid($item)),
 					'source_name'  => $postarray['author-name'],
 					'source_link'  => $postarray['author-link'],
 					'source_photo' => $postarray['author-avatar'],
 					'verb'         => ACTIVITY_TAG,
-					'otype'        => 'item'
+					'otype'        => 'item',
+					'parent'       => $parent_id
 				));
 			}
 		}

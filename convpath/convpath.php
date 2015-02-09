@@ -4,7 +4,7 @@
  * Description: Converts all internal paths according to the current scheme (http or https)
  * Version: 1.0
  * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
- * 
+ * Status: Unsupported
  */
 
 function convpath_install() {
@@ -34,7 +34,8 @@ function convpath_page_header(&$a, &$o){
 
 function convpath_page_end(&$a, &$o){
 	$o = convpath_convert($o);
-	$a->page['aside'] = convpath_convert($a->page['aside']);
+	if (isset($a->page['aside']))
+		$a->page['aside'] = convpath_convert($a->page['aside']);
 }
 
 function convpath_prepare_body_hook(&$a, &$o) {

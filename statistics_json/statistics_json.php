@@ -2,8 +2,8 @@
 
 /**
  * Name: Statistics
- * Description: Generates some statistics for http://pods.jasonrobinson.me/
- * Version: 0.1
+ * Description: Generates some statistics for http://the-federation.info/
+ * Version: 0.2
  * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
  */
 
@@ -18,19 +18,53 @@ function statistics_json_uninstall() {
 
 function statistics_json_module() {}
 
+function statistics_json_plugin_enabled($plugin) {
+	$r = q("SELECT * FROM `addon` WHERE `installed` = 1 AND `name` = '%s'", $plugin);
+	return((bool)(count($r) > 0));
+}
+
 function statistics_json_init() {
 	global $a;
 
 	$statistics = array(
 			"name" => $a->config["sitename"],
 			"network" => FRIENDICA_PLATFORM,
-			"version" => FRIENDICA_VERSION,
+			"version" => FRIENDICA_VERSION."-".DB_UPDATE_VERSION,
 			"registrations_open" => ($a->config['register_policy'] != 0),
 			"total_users" => get_config('statistics_json','total_users'),
 			"active_users_halfyear" => get_config('statistics_json','active_users_halfyear'),
 			"active_users_monthly" => get_config('statistics_json','active_users_monthly'),
 			"local_posts" => get_config('statistics_json','local_posts')
 			);
+
+	$statistics["services"] = array();
+	$statistics["services"]["appnet"] = statistics_json_plugin_enabled("appnet");
+	$statistics["services"]["blogger"] = statistics_json_plugin_enabled("blogger");
+	$statistics["services"]["buffer"] = statistics_json_plugin_enabled("buffer");
+	$statistics["services"]["dreamwidth"] = statistics_json_plugin_enabled("dwpost");
+	$statistics["services"]["facebook"] = statistics_json_plugin_enabled("fbpost");
+	$statistics["services"]["gnusocial"] = statistics_json_plugin_enabled("statusnet");
+	$statistics["services"]["googleplus"] = statistics_json_plugin_enabled("gpluspost");
+	$statistics["services"]["libertree"] = statistics_json_plugin_enabled("libertree");
+	$statistics["services"]["livejournal"] = statistics_json_plugin_enabled("ljpost");
+	$statistics["services"]["pumpio"] = statistics_json_plugin_enabled("pumpio");
+	$statistics["services"]["twitter"] = statistics_json_plugin_enabled("twitter");
+	$statistics["services"]["tumblr"] = statistics_json_plugin_enabled("tumblr");
+	$statistics["services"]["wordpress"] = statistics_json_plugin_enabled("wppost");
+
+	$statistics["appnet"] = $statistics["services"]["appnet"];
+	$statistics["blogger"] = $statistics["services"]["blogger"];
+	$statistics["buffer"] = $statistics["services"]["buffer"];
+	$statistics["dreamwidth"] = $statistics["services"]["dreamwidth"];
+	$statistics["facebook"] = $statistics["services"]["facebook"];
+	$statistics["gnusocial"] = $statistics["services"]["gnusocial"];
+	$statistics["googleplus"] = $statistics["services"]["googleplus"];
+	$statistics["libertree"] = $statistics["services"]["libertree"];
+	$statistics["livejournal"] = $statistics["services"]["livejournal"];
+	$statistics["pumpio"] = $statistics["services"]["pumpio"];
+	$statistics["twitter"] = $statistics["services"]["twitter"];
+	$statistics["tumblr"] = $statistics["services"]["tumblr"];
+	$statistics["wordpress"] = $statistics["services"]["wordpress"];
 
 	header("Content-Type: application/json");
 	echo json_encode($statistics);
@@ -91,7 +125,7 @@ function statistics_json_cron($a,$b) {
 			set_config('statistics_json','active_users_monthly', $active_users_monthly);
 	}
 
-	$posts = q("SELECT COUNT(*) AS local_posts FROM `item` WHERE `wall` AND left(body, 6) != '[share'");
+	$posts = q("SELECT COUNT(*) AS local_posts FROM `item` WHERE `wall` AND `uid` != 0 AND `id` = `parent` AND left(body, 6) != '[share'");
 
 	if (!is_array($posts))
 		$local_posts = -1;
@@ -103,7 +137,7 @@ function statistics_json_cron($a,$b) {
         logger('statistics_json_cron: local_posts: '.$local_posts, LOGGER_DEBUG);
 
 	// Now trying to register
-	$url = "http://pods.jasonrobinson.me/register/".$a->get_hostname();
+	$url = "http://the-federation.info/register/".$a->get_hostname();
         logger('statistics_json_cron: registering url: '.$url, LOGGER_DEBUG);
 	$ret = fetch_url($url);
         logger('statistics_json_cron: registering answer: '.$ret, LOGGER_DEBUG);
