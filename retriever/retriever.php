@@ -183,6 +183,9 @@ function retriever_retrieve_items($max_items) {
         $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
                dbesc(implode($schedule_clauses, ' OR ')),
                intval($retrieve_items));
+        if (!is_array($r)) {
+            break;
+        }
         if (count($r) == 0) {
             break;
         }
@@ -245,7 +248,7 @@ function retrieve_resource($resource) {
     logger('retrieve_resource: ' . ($resource['num-tries'] + 1) .
            ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
     $redirects;
-    $cookiejar = tempnam ('/tmp', 'cookiejar-retriever');
+    $cookiejar = tempnam ('/tmp', 'cookiejar-retriever-');
     $resource['data'] = fetch_url($resource['url'], $resource['binary'], $redirects, 0, Null, $cookiejar, true);
     unlink($cookiejar);
     $resource['http-code'] = $a->get_curl_code();
@@ -471,12 +474,13 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     }
 
     $encoding = retriever_get_encoding($resource);
-    $doc = new DOMDocument('1.0', $encoding);
+    $content = mb_convert_encoding($resource['data'], 'HTML-ENTITIES', $encoding);
+    $doc = new DOMDocument('1.0', 'UTF-8');
     if (strpos($resource['type'], 'html') !== false) {
-        @$doc->loadHTML($resource['data']);
+        @$doc->loadHTML($content);
     }
     else {
-        $doc->loadXML($resource['data']);
+        $doc->loadXML($content);
     }
 
     $components = parse_url($resource['redirect-url']);
