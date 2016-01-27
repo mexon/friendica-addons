@@ -9,6 +9,7 @@
 function mailstream_install() {
     register_hook('plugin_settings', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings');
     register_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
+    register_hook('post_local_end', 'addon/mailstream/mailstream.php', 'mailstream_post_local_hook');
     register_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     register_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
 
@@ -49,7 +50,9 @@ function mailstream_install() {
 function mailstream_uninstall() {
     unregister_hook('plugin_settings', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings');
     unregister_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
+    unregister_hook('post_local', 'addon/mailstream/mailstream.php', 'mailstream_post_local_hook');
     unregister_hook('post_remote', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
+    unregister_hook('post_local_end', 'addon/mailstream/mailstream.php', 'mailstream_post_local_hook');
     unregister_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     unregister_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
     unregister_hook('incoming_mail', 'addon/mailstream/mailstream.php', 'mailstream_incoming_mail');
@@ -58,7 +61,6 @@ function mailstream_uninstall() {
 function mailstream_module() {}
 
 function mailstream_plugin_admin(&$a,&$o) {
-    //@@@ add a check if the mimedecode plugin is installed
     $frommail = get_config('mailstream', 'frommail');
     $template = get_markup_template('admin.tpl', 'addon/mailstream/');
     $config = array('frommail',
@@ -80,10 +82,17 @@ function mailstream_generate_id($a, $uri) {
     // http://www.jwz.org/doc/mid.html
     $host = $a->get_hostname();
     $resource = hash('md5', $uri);
-    return "<" . $resource . "@" . $host . ">";
+    $message_id = "<" . $resource . "@" . $host . ">";
+    logger('mailstream: Generated message ID ' . $message_id . ' for URI ' . $uri, LOGGER_DEBUG);
+    return $message_id;
+}
+
+function mailstream_post_local_hook(&$a, &$item) {
+logger('@@@ mailstream_post_local_hook for item uid ' . $item['uid'] . ' contact ' . $item['contact-id'] . ' uri ' . $item['uri']);
 }
 
 function mailstream_post_remote_hook(&$a, &$item) {
+logger('@@@ mailstream_post_remote_hook for item uid ' . $item['uid'] . ' contact ' . $item['contact-id'] . ' uri ' . $item['uri']);
     if (!get_pconfig($item['uid'], 'mailstream', 'enabled')) {
         return;
     }
@@ -102,9 +111,10 @@ function mailstream_post_remote_hook(&$a, &$item) {
         }
     }
 
+    $message_id = mailstream_generate_id($a, $item['uri']);
     q("INSERT INTO `mailstream_item` (`uid`, `contact-id`, `uri`, `message-id`) " .
       "VALUES (%d, '%s', '%s', '%s')", intval($item['uid']),
-      intval($item['contact-id']), dbesc($item['uri']), dbesc(mailstream_generate_id($a, $item['uri'])));
+      intval($item['contact-id']), dbesc($item['uri']), dbesc($message_id));
     $r = q('SELECT * FROM `mailstream_item` WHERE `uid` = %d AND `contact-id` = %d AND `uri` = "%s"', intval($item['uid']), intval($item['contact-id']), dbesc($item['uri']));
     if (count($r) != 1) {
         logger('mailstream_post_remote_hook: Unexpected number of items returned from mailstream_item', LOGGER_NORMAL);
@@ -132,34 +142,27 @@ function mailstream_get_user($uid) {
 }
 
 function mailstream_do_images($a, &$item, &$attachments) {
+    if (!get_pconfig($item['uid'], 'mailstream', 'attachimg')) {
+        return;
+    }
+    $attachments = array();
     $baseurl = $a->get_baseurl();
-    $id = 1;
-    $matches = array();
-    preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches);
-    if (count($matches)) {
-        foreach ($matches[3] as $url) {
-            $attachments[$url] = array();
-        }
-    }
-    preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches);
-    if (count($matches)) {
-        foreach ($matches[1] as $url) {
-            $attachments[$url] = array();
-        }
-    }
-    foreach ($attachments as $url=>$cid) {
-        if (strncmp($url, $baseurl, strlen($baseurl))) {
-            unset($attachments[$url]); // Not a local image, don't replace
-        }
-        else {
-            $attachments[$url]['guid'] = substr($url, strlen($baseurl) + strlen('/photo/'));
-            $r = q("SELECT `data`, `filename`, `type` FROM `photo` WHERE `resource-id` = '%s'", dbesc($attachments[$url]['guid']));
-            $attachments[$url]['data'] = $r[0]['data'];
-            $attachments[$url]['filename'] = $r[0]['filename'];
-            $attachments[$url]['type'] = $r[0]['type'];
+    preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches1);
+    preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches2);
+    foreach (array_merge($matches1[3], $matches2[1]) as $url) {
+        $redirects;
+        $cookiejar = tempnam(get_temppath(), 'cookiejar-mailstream-');
+        $attachments[$url] = array(
+            'data' => fetch_url($url, true, $redirects, 0, Null, $cookiejar),
+            'guid' => hash("crc32", $url),
+            'filename' => basename($url),
+            'type' => $a->get_curl_content_type());
+        if (strlen($attachments[$url]['data'])) {
             $item['body'] = str_replace($url, 'cid:' . $attachments[$url]['guid'], $item['body']);
+            continue;
         }
     }
+    return $attachments;
 }
 
 function mailstream_sender($item) {
@@ -174,9 +177,27 @@ function mailstream_sender($item) {
 }
 
 function mailstream_decode_subject($subject) {
-    $replacement = trim(html_entity_decode(strip_tags(bbcode($subject))));
-    $replacement = preg_replace_callback("/(&#[0-9]+;)/", function($m) { return mb_convert_encoding($m[1], "UTF-8", "HTML-ENTITIES"); }, $replacement);
-    return $replacement ? $replacement : $subject;
+    $html = bbcode($subject);
+    if (!$html) {
+        return $subject;
+    }
+    $notags = strip_tags($html);
+    if (!$notags) {
+       return $subject;
+    }
+    $noentity = html_entity_decode($notags);
+    if (!$noentity) {
+        return $notags;
+    }
+    $nocodes = preg_replace_callback("/(&#[0-9]+;)/", function($m) { return mb_convert_encoding($m[1], "UTF-8", "HTML-ENTITIES"); }, $noentity);
+    if (!$nocodes) {
+        return $noentity;
+    }
+    $trimmed = trim($nocodes);
+    if (!$trimmed) {
+        return $nocodes;
+    }
+    return $trimmed;
 }
 
 function mailstream_subject($item) {
@@ -227,6 +248,9 @@ function mailstream_send($a, $message_id, $item, $user) {
     if (!$item['visible']) {
         return;
     }
+    if (!$message_id) {
+        return;
+    }
     require_once(dirname(__file__).'/class.phpmailer.php');
     require_once('include/bbcode.php');
     $attachments = array();
@@ -252,7 +276,7 @@ function mailstream_send($a, $message_id, $item, $user) {
         $mail->addCustomHeader('X-Friendica-Mailstream-URI: ' . $item['uri']);
         $mail->addCustomHeader('X-Friendica-Mailstream-Plink: ' . $item['plink']);
         $encoding = 'base64';
-        foreach ($attachments as $url=>$image) {
+        foreach ($attachments as $url => $image) {
             $mail->AddStringEmbeddedImage($image['data'], $image['guid'], $image['filename'], $encoding, $image['type']);
         }
         $mail->IsHTML(true);
@@ -301,9 +325,12 @@ function mailstream_cron($a, $b) {
     // send the email itself before cron jumps in.  Only if
     // mailstream_post_remote_hook fails for some reason will this get
     // used, and in that case it's worth holding off a bit anyway.
-    $ms_item_ids = q("SELECT `mailstream_item`.`message-id`, `item`.`id` FROM `mailstream_item` JOIN `item` ON (`mailstream_item`.`uid` = `item`.`uid` AND `mailstream_item`.`uri` = `item`.`uri` AND `mailstream_item`.`contact-id` = `item`.`contact-id`) WHERE `mailstream_item`.`completed` IS NULL AND `mailstream_item`.`created` < DATE_SUB(NOW(), INTERVAL 1 HOUR) AND `item`.`visible` = 1 ORDER BY `mailstream_item`.`created` LIMIT 100");
+    $ms_item_ids = q("SELECT `mailstream_item`.`message-id`, `mailstream_item`.`uri`, `item`.`id` FROM `mailstream_item` JOIN `item` ON (`mailstream_item`.`uid` = `item`.`uid` AND `mailstream_item`.`uri` = `item`.`uri` AND `mailstream_item`.`contact-id` = `item`.`contact-id`) WHERE `mailstream_item`.`completed` IS NULL AND `mailstream_item`.`created` < DATE_SUB(NOW(), INTERVAL 1 HOUR) AND `item`.`visible` = 1 ORDER BY `mailstream_item`.`created` LIMIT 100");
     logger('mailstream_cron processing ' . count($ms_item_ids) . ' items', LOGGER_DEBUG);
     foreach ($ms_item_ids as $ms_item_id) {
+        if (!$ms_item_id['message-id'] || !strlen($ms_item_id['message-id'])) {
+            logger('mailstream_cron: Item ' . $ms_item_id['id'] . ' URI ' . $ms_item_id['uri'] . ' has no message-id', LOGGER_NORMAL);
+        }
         $items = q('SELECT * FROM `item` WHERE `id` = %d', $ms_item_id['id']);
         $item = $items[0];
         $users = q("SELECT * FROM `user` WHERE `uid` = %d", intval($item['uid']));
@@ -321,10 +348,15 @@ function mailstream_cron($a, $b) {
 
 function mailstream_plugin_settings(&$a,&$s) {
     $enabled = get_pconfig(local_user(), 'mailstream', 'enabled');
-    $nolikes = get_pconfig(local_user(), 'mailstream', 'nolikes');
     $address = get_pconfig(local_user(), 'mailstream', 'address');
+    $nolikes = get_pconfig(local_user(), 'mailstream', 'nolikes');
+    $attachimg= get_pconfig(local_user(), 'mailstream', 'attachimg');
     $template = get_markup_template('settings.tpl', 'addon/mailstream/');
     $s .= replace_macros($template, array(
+                             '$enabled' => array(
+                                 'mailstream_enabled',
+                                 t('Enabled'),
+                                 $enabled),
                              '$address' => array(
                                  'mailstream_address',
                                  t('Email Address'),
@@ -335,10 +367,11 @@ function mailstream_plugin_settings(&$a,&$s) {
                                  t('Exclude Likes'),
                                  $nolikes,
                                  t("Check this to omit mailing \"Like\" notifications")),
-                             '$enabled' => array(
-                                 'mailstream_enabled',
-                                 t('Enabled'),
-                                 $enabled),
+                             '$attachimg' => array(
+                                 'mailstream_attachimg',
+                                 t('Attach Images'),
+                                 $attachimg,
+                                 t("Download images in posts and attach them to the email.  Useful for reading email while offline.")),
                              '$title' => t('Mail Stream Settings'),
                              '$submit' => t('Save Settings')));
 }
@@ -361,6 +394,12 @@ function mailstream_plugin_settings_post($a,$post) {
     }
     else {
         del_pconfig(local_user(), 'mailstream', 'enabled');
+    }
+    if ($_POST['mailstream_attachimg']) {
+        set_pconfig(local_user(), 'mailstream', 'attachimg', $_POST['mailstream_attachimg']);
+    }
+    else {
+        del_pconfig(local_user(), 'mailstream', 'attachimg');
     }
 }
 
