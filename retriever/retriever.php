@@ -179,6 +179,7 @@ function retriever_retrieve_items($max_items) {
     }
 
     $retrieve_items = $max_items - $retriever_item_count;
+    logger('retriever_retrieve_items: asked for maximum ' . $max_items . ', already retrieved ' . $retriever_item_count . ', retrieve ' . $retrieve_items, LOGGER_DEBUG);
     do {
         $r = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
                dbesc(implode($schedule_clauses, ' OR ')),
@@ -189,6 +190,7 @@ function retriever_retrieve_items($max_items) {
         if (count($r) == 0) {
             break;
         }
+        logger('retriever_retrieve_items: found ' . count($r) . ' waiting resources in database', LOGGER_DEBUG);
         foreach ($r as $rr) {
             retrieve_resource($rr);
             $retriever_item_count++;
@@ -206,6 +208,7 @@ function retriever_retrieve_items($max_items) {
     if (!$r) {
         $r = array();
     }
+    logger('retriever_retrieve_items: items waiting even though resource has completed: ' . count($r), LOGGER_DEBUG);
     foreach ($r as $rr) {
         $resource = q("SELECT * FROM retriever_resource WHERE `id` = %d", $rr['resource']);
         $retriever_item = retriever_get_retriever_item($rr['item']);
@@ -237,6 +240,7 @@ function retriever_tidy() {
     q("DELETE FROM retriever_resource WHERE completed IS NULL AND created < DATE_SUB(now(), INTERVAL 3 MONTH)");
 
     $r = q("SELECT retriever_item.id FROM retriever_item LEFT OUTER JOIN retriever_resource ON (retriever_item.resource = retriever_resource.id) WHERE retriever_resource.id is null");
+    logger('retriever_tidy: found ' . count($r) . ' retriever_items with no retriever_resource');
     foreach ($r as $rr) {
         q('DELETE FROM retriever_item WHERE id = %d', intval($rr['id']));
     }
@@ -248,14 +252,13 @@ function retrieve_resource($resource) {
     logger('retrieve_resource: ' . ($resource['num-tries'] + 1) .
            ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], LOGGER_DEBUG);
     $redirects;
-    $cookiejar = tempnam ('/tmp', 'cookiejar-retriever-');
-    $resource['data'] = fetch_url($resource['url'], $resource['binary'], $redirects, 0, Null, $cookiejar, true);
+    $cookiejar = tempnam(get_temppath(), 'cookiejar-retriever-');
+    $fetch_result = z_fetch_url($resource['url'], $resource['binary'], $redirects, array('cookiejar' => $cookiejar));
     unlink($cookiejar);
+    $resource['data'] = $fetch_result['body'];
     $resource['http-code'] = $a->get_curl_code();
     $resource['type'] = $a->get_curl_content_type();
-    if (method_exists($a, 'edd_debug')) {
-        $resource['redirect-url'] = $a->get_curl_redirect_url();
-    }
+    $resource['redirect-url'] = $fetch_result['redirect_url'];
     logger('retrieve_resource: got code ' . $resource['http-code'] .
            ' retrieving resource ' . $resource['id'] .
            ' final url ' . $resource['redirect-url'], LOGGER_DEBUG);
@@ -344,6 +347,7 @@ function apply_retrospective($retriever, $num) {
            intval($retriever['contact-id']), intval($num));
     foreach ($r as $item) {
         q('UPDATE `item` SET `visible` = 0 WHERE `id` = %d', $item['id']);
+        q('UPDATE `thread` SET `visible` = 0 WHERE `iid` = %d', $item['id']);
         retriever_on_item_insert($retriever, $item);
     }
 }
@@ -449,12 +453,12 @@ function retriever_get_encoding($resource) {
 function retriever_apply_xslt_text($xslt_text, $doc) {
     if (!$xslt_text) {
         logger('retriever_apply_xslt_text: empty XSLT text', LOGGER_NORMAL);
-        return;
+        return $doc;
     }
     $xslt_doc = new DOMDocument();
     if (!$xslt_doc->loadXML($xslt_text)) {
         logger('retriever_apply_xslt_text: could not load XML', LOGGER_NORMAL);
-        return;
+        return $doc;
     }
     $xp = new XsltProcessor();
     $xp->importStylesheet($xslt_doc);
@@ -463,7 +467,7 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
 }
 
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
-    logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['uri'], LOGGER_DEBUG);
+    logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['uri'] . ' contact ' . $item['contact-id'], LOGGER_DEBUG);
 
     if (!$retriever['data']['include'] && !$retriever['data']['customxslt']) {
         return;
@@ -483,24 +487,23 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         $doc->loadXML($content);
     }
 
-    $components = parse_url($resource['redirect-url']);
-    $rooturl = $components['scheme'] . "://" . $components['host'];
-    $dirurl = $rooturl . dirname($components['path']) . "/";
-
+    $params = array('$spec' => $retriever['data']);
+    $extract_template = get_markup_template('extract.tpl', 'addon/retriever/');
+    $extract_xslt = replace_macros($extract_template, $params);
+    if ($retriever['data']['include']) {
+        $doc = retriever_apply_xslt_text($extract_xslt, $doc);
+    }
     if ($retriever['data']['customxslt']) {
-        $extract_xslt = $retriever['data']['customxslt'];
+        $doc = retriever_apply_xslt_text($retriever['data']['customxslt'], $doc);
     }
-    else {
-        $params = array('$spec' => $retriever['data']);
-        $extract_template = get_markup_template('extract.tpl', 'addon/retriever/');
-        $extract_xslt = replace_macros($extract_template, $params);
-    }
-    $doc = retriever_apply_xslt_text($extract_xslt, $doc);
     if (!$doc) {
         logger('retriever_apply_dom_filter: failed to apply extract XSLT template', LOGGER_NORMAL);
         return;
     }
 
+    $components = parse_url($resource['redirect-url']);
+    $rooturl = $components['scheme'] . "://" . $components['host'];
+    $dirurl = $rooturl . dirname($components['path']) . "/";
     $params = array('$dirurl' => $dirurl, '$rooturl' => $rooturl);
     $fix_urls_template = get_markup_template('fix-urls.tpl', 'addon/retriever/');
     $fix_urls_xslt = replace_macros($fix_urls_template, $params);
@@ -558,8 +561,12 @@ function retriever_check_item_completed(&$item)
         q("UPDATE `item` SET `visible` = %d WHERE `id` = %d",
           intval($item['visible']),
           intval($item['id']));
-// disable due to possible security issue
-//        proc_run('php', "include/notifier.php", 'edit_post', $item['id']);
+        q("UPDATE `thread` SET `visible` = %d WHERE `iid` = %d",
+          intval($item['visible']),
+          intval($item['id']));
+        //q("INSERT INTO `deliverq` (`cmd`, `item`, `contact`) VALUES ('edit_post', '%s', '%s')", intval($item['id']), intval($item['contact-id']));//@@@
+	//@@@ Must remove this before pushing upstream
+        proc_run('php', "include/notifier.php", 'edit_post', $item['id']);
     }
 }
 
