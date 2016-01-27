@@ -85,9 +85,7 @@ function publicise_create_user($owner, $contact) {
 
     $nick = $contact['nick'];
     if (!$nick) {
-        logger("Publicise: can't convert contact " .
-               $contact['id'] . ' ' . $contact['name'] .
-               ' because there is no nick', LOGGER_NORMAL);
+        notice(sprintf(t("Can't publicise feed \"%s\" because it doesn't have a nickname"), $contact['name']) . EOL);
         return;
     }
     logger('Publicise: create user, beginning key generation...', LOGGER_DEBUG);
@@ -234,16 +232,19 @@ function publicise_create_profile($contact, $uid) {
 function publicise_set_up_user($a, $contact, $owner) {
     $user = publicise_create_user($owner, $contact);
     if (!$user) {
+        notice(sprintf(t("Failed to create user for feed \"%s\""), $contact['name']) . EOL);
         return;
     }
     $self_contact = publicise_create_self_contact($a, $contact, $user['uid']);
     if (!$self_contact) {
+        notice(sprintf(t("Failed to create self contact for user \"%s\""), $contact['name']) . EOL);
         logger("Publicise: unable to create self contact, deleting user " . $user['uid'], LOGGER_NORMAL);
         q('DELETE FROM `user` WHERE `uid` = %d', intval($user['uid']));
         return;
     }
     $profile = publicise_create_profile($contact, $user['uid']);
     if (!$profile) {
+        notice(sprintf(t("Failed to create profile for user \"%s\""), $contact['name']) . EOL);
         logger("Publicise: unable to create profile, deleting user $uid contact $self_contact", LOGGER_NORMAL);
         q('DELETE FROM `user` WHERE `uid` = %d', intval($user['uid']));
         q('DELETE FROM `contact` WHERE `id` = %d', intval($self_contact));
@@ -254,6 +255,7 @@ function publicise_set_up_user($a, $contact, $owner) {
 
 function publicise($a, &$contact, &$owner) {
     if (!is_site_admin()) {
+        notice(t("Only admin users can publicise feeds"));
         logger('Publicise: non-admin tried to publicise', LOGGER_NORMAL);
         return;
     }
@@ -291,6 +293,7 @@ function publicise($a, &$contact, &$owner) {
     $r = q("UPDATE `retriever_rule` SET `uid` = %d WHERE `contact-id` = %d",
            intval($owner['uid']), intval($contact['id']));
 
+    info(sprintf(t("Moved feed \"%s\" to dedicated account"), $contact['name']) . EOL);
     return true;
 }
 
@@ -307,6 +310,7 @@ function depublicise($a, $contact, $user) {
     require_once('include/Contact.php');
 
     if (!is_site_admin()) {
+        notice("Only admin users can depublicise feeds");
         logger('Publicise: non-admin tried to depublicise', LOGGER_NORMAL);
         return;
     }
@@ -352,6 +356,8 @@ function depublicise($a, $contact, $user) {
     q('UPDATE `user` SET `account_removed` = 1, `account_expired` = 1, `account_expires_on` = UTC_TIMESTAMP() WHERE `uid` = %d',
       intval($user['uid']));
     q('UPDATE `profile` SET `publish` = 0, `net-publish` = 0 WHERE `uid` = %d AND `is-default` = 1', intval($user['uid']));
+
+    info(sprintf(t("Removed dedicated account for feed \"%s\""), $contact['name']) . EOL);
 }
 
 function publicise_plugin_admin_post ($a) {
