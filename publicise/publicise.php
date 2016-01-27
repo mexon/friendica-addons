@@ -8,6 +8,7 @@
 
 function publicise_install() {
     register_hook('post_remote', 'addon/publicise/publicise.php', 'publicise_post_remote_hook');
+    register_hook('post_remote_end', 'addon/publicise/publicise.php', 'publicise_post_remote_end_hook');
 }
 
 function publicise_uninstall() {
@@ -21,7 +22,7 @@ SELECT *
  FROM `contact`
  WHERE (`contact`.`uid` = %d and `contact`.`network` = 'feed')
  OR (`reason` = 'publicise')
- ORDER BY `contact`.`id`
+ ORDER BY `contact`.`name`
 EOF;
     return q($query, intval(local_user()));
 }
@@ -47,11 +48,14 @@ function publicise_plugin_admin(&$a,&$o) {
         $comments = 1;
         $url = $v['url'];
         if ($enabled) {
-            $r = q('SELECT `expire`, `page-flags` FROM `user` WHERE `uid` = %d', intval($v['uid']));
+            $r = q('SELECT * FROM `user` WHERE `uid` = %d', intval($v['uid']));
             $expire = $r[0]['expire'];
             $url = $a->get_baseurl() . '/profile/' . $v['nick'];
             if ($r[0]['page-flags'] == PAGE_SOAPBOX) {
                 $comments = NULL;
+            }
+            if ($r[0]['account_expired']) {
+                $enabled = NULL;
             }
         }
         $contacts[$k]['enabled'] = array('publicise-enabled-' . $v['id'], NULL, $enabled);
@@ -86,7 +90,7 @@ function publicise_create_user($owner, $contact) {
                ' because there is no nick', LOGGER_NORMAL);
         return;
     }
-    logger('Publicise: create user, beginning key generation...', LOGGER_DATA);
+    logger('Publicise: create user, beginning key generation...', LOGGER_DEBUG);
     $res=openssl_pkey_new(array(
         'digest_alg' => 'sha1',
         'private_key_bits' => 4096,
@@ -131,7 +135,7 @@ function publicise_create_user($owner, $contact) {
         'page-flags' => publicise_make_int($comments ? PAGE_COMMUNITY : PAGE_SOAPBOX),
         'expire' => publicise_make_int($expire),
         );
-    logger('Publicise: created user ' . print_r($newuser, true), LOGGER_DATA);
+    logger('Publicise: creating user ' . print_r($newuser, true), LOGGER_DATA);
     $r = q("INSERT INTO `user` (`" 
 			. implode("`, `", array_keys($newuser))
 			. "`) VALUES (" 
@@ -146,6 +150,7 @@ function publicise_create_user($owner, $contact) {
         logger('Publicise: unexpected number of uids returned', LOGGER_NORMAL);
         return;
     }
+    logger('Publicise: created user ID ' . $r[0], LOGGER_DEBUG);
     return $r[0];
 }
 
@@ -172,20 +177,28 @@ function publicise_create_self_contact($a, $contact, $uid) {
         'avatar-date' => publicise_make_string(datetime_convert()),
         'closeness' => publicise_make_int(0),
         );
-    logger('Publicise: create contact ' . print_r($newcontact, true), LOGGER_DATA);
-    q("INSERT INTO `contact` (`"
-      . implode("`, `", array_keys($newcontact))
-      . "`) VALUES ("
-      . implode(", ", array_values($newcontact))
-      . ")" );
-    $newcontact = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self` = 1", intval($uid));
-    if (count($newcontact) != 1) {
-        logger('Publicise: create contact failed', LOGGER_NORMAL);
-        $r = q("DELETE FROM `user` WHERE `uid` = %d", intval($uid));
-        logger('Publicise: deleted failed user ' . $uid, LOGGER_DATA);
-        return;
+    $existing = q("SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1", intval($uid));
+    if (count($existing)) {
+        $newcontact = $existing[0];
+        logger('Publicise: self contact already exists for user ' . $uid . ' id ' . $newcontact['id'], LOGGER_DEBUG);
+    } else {
+        logger('Publicise: create contact ' . print_r($newcontact, true), LOGGER_DATA);
+        q("INSERT INTO `contact` (`"
+          . implode("`, `", array_keys($newcontact))
+          . "`) VALUES ("
+          . implode(", ", array_values($newcontact))
+          . ")" );
+        $results = q("SELECT `id` FROM `contact` WHERE `uid` = %d AND `self` = 1", intval($uid));
+        if (count($results) != 1) {
+            logger('Publicise: create self contact failed, will delete uid ' . $uid, LOGGER_NORMAL);
+            $r = q("DELETE FROM `user` WHERE `uid` = %d", intval($uid));
+            return;
+        }
+        $newcontact = $results[0];
+        logger('Publicise: created self contact for user ' . $uid . ' id ' . $newcontact['id'], LOGGER_DEBUG);
     }
-    return $newcontact[0]['id'];
+    logger('Publicise: self contact for ' . $uid . ' nick ' . $contact['nick'] . ' is ' . $newcontact['id'], LOGGER_DEBUG);
+    return $newcontact['id'];
 }
 
 function publicise_create_profile($contact, $uid) {
@@ -214,6 +227,7 @@ function publicise_create_profile($contact, $uid) {
         logger('Publicise: create profile produced unexpected number of results', LOGGER_NORMAL);
         return;
     }
+    logger('Publicise: created profile ' . $newprofile[0]['id'], LOGGER_DEBUG);
     return $newprofile[0]['id'];
 }
 
@@ -251,14 +265,14 @@ function publicise($a, &$contact, &$owner) {
         $owner = $existing[0];
         q('UPDATE `user` SET `account_expires_on` = "0000-00-00 00:00:00", `account_removed` = 0, `account_expired` = 0 WHERE `uid` = %d', intval($owner['uid']));
         q('UPDATE `profile` SET `publish` = 1, `net-publish` = 1 WHERE `uid` = %d AND `is-default` = 1', intval($owner['uid']));
-        logger('Publicise: recycled previous user ' . $owner['uid'], LOGGER_DATA);
+        logger('Publicise: recycled previous user ' . $owner['uid'], LOGGER_DEBUG);
     }
     else {
         $owner = publicise_set_up_user($a, $contact, $owner);
         if (!$owner) {
             return;
         }
-        logger("Publicise: created new user " . $owner['uid'], LOGGER_DATA);
+        logger("Publicise: created new user " . $owner['uid'], LOGGER_DEBUG);
     }
     logger('Publicise: new contact user is ' . $owner['uid']);
 
@@ -280,6 +294,15 @@ function publicise($a, &$contact, &$owner) {
     return true;
 }
 
+function publicise_self_contact($uid) {
+    $r = q('SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1', intval($uid));
+    if (count($r) != 1) {
+        logger('Publicise: unexpected number of self contacts for user ' . $uid, LOGGER_NORMAL);
+        return;
+    }
+    return $r[0];
+}
+
 function depublicise($a, $contact, $user) {
     require_once('include/Contact.php');
 
@@ -288,14 +311,9 @@ function depublicise($a, $contact, $user) {
         return;
     }
 
-    logger('Publicise: about to depublicise contact ' . $contact['id'] . ' user ' . $user['uid'], LOGGER_DATA);
+    logger('Publicise: about to depublicise contact ' . $contact['id'] . ' user ' . $user['uid'], LOGGER_DEBUG);
 
-    $r = q('SELECT * FROM `contact` WHERE `uid` = %d AND `self` = 1', intval($user['uid']));
-    if (count($r) != 1) {
-        logger('Publicise: unexpected number of self contacts for user ' . $user['uid'], LOGGER_NORMAL);
-        return;
-    }
-    $self_contact = $r[0];
+    $self_contact = publicise_self_contact($user['uid']);
 
     // If the local_user() is subscribed to the feed, take ownership
     // of the feed and all its items and photos.  Otherwise they will
@@ -330,7 +348,8 @@ function depublicise($a, $contact, $user) {
                intval($owner['uid']), intval($contact['id']));
     }
 
-    q('UPDATE `user` SET `account_expires_on` = UTC_TIMESTAMP() + INTERVAL 1 DAY WHERE `uid` = %d',
+    // Set the account to removed and expired right now.  It will be cleaned up by cron after 3 days, giving a chance to change your mind
+    q('UPDATE `user` SET `account_removed` = 1, `account_expired` = 1, `account_expires_on` = UTC_TIMESTAMP() WHERE `uid` = %d',
       intval($user['uid']));
     q('UPDATE `profile` SET `publish` = 0, `net-publish` = 0 WHERE `uid` = %d AND `is-default` = 1', intval($user['uid']));
 }
@@ -390,3 +409,14 @@ function publicise_post_remote_hook(&$a, &$item) {
     $item['wall'] = 1;
     $item['private'] = 0;
 }
+
+function publicise_post_remote_end_hook(&$a, &$item) {
+    $r1 = q("SELECT `uid` FROM `contact` WHERE `id` = %d AND `reason` = 'publicise'", intval($item['contact-id']));
+    if (!$r1) {
+        return;
+    }  
+
+    logger('Publicise: notifying: ' . $item['id'] . ' ' . $item['uid'] . $item['contact-id'] . ' ' . $item['uri'], LOGGER_DEBUG);
+    proc_run('php', 'include/notifier.php', 'wall-new', $item['id']); //@@@ remove this before pushing upstream
+}
+
