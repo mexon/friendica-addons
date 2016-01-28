@@ -564,9 +564,6 @@ function retriever_check_item_completed(&$item)
         q("UPDATE `thread` SET `visible` = %d WHERE `iid` = %d",
           intval($item['visible']),
           intval($item['id']));
-        //q("INSERT INTO `deliverq` (`cmd`, `item`, `contact`) VALUES ('edit_post', '%s', '%s')", intval($item['id']), intval($item['contact-id']));//@@@
-	//@@@ Must remove this before pushing upstream
-        proc_run('php', "include/notifier.php", 'edit_post', $item['id']);
     }
 }
 

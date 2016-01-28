@@ -8,7 +8,6 @@
 
 function publicise_install() {
     register_hook('post_remote', 'addon/publicise/publicise.php', 'publicise_post_remote_hook');
-    register_hook('post_remote_end', 'addon/publicise/publicise.php', 'publicise_post_remote_end_hook');
 }
 
 function publicise_uninstall() {
@@ -414,15 +413,5 @@ function publicise_post_remote_hook(&$a, &$item) {
     $item['type'] = 'wall';
     $item['wall'] = 1;
     $item['private'] = 0;
-}
-
-function publicise_post_remote_end_hook(&$a, &$item) {
-    $r1 = q("SELECT `uid` FROM `contact` WHERE `id` = %d AND `reason` = 'publicise'", intval($item['contact-id']));
-    if (!$r1) {
-        return;
-    }  
-
-    logger('Publicise: notifying: ' . $item['id'] . ' ' . $item['uid'] . $item['contact-id'] . ' ' . $item['uri'], LOGGER_DEBUG);
-    proc_run('php', 'include/notifier.php', 'wall-new', $item['id']); //@@@ remove this before pushing upstream
 }
 
