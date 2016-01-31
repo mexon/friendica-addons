@@ -9,8 +9,8 @@
 function mailstream_install() {
     register_hook('plugin_settings', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings');
     register_hook('plugin_settings_post', 'addon/mailstream/mailstream.php', 'mailstream_plugin_settings_post');
-    register_hook('post_local_end', 'addon/mailstream/mailstream.php', 'mailstream_post_local_hook');
-    register_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
+    register_hook('post_local_end', 'addon/mailstream/mailstream.php', 'mailstream_post_hook');
+    register_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_hook');
     register_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
 
     if (get_config('mailstream', 'dbversion') == '0.1') {
@@ -54,6 +54,8 @@ function mailstream_uninstall() {
     unregister_hook('post_remote', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
     unregister_hook('post_local_end', 'addon/mailstream/mailstream.php', 'mailstream_post_local_hook');
     unregister_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_remote_hook');
+    unregister_hook('post_local_end', 'addon/mailstream/mailstream.php', 'mailstream_post_hook');
+    unregister_hook('post_remote_end', 'addon/mailstream/mailstream.php', 'mailstream_post_hook');
     unregister_hook('cron', 'addon/mailstream/mailstream.php', 'mailstream_cron');
     unregister_hook('incoming_mail', 'addon/mailstream/mailstream.php', 'mailstream_incoming_mail');
 }
@@ -87,12 +89,8 @@ function mailstream_generate_id($a, $uri) {
     return $message_id;
 }
 
-function mailstream_post_local_hook(&$a, &$item) {
-logger('@@@ mailstream_post_local_hook for item uid ' . $item['uid'] . ' contact ' . $item['contact-id'] . ' uri ' . $item['uri']);
-}
-
-function mailstream_post_remote_hook(&$a, &$item) {
-logger('@@@ mailstream_post_remote_hook for item uid ' . $item['uid'] . ' contact ' . $item['contact-id'] . ' uri ' . $item['uri']);
+function mailstream_post_hook(&$a, &$item) {
+logger('@@@ mailstream_post_hook for item uid ' . $item['uid'] . ' contact ' . $item['contact-id'] . ' uri ' . $item['uri']);
     if (!get_pconfig($item['uid'], 'mailstream', 'enabled')) {
         return;
     }
