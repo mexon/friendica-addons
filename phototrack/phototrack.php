@@ -19,8 +19,8 @@ profile: photo thumb about
 
 */
 
-if (!defined('PHOTOTRACK_BATCH_SIZE')) {
-    define('PHOTOTRACK_BATCH_SIZE', 1000);
+if (!defined('PHOTOTRACK_DEFAULT_BATCH_SIZE')) {
+    define('PHOTOTRACK_DEFAULT_BATCH_SIZE', 1000);
 }
 if (!defined('PHOTOTRACK_DEFAULT_SEARCH_INTERVAL')) {
     define('PHOTOTRACK_DEFAULT_SEARCH_INTERVAL', 360);
@@ -183,8 +183,16 @@ function phototrack_check_row($a, $table, $row) {
     phototrack_finished_row($table, $row['id']);
 }
 
+function phototrack_batch_size() {
+    $batch_size = get_config('phototrack', 'batch_size');
+    if ($batch_size > 0) {
+        return $batch_size;
+    }
+    return PHOTOTRACK_DEFAULT_BATCH_SIZE;
+}
+
 function phototrack_search_table($a, $table) {
-    $batch_size = PHOTOTRACK_BATCH_SIZE;
+    $batch_size = phototrack_batch_size();
     $rows = q("SELECT `$table`.* FROM `$table` LEFT OUTER JOIN phototrack_row_check ON ( phototrack_row_check.`table` = '$table' AND phototrack_row_check.`row-id` = `$table`.id ) WHERE ( ( phototrack_row_check.checked IS NULL ) OR ( phototrack_row_check.checked < DATE_SUB(NOW(), INTERVAL 1 MONTH) ) ) ORDER BY phototrack_row_check.checked LIMIT $batch_size");
     foreach ($rows as $row) {
         phototrack_check_row($a, $table, $row);
@@ -195,20 +203,33 @@ function phototrack_search_table($a, $table) {
     return $remaining;
 }
 
-function phototrack_cron($a, $b) {
-    logger('@@@ phototrack cron dbversion ' . get_config('phototrack', 'dbversion'));
+function phototrack_cron_time() {
+    $prev_remaining = get_config('phototrack', 'remaining_items');
+    if ($prev_remaining > 10 * phototrack_batch_size()) {
+        logger('@@@ lots of things still remaining, always cron time now');
+        return true;
+    }
     $last = get_config('phototrack', 'last_search');
     $search_interval = intval(get_config('phototrack', 'search_interval'));
     if (!$search_interval) {
         $search_interval = PHOTOTRACK_DEFAULT_SEARCH_INTERVAL;
     }
+    logger('@@@ phototrack_cron_time now ' . time() . ' last ' . $last . ' search_interval ' . $search_interval);
     if ($last) {
         $next = $last + ($search_interval * 60);
         if ($next > time()) {
             logger('phototrack: search interval not reached');
-            return;
+            return false;
         }
     }
+    return true;
+}
+
+function phototrack_cron($a, $b) {
+    if (!phototrack_cron_time()) {
+        return;
+    }
+    set_config('phototrack', 'last_search', time());
 
     $remaining = 0;
     $remaining += phototrack_search_table($a, 'item');
@@ -218,6 +239,7 @@ function phototrack_cron($a, $b) {
     $remaining += phototrack_search_table($a, 'gcontact');
 
     logger('@@@ total remaining items ' . $remaining);
+    set_config('phototrack', 'remaining_items', $remaining);
     if ($remaining === 0) {
         phototrack_tidy();
     }
@@ -228,10 +250,10 @@ function phototrack_tidy() {
 //@@@ so this is how this will work.  Delete all use rows older than a certain time.  Then delete things with no use rows.  This both tidies up our own database and also expires things after a month
     logger('@@@ phototrack_tidy');
     return;
+    q('DELETE FROM photo WHERE `id` IN (SELECT * FROM (SELECT photo.`id` FROM photo LEFT OUTER JOIN phototrack_photo_use ON (photo.`resource-id` = phototrack_photo_use.`resource-id`) WHERE phototrack_photo_use.id IS NULL AND photo.`created` < DATE_SUB(NOW(), INTERVAL 3 MONTH) AND `album` = "Retrieved Images") AS X)');
     $r = q("SELECT id FROM phototrack_item WHERE completed IS NOT NULL AND completed < DATE_SUB(NOW(), INTERVAL 1 YEAR)");
     foreach ($r as $rr) {
         q('DELETE FROM phototrack_item WHERE id = %d', intval($rr['id']));
     }
-    q('DELETE FROM photo WHERE `id` IN (SELECT * FROM (SELECT photo.`id` FROM photo LEFT OUTER JOIN phototrack_photo_use ON (photo.`resource-id` = phototrack_photo_use.`resource-id`) WHERE phototrack_photo_use.id IS NULL AND photo.`created` < DATE_SUB(NOW(), INTERVAL 3 MONTH) AND `album` = "Retrieved Images") AS X)');
     logger('phototrack_tidy: deleted ' . count($r) . ' old items', LOGGER_DEBUG);
 }
