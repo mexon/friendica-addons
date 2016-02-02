@@ -90,7 +90,6 @@ function mailstream_generate_id($a, $uri) {
 }
 
 function mailstream_post_hook(&$a, &$item) {
-logger('@@@ mailstream_post_hook for item uid ' . $item['uid'] . ' contact ' . $item['contact-id'] . ' uri ' . $item['uri']);
     if (!get_pconfig($item['uid'], 'mailstream', 'enabled')) {
         return;
     }
