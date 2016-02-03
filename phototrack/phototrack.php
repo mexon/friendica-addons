@@ -249,7 +249,6 @@ function phototrack_cron($a, $b) {
 function phototrack_tidy() {
 //@@@ so this is how this will work.  Delete all use rows older than a certain time.  Then delete things with no use rows.  This both tidies up our own database and also expires things after a month
     logger('@@@ phototrack_tidy');
-    return;
     q('DELETE FROM photo WHERE `id` IN (SELECT * FROM (SELECT photo.`id` FROM photo LEFT OUTER JOIN phototrack_photo_use ON (photo.`resource-id` = phototrack_photo_use.`resource-id`) WHERE phototrack_photo_use.id IS NULL AND photo.`created` < DATE_SUB(NOW(), INTERVAL 3 MONTH) AND `album` = "Retrieved Images") AS X)');
     $r = q("SELECT id FROM phototrack_item WHERE completed IS NOT NULL AND completed < DATE_SUB(NOW(), INTERVAL 1 YEAR)");
     foreach ($r as $rr) {
