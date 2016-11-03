@@ -23,7 +23,7 @@ if (!defined('PHOTOTRACK_DEFAULT_BATCH_SIZE')) {
     define('PHOTOTRACK_DEFAULT_BATCH_SIZE', 1000);
 }
 if (!defined('PHOTOTRACK_DEFAULT_SEARCH_INTERVAL')) {
-    define('PHOTOTRACK_DEFAULT_SEARCH_INTERVAL', 360);
+    define('PHOTOTRACK_DEFAULT_SEARCH_INTERVAL', 60);
 }
 
 function phototrack_install() {
@@ -247,12 +247,15 @@ function phototrack_cron($a, $b) {
 }
 
 function phototrack_tidy() {
-//@@@ so this is how this will work.  Delete all use rows older than a certain time.  Then delete things with no use rows.  This both tidies up our own database and also expires things after a month
-    logger('@@@ phototrack_tidy');
-    q('DELETE FROM photo WHERE `id` IN (SELECT * FROM (SELECT photo.`id` FROM photo LEFT OUTER JOIN phototrack_photo_use ON (photo.`resource-id` = phototrack_photo_use.`resource-id`) WHERE phototrack_photo_use.id IS NULL AND photo.`created` < DATE_SUB(NOW(), INTERVAL 3 MONTH) AND `album` = "Retrieved Images") AS X)');
-    $r = q("SELECT id FROM phototrack_item WHERE completed IS NOT NULL AND completed < DATE_SUB(NOW(), INTERVAL 1 YEAR)");
-    foreach ($r as $rr) {
-        q('DELETE FROM phototrack_item WHERE id = %d', intval($rr['id']));
+    $batch_size = phototrack_batch_size();
+    $rows = q('SELECT id FROM phototrack_photo_use WHERE checked < DATE_SUB(NOW(), INTERVAL 2 MONTH)');
+    foreach ($rows as $row) {
+        q('DELETE FROM phototrack_photo_use WHERE id = ' . $row['id']);
     }
-    logger('phototrack_tidy: deleted ' . count($r) . ' old items', LOGGER_DEBUG);
+    logger('phototrack_tidy: deleted ' . count($rows) . ' phototrack_photo_use rows');
+    $rows = q('SELECT id FROM photo WHERE `id` IN (SELECT * FROM (SELECT photo.`id` FROM photo LEFT OUTER JOIN phototrack_photo_use ON (photo.`resource-id` = phototrack_photo_use.`resource-id`) WHERE phototrack_photo_use.id IS NULL AND photo.`created` < DATE_SUB(NOW(), INTERVAL 1 MONTH) AND `album` = "Retrieved Images") AS X) LIMIT ' . $batch_size);
+    foreach ($rows as $row) {
+        q('DELETE FROM photo WHERE `id` = ' . $row['id']);
+    }
+    logger('phototrack_tidy: deleted ' . count($rows) . ' photos');
 }
