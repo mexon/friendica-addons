@@ -2,7 +2,7 @@
 
 /**
  * Name: App.net Connector
- * Description: app.net postings import and export
+ * Description: Bidirectional (posting and reading) connector for app.net.
  * Version: 0.2
  * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
  */
@@ -15,6 +15,9 @@
  - https://alpha.app.net/opendev/post/34396399 - location data
 */
 
+require_once('include/enotify.php');
+require_once("include/socgraph.php");
+
 define('APPNET_DEFAULT_POLL_INTERVAL', 5); // given in minutes
 
 function appnet_install() {
@@ -25,6 +28,7 @@ function appnet_install() {
 	register_hook('connector_settings',	'addon/appnet/appnet.php', 'appnet_settings');
 	register_hook('connector_settings_post','addon/appnet/appnet.php', 'appnet_settings_post');
 	register_hook('prepare_body', 		'addon/appnet/appnet.php', 'appnet_prepare_body');
+	register_hook('check_item_notification','addon/appnet/appnet.php', 'appnet_check_item_notification');
 }
 
 
@@ -36,6 +40,7 @@ function appnet_uninstall() {
 	unregister_hook('connector_settings',	'addon/appnet/appnet.php', 'appnet_settings');
 	unregister_hook('connector_settings_post', 'addon/appnet/appnet.php', 'appnet_settings_post');
 	unregister_hook('prepare_body', 	'addon/appnet/appnet.php', 'appnet_prepare_body');
+	unregister_hook('check_item_notification','addon/appnet/appnet.php', 'appnet_check_item_notification');
 }
 
 function appnet_module() {}
@@ -62,6 +67,18 @@ function appnet_content(&$a) {
 		$o = appnet_connect($a);
 
 	return $o;
+}
+
+function appnet_check_item_notification($a, &$notification_data) {
+        $own_id = get_pconfig($notification_data["uid"], 'appnet', 'ownid');
+
+        $own_user = q("SELECT `url` FROM `contact` WHERE `uid` = %d AND `alias` = '%s' LIMIT 1",
+                        intval($notification_data["uid"]),
+                        dbesc("adn::".$own_id)
+                );
+
+        if ($own_user)
+                $notification_data["profiles"][] = $own_user[0]["url"];
 }
 
 function appnet_plugin_admin(&$a, &$o){
@@ -357,12 +374,12 @@ function appnet_create_entities($a, $b, $postdata) {
 		$start = $pos + 1;
 	}
 
-	if (isset($postdata["url"]) AND isset($postdata["title"])) {
+	if (isset($postdata["url"]) AND isset($postdata["title"]) AND ($postdata["type"] != "photo")) {
 		$postdata["title"] = shortenmsg($postdata["title"], 90);
 		$max = 256 - strlen($postdata["title"]);
 		$text = shortenmsg($text, $max);
 		$text .= "\n[".$postdata["title"]."](".$postdata["url"].")";
-	} elseif (isset($postdata["url"])) {
+	} elseif (isset($postdata["url"]) AND ($postdata["type"] != "photo")) {
 		$postdata["url"] = short_link($postdata["url"]);
 		$max = 240;
 		$text = shortenmsg($text, $max);
@@ -524,7 +541,7 @@ function appnet_send(&$a,&$b) {
 						"value" => $attached_data
 						);
 
-		if (isset($post["url"]) AND !isset($post["title"])) {
+		if (isset($post["url"]) AND !isset($post["title"]) AND ($post["type"] != "photo")) {
 			$display_url = str_replace(array("http://www.", "https://www."), array("", ""), $post["url"]);
 			$display_url = str_replace(array("http://", "https://"), array("", ""), $display_url);
 
@@ -701,11 +718,13 @@ function appnet_fetchstream($a, $uid) {
 		$postarray = appnet_createpost($a, $uid, $post, $me, $user, $ownid, true);
 
 		$item = item_store($postarray);
+		$postarray["id"] = $item;
+
 		logger('appnet_fetchstream: User '.$uid.' posted stream item '.$item);
 
 		$lastid = $post["id"];
 
-		if (($item != 0) AND ($postarray['contact-id'] != $me["id"])) {
+		if (($item != 0) AND ($postarray['contact-id'] != $me["id"]) AND !function_exists("check_item_notification")) {
 			$r = q("SELECT `thread`.`iid` AS `parent` FROM `thread`
 				INNER JOIN `item` ON `thread`.`iid` = `item`.`parent` AND `thread`.`uid` = `item`.`uid`
 				WHERE `item`.`id` = %d AND `thread`.`mention` LIMIT 1", dbesc($item));
@@ -763,8 +782,14 @@ function appnet_fetchstream($a, $uid) {
 			$parent_id = $postarray['parent'];
 		} elseif (isset($postarray["body"])) {
 			$item = item_store($postarray);
+			$postarray["id"] = $item;
+
 			$parent_id = 0;
 			logger('appnet_fetchstream: User '.$uid.' posted mention item '.$item);
+
+			if ($item AND function_exists("check_item_notification"))
+				check_item_notification($item, $uid, NOTIFY_TAGSELF);
+
 		} else {
 			$item = 0;
 			$parent_id = 0;
@@ -786,7 +811,7 @@ function appnet_fetchstream($a, $uid) {
 		$lastid = $post["id"];
 
 		//if (($item != 0) AND ($postarray['contact-id'] != $me["id"])) {
-		if ($item != 0) {
+		if (($item != 0) AND !function_exists("check_item_notification")) {
 			require_once('include/enotify.php');
 			notification(array(
 				'type'         => NOTIFY_TAGSELF,
@@ -896,6 +921,8 @@ function appnet_createpost($a, $uid, $post, $me, $user, $ownid, $createuser, $th
 				foreach ($thread AS $tpost) {
 					$threadpost = appnet_createpost($a, $uid, $tpost, $me, $user, $ownid, false, false);
 					$item = item_store($threadpost);
+					$threadpost["id"] = $item;
+
 					logger("appnet_createpost: stored post ".$post["id"]." thread ".$post["thread_id"]." in item ".$item, LOGGER_DEBUG);
 				}
 			//}
@@ -1091,28 +1118,36 @@ function appnet_expand_annotations($a, $annotations) {
 
 function appnet_fetchcontact($a, $uid, $contact, $me, $create_user) {
 
-	$r = q("SELECT id FROM unique_contacts WHERE url='%s' LIMIT 1",
-			dbesc(normalise_link($contact["canonical_url"])));
+	if (function_exists("update_gcontact"))
+		update_gcontact(array("url" => $contact["canonical_url"], "generation" => 2,
+				"network" => NETWORK_APPNET, "photo" => $contact["avatar_image"]["url"],
+				"name" => $contact["name"], "nick" => $contact["username"],
+				"about" => $contact["description"]["text"], "hide" => true,
+				"addr" => $contact["username"]."@app.net"));
+	else {
+		// Old Code
+		$r = q("SELECT id FROM unique_contacts WHERE url='%s' LIMIT 1",
+				dbesc(normalise_link($contact["canonical_url"])));
 
-	if (count($r) == 0)
-		q("INSERT INTO unique_contacts (url, name, nick, avatar) VALUES ('%s', '%s', '%s', '%s')",
-			dbesc(normalise_link($contact["canonical_url"])),
-			dbesc($contact["name"]),
-			dbesc($contact["username"]),
-			dbesc($contact["avatar_image"]["url"]));
-	else
-		q("UPDATE unique_contacts SET name = '%s', nick = '%s', avatar = '%s' WHERE url = '%s'",
-			dbesc($contact["name"]),
-			dbesc($contact["username"]),
-			dbesc($contact["avatar_image"]["url"]),
-			dbesc(normalise_link($contact["canonical_url"])));
+		if (count($r) == 0)
+			q("INSERT INTO unique_contacts (url, name, nick, avatar) VALUES ('%s', '%s', '%s', '%s')",
+				dbesc(normalise_link($contact["canonical_url"])),
+				dbesc($contact["name"]),
+				dbesc($contact["username"]),
+				dbesc($contact["avatar_image"]["url"]));
+		else
+			q("UPDATE unique_contacts SET name = '%s', nick = '%s', avatar = '%s' WHERE url = '%s'",
+				dbesc($contact["name"]),
+				dbesc($contact["username"]),
+				dbesc($contact["avatar_image"]["url"]),
+				dbesc(normalise_link($contact["canonical_url"])));
 
-	if (DB_UPDATE_VERSION >= "1177")
-		q("UPDATE `unique_contacts` SET `location` = '%s', `about` = '%s' WHERE url = '%s'",
-			dbesc(""),
-			dbesc($contact["description"]["text"]),
-			dbesc(normalise_link($contact["canonical_url"])));
-
+		if (DB_UPDATE_VERSION >= "1177")
+			q("UPDATE `unique_contacts` SET `location` = '%s', `about` = '%s' WHERE url = '%s'",
+				dbesc(""),
+				dbesc($contact["description"]["text"]),
+				dbesc(normalise_link($contact["canonical_url"])));
+	}
 
 	$r = q("SELECT * FROM `contact` WHERE `uid` = %d AND `alias` = '%s' LIMIT 1",
 		intval($uid), dbesc("adn::".$contact["id"]));

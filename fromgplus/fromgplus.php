@@ -9,6 +9,10 @@
 
 define('FROMGPLUS_DEFAULT_POLL_INTERVAL', 30); // given in minutes
 
+require_once('mod/share.php');
+require_once('mod/parse_url.php');
+require_once('include/text.php');
+
 function fromgplus_install() {
 	register_hook('connector_settings', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings');
 	register_hook('connector_settings_post', 'addon/fromgplus/fromgplus.php', 'fromgplus_addon_settings_post');
@@ -36,6 +40,7 @@ function fromgplus_addon_settings(&$a,&$s) {
 		return;
 
 	$enable_checked = (intval(get_pconfig(local_user(),'fromgplus','enable')) ? ' checked="checked"' : '');
+	$keywords_checked = (intval(get_pconfig(local_user(), 'fromgplus', 'keywords')) ? ' checked="checked"' : '');
 	$account = get_pconfig(local_user(),'fromgplus','account');
 
 	$s .= '<span id="settings_fromgplus_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_fromgplus_expanded\'); openClose(\'settings_fromgplus_inflated\');">';
@@ -54,6 +59,9 @@ function fromgplus_addon_settings(&$a,&$s) {
 	$s .= '<label id="fromgplus-label" for="fromgplus-account">'.t('Google Account ID').' </label>';
 	$s .= '<input id="fromgplus-account" type="text" name="fromgplus-account" value="'.$account.'" />';
 	$s .= '</div><div class="clear"></div>';
+	$s .= '<label id="fromgplus-keywords-label" for="fromgplus-keywords">'.t('Add keywords to post').'</label>';
+	$s .= '<input id="fromgplus-keywords" type="checkbox" name="fromgplus-keywords" value="1"'.$keywords_checked.' />';
+	$s .= '<div class="clear"></div>';
 
 	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="fromgplus-submit" name="fromgplus-submit" 
 class="settings-submit" value="' . t('Save Settings') . '" /></div>';
@@ -71,12 +79,29 @@ function fromgplus_addon_settings_post(&$a,&$b) {
 		set_pconfig(local_user(),'fromgplus','account',trim($_POST['fromgplus-account']));
 		$enable = ((x($_POST,'fromgplus-enable')) ? intval($_POST['fromgplus-enable']) : 0);
 		set_pconfig(local_user(),'fromgplus','enable', $enable);
+		$keywords = ((x($_POST, 'fromgplus-keywords')) ? intval($_POST['fromgplus-keywords']) : 0);
+		set_pconfig(local_user(),'fromgplus', 'keywords', $keywords);
 
 		if (!$enable)
 			del_pconfig(local_user(),'fromgplus','lastdate');
 
 		info( t('Google+ Import Settings saved.') . EOL);
 	}
+}
+
+function fromgplus_plugin_admin(&$a, &$o){
+        $t = get_markup_template("admin.tpl", "addon/fromgplus/");
+
+        $o = replace_macros($t, array(
+                '$submit' => t('Save Settings'),
+                '$key' => array('key', t('Key'), trim(get_config('fromgplus', 'key')), t('')),
+        ));
+}
+
+function fromgplus_plugin_admin_post(&$a){
+        $key = ((x($_POST,'key')) ? trim($_POST['key']) : '');
+        set_config('fromgplus','key',$key);
+        info( t('Settings updated.'). EOL );
 }
 
 function fromgplus_cron($a,$b) {
@@ -112,7 +137,7 @@ function fromgplus_cron($a,$b) {
 	set_config('fromgplus','last_poll', time());
 }
 
-function fromgplus_post($a, $uid, $source, $body, $location) {
+function fromgplus_post($a, $uid, $source, $body, $location, $coord, $id) {
 
 	//$uid = 2;
 
@@ -140,6 +165,10 @@ function fromgplus_post($a, $uid, $source, $body, $location) {
 	$_REQUEST['source'] = $source;
 	$_REQUEST['extid'] = NETWORK_GPLUS;
 
+	if (isset($id)) {
+		$_REQUEST['message_id'] = item_new_uri($a->get_hostname(), $uid, NETWORK_GPLUS.':'.$id);
+	}
+
 	// $_REQUEST['verb']
 	// $_REQUEST['parent']
 	// $_REQUEST['parent_uri']
@@ -147,6 +176,7 @@ function fromgplus_post($a, $uid, $source, $body, $location) {
 	$_REQUEST['title'] = $title;
 	$_REQUEST['body'] = $body;
 	$_REQUEST['location'] = $location;
+	$_REQUEST['coord'] = $coord;
 
 	if (($_REQUEST['title'] == "") AND ($_REQUEST['body'] == "")) {
 	        logger('fromgplus: empty post for user '.$uid." ".print_r($_REQUEST, true));
@@ -306,6 +336,11 @@ function fromgplus_handleattachments($a, $uid, $item, $displaytext, $shared) {
 				if ($quote != "")
 					$pagedata["text"] = $quote;
 
+				// Add Keywords to page link
+				$data = parseurl_getsiteinfo_cached($pagedata["url"], true);
+				if (isset($data["keywords"]) AND get_pconfig($uid, 'fromgplus', 'keywords')) {
+					$pagedata["keywords"] = $data["keywords"];
+				}
 				break;
 
 			case "photo":
@@ -399,7 +434,6 @@ function fromgplus_fetch($a, $uid) {
 
 	$result = fetch_url("https://www.googleapis.com/plus/v1/people/".$account."/activities/public?alt=json&pp=1&key=".$key."&maxResults=".$maxfetch);
 	//$result = file_get_contents("google.txt");
-	//$result = file_get_contents("addon/fromgplus/album.txt");
 	//file_put_contents("google.txt", $result);
 
 	$activities = json_decode($result);
@@ -416,6 +450,7 @@ function fromgplus_fetch($a, $uid) {
 	$reversed = array_reverse($activities->items);
 
 	foreach($reversed as $item) {
+
 		if (strtotime($item->published) <= $initiallastdate)
 			continue;
 
@@ -428,17 +463,16 @@ function fromgplus_fetch($a, $uid) {
 		if ($lastdate < strtotime($item->published))
 			$lastdate = strtotime($item->published);
 
+		set_pconfig($uid,'fromgplus','lastdate', $lastdate);
+
 		if ($first_time)
 			continue;
 
-		if ($item->access->description == "Public")
-
-			// Loop prevention - ignore postings from HootSuite
-			if ($item->provider->title == "HootSuite")
-				continue;
+		if ($item->access->description == "Public") {
 
 			// Loop prevention through the special blank from the googleplus connector
-			if (strstr($item->object->content, $blank))
+			//if (strstr($item->object->content, $blank))
+			if (strrpos($item->object->content, $blank) >= strlen($item->object->content) - 5)
 				continue;
 
 			switch($item->object->objectType) {
@@ -448,14 +482,23 @@ function fromgplus_fetch($a, $uid) {
 					if (is_array($item->object->attachments))
 						$post .= fromgplus_handleattachments($a, $uid, $item, $item->object->content, false);
 
-					// geocode, placeName
-					if (isset($item->address))
-						$location = $item->address;
-					else
-						$location = "";
+					$coord = "";
+					$location = "";
+					if (isset($item->location)) {
+						if (isset($item->location->address->formatted))
+							$location = $item->location->address->formatted;
 
-					fromgplus_post($a, $uid, "Google+", $post, $location);
-					//fromgplus_post($a, $uid, $item->provider->title, $post, $location);
+						if (isset($item->location->displayName))
+							$location = $item->location->displayName;
+
+						if (isset($item->location->position->latitude) AND
+							isset($item->location->position->longitude))
+							$coord = $item->location->position->latitude." ".$item->location->position->longitude;
+
+					} elseif (isset($item->address))
+						$location = $item->address;
+
+					fromgplus_post($a, $uid, $item->provider->title, $post, $location, $coord, $item->id);
 
 					break;
 
@@ -463,10 +506,17 @@ function fromgplus_fetch($a, $uid) {
 					$post = fromgplus_html2bbcode($item->annotation)."\n";
 
 					if (!intval(get_config('system','old_share'))) {
-						$post .= "[share author='".str_replace("'", "&#039;",$item->object->actor->displayName).
-								"' profile='".$item->object->actor->url.
-								"' avatar='".$item->object->actor->image->url.
-								"' link='".$item->object->url."']";
+
+						if (function_exists("share_header"))
+							$post .= share_header($item->object->actor->displayName, $item->object->actor->url,
+										$item->object->actor->image->url, "",
+										datetime_convert('UTC','UTC',$item->object->published),$item->object->url);
+						else
+							$post .= "[share author='".str_replace("'", "&#039;",$item->object->actor->displayName).
+									"' profile='".$item->object->actor->url.
+									"' avatar='".$item->object->actor->image->url.
+									"' posted='".datetime_convert('UTC','UTC',$item->object->published).
+									"' link='".$item->object->url."']";
 
 						$post .= fromgplus_html2bbcode($item->object->content);
 
@@ -483,15 +533,26 @@ function fromgplus_fetch($a, $uid) {
 							$post .= "\n".trim(fromgplus_handleattachments($a, $uid, $item, $item->object->content, true));
 					}
 
-					if (isset($item->address))
-						$location = $item->address;
-					else
-						$location = "";
+					$coord = "";
+					$location = "";
+					if (isset($item->location)) {
+						if (isset($item->location->address->formatted))
+							$location = $item->location->address->formatted;
 
-					fromgplus_post($a, $uid, "Google+", $post, $location);
-					//fromgplus_post($a, $uid, $item->provider->title, $post, $location);
+						if (isset($item->location->displayName))
+							$location = $item->location->displayName;
+
+						if (isset($item->location->position->latitude) AND
+							isset($item->location->position->longitude))
+							$coord = $item->location->position->latitude." ".$item->location->position->longitude;
+
+					} elseif (isset($item->address))
+						$location = $item->address;
+
+					fromgplus_post($a, $uid, $item->provider->title, $post, $location, $coord, $item->id);
 					break;
 			}
+		}
 	}
 	if ($lastdate != 0)
 		set_pconfig($uid,'fromgplus','lastdate', $lastdate);

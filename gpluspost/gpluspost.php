@@ -5,6 +5,7 @@
  * Description: Posts to a Google+ page with the help of Hootsuite
  * Version: 0.1
  * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
+ * Status: Unsupported
  */
 
 function gpluspost_install() {
@@ -98,7 +99,7 @@ function gpluspost_settings(&$a,&$s) {
 		/*
 		// To-Do: Option to check the credentials if requested
 		if (($username != "") AND ($password != "")) {
-			require_once("addon/googleplus/postToGooglePlus.php");
+			require_once("addon/gpluspost/postToGooglePlus.php");
 			$loginError = doConnectToGooglePlus2($username, $password);
 			if ($loginError)
 				$s .= '<p>Login Error. Please enter the correct credentials.</p>';
@@ -230,7 +231,7 @@ function gpluspost_send(&$a,&$b) {
 		return;
 
 	// if post comes from Google+ don't send it back
-	if (!get_pconfig($b["uid"],'gpluspost','no_loop_prevention') and ($b['app'] == "Google+"))
+	if (!get_pconfig($b["uid"],'gpluspost','no_loop_prevention') and (($b['app'] == "Google+") OR ($b["extid"] == NETWORK_GPLUS)))
 		return;
 
 	if (!gpluspost_nextscripts()) {
@@ -348,7 +349,7 @@ function gpluspost_queue_hook(&$a,&$b) {
 		$success = false;
 
 		if($username && $password) {
-			require_once("addon/googleplus/postToGooglePlus.php");
+			require_once("addon/gpluspost/postToGooglePlus.php");
 
 			logger('gpluspost_queue: able to post for user '.$username);
 
@@ -433,7 +434,7 @@ function gpluspost_init() {
 		foreach ($items AS $item)
 			gpluspost_feeditem($item, $uid);
 	} else {
-		$items = q("SELECT `id` FROM `item` FORCE INDEX (`received`) WHERE `item`.`visible` = 1 AND `item`.`deleted` = 0 and `item`.`moderated` = 0 AND `item`.`allow_cid` = ''  AND `item`.`allow_gid` = '' AND `item`.`deny_cid`  = '' AND `item`.`deny_gid`  = '' AND `item`.`private` = 0 AND `item`.`wall` = 1 AND `item`.`id` = `item`.`parent` ORDER BY `received` DESC LIMIT 10");
+		$items = q("SELECT `id` FROM `item` WHERE `item`.`visible` = 1 AND `item`.`deleted` = 0 and `item`.`moderated` = 0 AND `item`.`allow_cid` = ''  AND `item`.`allow_gid` = '' AND `item`.`deny_cid`  = '' AND `item`.`deny_gid`  = '' AND `item`.`private` = 0 AND `item`.`wall` = 1 AND `item`.`id` = `item`.`parent` ORDER BY `received` DESC LIMIT 10");
 		foreach ($items AS $item)
 			gpluspost_feeditem($item["id"], $uid);
 	}

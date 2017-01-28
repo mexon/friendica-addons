@@ -159,7 +159,7 @@ function dav_content()
 				if ($a->argv[2] == "new") {
 					$o = "";
 					if (isset($_REQUEST["save"])) {
-						check_form_security_token_redirectOnErr($a->get_baseurl() . "/dav/wdcal/", "caledit");
+						check_form_security_token_redirectOnErr("/dav/wdcal/", "caledit");
 						$ret = wdcal_postEditPage("new", "", $a->user["uid"], $a->timezone, $a->get_baseurl() . "/dav/wdcal/");
 						if ($ret["ok"]) notice($ret["msg"]);
 						else info($ret["msg"]);
@@ -177,7 +177,7 @@ function dav_content()
 						if (isset($a->argv[4]) && $a->argv[4] == "edit") {
 							$o = "";
 							if (isset($_REQUEST["save"])) {
-								check_form_security_token_redirectOnErr($a->get_baseurl() . "/dav/wdcal/", "caledit");
+								check_form_security_token_redirectOnErr("/dav/wdcal/", "caledit");
 								$ret = wdcal_postEditPage($a->argv[3], $a->user["uid"], $a->timezone, $a->get_baseurl() . "/dav/wdcal/");
 								if ($ret["ok"]) notice($ret["msg"]);
 								else info($ret["msg"]);
@@ -285,8 +285,8 @@ function dav_cron(&$a, &$b)
 						'textVersion'          => $text_text,
 						'additionalMailHeader' => "",
 					);
-					require_once('include/enotify.php');
-					enotify::send($params);
+					require_once('include/Emailer.php');
+					Emailer::send($params);
 				}
 				break;
 		}

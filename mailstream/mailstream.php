@@ -2,7 +2,7 @@
 /**
  * Name: Mail Stream
  * Description: Mail all items coming into your network feed to an email address
- * Version: 1.0
+ * Version: 1.1
  * Author: Matthew Exon <http://mat.exon.name>
  */
 
@@ -164,7 +164,7 @@ function mailstream_do_images($a, &$item, &$attachments) {
 
 function mailstream_sender($item) {
 	$r = q('SELECT * FROM `contact` WHERE `id` = %d', $item['contact-id']);
-	if (count($r)) {
+	if (dbm::is_result($r)) {
 		$contact = $r[0];
 		if ($contact['name'] != $item['author-name']) {
 			return $contact['name'] . ' - ' . $item['author-name'];
@@ -205,7 +205,7 @@ function mailstream_subject($item) {
 	// Don't look more than 100 levels deep for a subject, in case of loops
 	for ($i = 0; ($i < 100) && $parent; $i++) {
 		$r = q("SELECT `thr-parent`, `title` FROM `item` WHERE `uri` = '%s'", dbesc($parent));
-		if (!count($r)) {
+		if (!dbm::is_result($r)) {
 			break;
 		}
 		if ($r[0]['thr-parent'] === $parent) {
@@ -248,7 +248,7 @@ function mailstream_send($a, $message_id, $item, $user) {
 	if (!$message_id) {
 		return;
 	}
-	require_once(dirname(__file__).'/class.phpmailer.php');
+	require_once(dirname(__file__).'/phpmailer/class.phpmailer.php');
 	require_once('include/bbcode.php');
 	$attachments = array();
 	mailstream_do_images($a, $item, $attachments);

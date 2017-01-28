@@ -1,18 +1,14 @@
-Installing the Friendica/Facebook connector
+> # Note
+> **Facebook Connector, Facebook Post Connector and Facebook Sync plugins are deprecated.**
+> As of the moment you cannot bridge from or to Facebook with Friendica.
 
-Detailed instructions how to use this plugin can be found at
-the [How to: Friendica's Facebook Connector](https://github.com/friendica/friendica/wiki/How-to:-Friendica%E2%80%99s-Facebook-connector) page.
+#### Installing the Friendica/Facebook connector
 
-Vidoes and embeds will not be posted if there is no other content. Links 
-and images will be converted to a format suitable for the Facebook API and 
-long posts truncated - with a link to view the full post. 
+Please register a Facebook application at [developers.facebook.com](https://developers.facebook.com/apps/async/create/platform-setup/dialog/)
 
-Facebook contacts will not be able to view private photos, as they are not able to
-authenticate to your site to establish identity. We will address this 
-in a future release.
+Chose "Website" as platform. Next you have to let your application be reviewed. You need these permissions for that:
 
-This addon will only post your entries to your Facebook account but won't fetch
-content from there.
+publish_actions, publish_pages, user_posts, user_photos, user_status, user_videos, manage_pages
 
-Info: please make sure that you understand all aspects due to Friendica's 
-default licence which is: [MIT License](https://github.com/friendica/friendica/blob/master/LICENSE)
+After your application was reviewed, your users can post to Facebook.
+
