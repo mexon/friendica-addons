@@ -127,14 +127,20 @@ function retriever_install() {
         q("ALTER TABLE `retriever_resource` ADD COLUMN `redirect-url` varchar(800) CHARACTER SET ascii COLLATE ascii_bin NULL DEFAULT NULL");
         set_config('retriever', 'dbversion', '0.10');
     }
+    if (get_config('retriever', 'dbversion') == '0.10') {
+        q("ALTER TABLE `retriever_resource` MODIFY COLUMN `type` char(255) NULL DEFAULT NULL");
+        q("ALTER TABLE `retriever_resource` MODIFY COLUMN `data` mediumblob NULL DEFAULT NULL");
+        q("ALTER TABLE `retriever_rule` MODIFY COLUMN `data` mediumtext NULL DEFAULT NULL");
+        set_config('retriever', 'dbversion', '0.10');
+    }
 
-    if (get_config('retriever', 'dbversion') != '0.10') {
+    if (get_config('retriever', 'dbversion') != '0.11') {
         $schema = file_get_contents(dirname(__file__).'/database.sql');
         $arr = explode(';', $schema);
         foreach ($arr as $a) {
             $r = q($a);
         }
-        set_config('retriever', 'dbversion', '0.10');
+        set_config('retriever', 'dbversion', '0.11');
     }
 }
 
@@ -152,13 +158,13 @@ function retriever_module() {}
 
 function retriever_cron($a, $b) {
     // 100 is a nice sane number.  Maybe this should be configurable.
-    retriever_retrieve_items(100);
+    retriever_retrieve_items(100, $a);
     retriever_tidy();
 }
 
 $retriever_item_count = 0;
 
-function retriever_retrieve_items($max_items) {
+function retriever_retrieve_items($max_items, $a) {
     global $retriever_item_count;
 
     $retriever_schedule = array(array(1,'minute'),
@@ -228,7 +234,7 @@ function retriever_retrieve_items($max_items) {
                    LOGGER_NORMAL);
             continue;
         }
-        retriever_apply_completed_resource_to_item($retriever, $item, $resource[0]);
+        retriever_apply_completed_resource_to_item($retriever, $item, $resource[0], $a);
         q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d",
           intval($retriever_item['id']));
         retriever_check_item_completed($item);
@@ -271,7 +277,7 @@ function retrieve_resource($resource) {
           dbesc($resource['data']),
           dbesc($resource['type']),
           intval($resource['id']));
-        retriever_resource_completed($resource);
+        retriever_resource_completed($resource, $a);
     }
 }
 
@@ -313,7 +319,7 @@ function retriever_get_item($retriever_item) {
     return $items[0];
 }
 
-function retriever_item_completed($retriever_item_id, $resource) {
+function retriever_item_completed($retriever_item_id, $resource, $a) {
     logger('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url'], LOGGER_DEBUG);
 
     $retriever_item = retriever_get_retriever_item($retriever_item_id);
@@ -327,18 +333,18 @@ function retriever_item_completed($retriever_item_id, $resource) {
         return;
     }
 
-    retriever_apply_completed_resource_to_item($retriever, $item, $resource);
+    retriever_apply_completed_resource_to_item($retriever, $item, $resource, $a);
 
     q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d",
       intval($retriever_item['id']));
     retriever_check_item_completed($item);
 }
 
-function retriever_resource_completed($resource) {
+function retriever_resource_completed($resource, $a) {
     logger('retriever_resource_completed: id ' . $resource['id'] . ' url ' . $resource['url'], LOGGER_DEBUG);
     $r = q("SELECT `id` FROM `retriever_item` WHERE `resource` = %d", $resource['id']);
     foreach ($r as $rr) {
-        retriever_item_completed($rr['id'], $resource);
+        retriever_item_completed($rr['id'], $resource, $a);
     }
 }
 
@@ -352,7 +358,7 @@ function apply_retrospective($retriever, $num) {
     }
 }
 
-function retriever_on_item_insert($retriever, &$item) {
+function retriever_on_item_insert($a, $retriever, &$item) {
     if (!$retriever || !$retriever['id']) {
         logger('retriever_on_item_insert: No retriever supplied', LOGGER_NORMAL);
         return;
@@ -368,11 +374,11 @@ function retriever_on_item_insert($retriever, &$item) {
         $url = $item['plink'];
     }
 
-    $resource = add_retriever_resource($url);
+    $resource = add_retriever_resource($a, $url);
     $retriever_item_id = add_retriever_item($item, $resource);
 }
 
-function add_retriever_resource($url, $binary = false) {
+function add_retriever_resource($a, $url, $binary = false) {
     logger('add_retriever_resource: ' . $url, LOGGER_DEBUG);
 
     $scheme = parse_url($url, PHP_URL_SCHEME);
@@ -401,7 +407,7 @@ function add_retriever_resource($url, $binary = false) {
         $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", dbesc($url));
         $resource = $r[0];
         if (count($r)) {
-            retriever_resource_completed($resource);
+            retriever_resource_completed($resource, $a);
         }
         return $resource;
     }
@@ -525,7 +531,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
       dbesc($item['body']), intval($item['id']));
 }
 
-function retrieve_images(&$item) {
+function retrieve_images(&$item, $a) {
     $matches1 = array();
     preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches1);
     $matches2 = array();
@@ -534,12 +540,12 @@ function retrieve_images(&$item) {
     logger('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], LOGGER_DEBUG);
     foreach ($matches as $url) {
         if (strpos($url, get_app()->get_baseurl()) === FALSE) {
-            $resource = add_retriever_resource($url, true);
+            $resource = add_retriever_resource($a, $url, true);
             if (!$resource['completed']) {
                 add_retriever_item($item, $resource);
             }
             else {
-                retriever_transform_images($item, $resource);
+                retriever_transform_images($a, $item, $resource);
             }
         }
     }
@@ -567,12 +573,12 @@ function retriever_check_item_completed(&$item)
     }
 }
 
-function retriever_apply_completed_resource_to_item($retriever, &$item, $resource) {
+function retriever_apply_completed_resource_to_item($retriever, &$item, $resource, $a) {
     logger('retriever_apply_completed_resource_to_item: retriever ' .
            ($retriever ? $retriever['id'] : 'none') .
            ' resource ' . $resource['url'] . ' plink ' . $item['plink'], LOGGER_DEBUG);
     if (strpos($resource['type'], 'image') !== false) {
-        retriever_transform_images($item, $resource);
+        retriever_transform_images($a, $item, $resource);
     }
     if (!$retriever) {
         return;
@@ -581,78 +587,20 @@ function retriever_apply_completed_resource_to_item($retriever, &$item, $resourc
         (strpos($resource['type'], 'xml') !== false)) {
         retriever_apply_dom_filter($retriever, $item, $resource);
         if ($retriever["data"]['images'] ) {
-            retrieve_images($item);
+            retrieve_images($item, $a);
         }
     }
 }
 
-function retriever_store_photo($item, &$resource) {
-    $hash = photo_new_resource();
-
-    if (class_exists('Imagick')) {
-        try {
-            $image = new Imagick();
-            $image->readImageBlob($resource['data']);
-            $resource['width'] = $image->getImageWidth();
-            $resource['height'] = $image->getImageHeight();
-        }
-        catch (Exception $e) {
-            logger("ImageMagick couldn't process image " . $resource['id'] . " " . $resource['url'] . ' length ' . strlen($resource['data']) . ': ' . $e->getMessage(), LOGGER_DEBUG);
-            return false;
-        }
-    }
-    if (!array_key_exists('width', $resource)) {
-        $image = @imagecreatefromstring($resource['data']);
-        if ($image === false) {
-            logger("Couldn't process image " . $resource['id'] . " " . $resource['url'], LOGGER_DEBUG);
-            return false;
-        }
-        $resource['width']  = imagesx($image);
-        $resource['height'] = imagesy($image);
-        imagedestroy($image);
-    }
-
-    $url_components = parse_url($resource['url']);
-    $filename = basename($url_components['path']);
-    if (!strlen($filename)) {
-        $filename = 'image';
-    }
-    $r = q("INSERT INTO `photo`
-                ( `uid`, `contact-id`, `guid`, `resource-id`, `created`, `edited`, `filename`, `type`, `album`, `height`, `width`, `datasize`, `data` )
-                VALUES ( %d, %d, '%s', '%s', '%s', '%s', '%s', '%s', '%s', %d, %d, %d, '%s' )",
-           intval($item['item-uid']),
-           intval($item['contact-id']),
-           dbesc(get_guid()),
-           dbesc($hash),
-           dbesc(datetime_convert()),
-           dbesc(datetime_convert()),
-           dbesc($filename),
-           dbesc($resource['type']),
-           dbesc('Retrieved Images'),
-           intval($resource['height']),
-           intval($resource['width']),
-           intval(strlen($resource['data'])),
-           dbesc($resource['data'])
-        );
-
-    return $hash;
-}
-
-function retriever_transform_images(&$item, $resource) {
+function retriever_transform_images($a, &$item, $resource) {
     if (!$resource["data"]) {
         logger('retriever_transform_images: no data available for '
                . $resource['id'] . ' ' . $resource['url'], LOGGER_NORMAL);
         return;
     }
 
-    $hash = retriever_store_photo($item, $resource);
-    if ($hash === false) {
-        logger('retriever_transform_images: unable to store photo '
-               . $resource['id'] . ' ' . $resource['url'], LOGGER_NORMAL);
-        return;
-    }
-
-    $new_url = get_app()->get_baseurl() . '/photo/' . $hash;
+    $photo = store_photo($a, $item['uid'], $resource['data'], $resource['url']);
+    $new_url = $photo['full'];
     logger('retriever_transform_images: replacing ' . $resource['url'] . ' with ' .
            $new_url . ' in item ' . $item['plink'], LOGGER_DEBUG);
     $transformed = str_replace($resource["url"], $new_url, $item['body']);
@@ -785,7 +733,7 @@ function retriever_post_remote_hook(&$a, &$item) {
 
     $retriever = get_retriever($item['contact-id'], $item["uid"], false);
     if ($retriever) {
-        retriever_on_item_insert($retriever, $item);
+        retriever_on_item_insert($a, $retriever, $item);
     }
     else {
         if (get_pconfig($item["uid"], 'retriever', 'oembed')) {
@@ -796,7 +744,7 @@ function retriever_post_remote_hook(&$a, &$item) {
             }
         }
         if (get_pconfig($item["uid"], 'retriever', 'all_photos')) {
-            retrieve_images($item, null);
+            retrieve_images($item, $a);
         }
     }
     retriever_check_item_completed($item);
