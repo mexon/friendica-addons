@@ -279,6 +279,7 @@ function mailstream_send($a, $message_id, $item, $user) {
 		$mail->IsHTML(true);
 		$mail->CharSet = 'utf-8';
 		$template = get_markup_template('mail.tpl', 'addon/mailstream/');
+                $mail->AltBody = $item['body'];
 		$item['body'] = bbcode($item['body']);
 		$item['url'] = $a->get_baseurl() . '/display/' . $user['nickname'] . '/' . $item['id'];
 		$mail->Body = replace_macros($template, array(
