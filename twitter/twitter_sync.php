@@ -1,4 +1,7 @@
 <?php
+
+use Friendica\App;
+
 if (!file_exists("boot.php") AND (sizeof($_SERVER["argv"]) != 0)) {
 	$directory = dirname($_SERVER["argv"][0]);
 
@@ -49,19 +52,21 @@ function twitter_sync_run($argv, $argc){
 	$mode = intval($argv[1]);
 	$uid = intval($argv[2]);
 
-	/// @todo Replace it with "App::is_already_running" in the next release
-	$lockpath = get_lockpath();
-	if ($lockpath != '') {
-		$pidfile = new pidfile($lockpath, 'twitter_sync-'.$mode.'-'.$uid);
-		if ($pidfile->is_already_running()) {
-			logger("Already running");
-			if ($pidfile->running_time() > 9*60) {
-				$pidfile->kill();
-				logger("killed stale process");
-				// Calling a new instance
-				proc_run('php','addon/twitter/twitter_sync.php', $mode, $uid);
+	// This is deprecated with the worker
+	if (function_exists("get_lockpath")) {
+		$lockpath = get_lockpath();
+		if ($lockpath != '') {
+			$pidfile = new pidfile($lockpath, 'twitter_sync-'.$mode.'-'.$uid);
+			if ($pidfile->is_already_running()) {
+				logger("Already running");
+				if ($pidfile->running_time() > 9*60) {
+					$pidfile->kill();
+					logger("killed stale process");
+					// Calling a new instance
+					proc_run('php','addon/twitter/twitter_sync.php', $mode, $uid);
+				}
+				exit;
 			}
-			exit;
 		}
 	}
 
