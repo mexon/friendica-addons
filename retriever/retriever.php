@@ -2,7 +2,7 @@
 /**
  * Name: Retrieve Feed Content
  * Description: Follow the permalink of RSS/Atom feed items and replace the summary with the full content.
- * Version: 1.0
+ * Version: 1.1
  * Author: Matthew Exon <http://mat.exon.name>
  */
 
@@ -131,16 +131,22 @@ function retriever_install() {
         q("ALTER TABLE `retriever_resource` MODIFY COLUMN `type` char(255) NULL DEFAULT NULL");
         q("ALTER TABLE `retriever_resource` MODIFY COLUMN `data` mediumblob NULL DEFAULT NULL");
         q("ALTER TABLE `retriever_rule` MODIFY COLUMN `data` mediumtext NULL DEFAULT NULL");
-        set_config('retriever', 'dbversion', '0.10');
+        set_config('retriever', 'dbversion', '0.11');
     }
-
-    if (get_config('retriever', 'dbversion') != '0.11') {
+    if (get_config('retriever', 'dbversion') == '0.11') {
+        q("ALTER TABLE `retriever_resource` ADD INDEX `url` (`url`)");
+        q("ALTER TABLE `retriever_resource` ADD INDEX `completed` (`completed`)");
+        q("ALTER TABLE `retriever_item` ADD INDEX `finished` (`finished`)");
+        q("ALTER TABLE `retriever_item` ADD INDEX `item-uid` (`item-uid`)");
+        set_config('retriever', 'dbversion', '0.12');
+    }
+    if (get_config('retriever', 'dbversion') != '0.12') {
         $schema = file_get_contents(dirname(__file__).'/database.sql');
         $arr = explode(';', $schema);
         foreach ($arr as $a) {
             $r = q($a);
         }
-        set_config('retriever', 'dbversion', '0.11');
+        set_config('retriever', 'dbversion', '0.12');
     }
 }
 
@@ -519,7 +525,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         return;
     }
 
-    $item['body'] = html2bbcode($doc->saveXML());
+    $item['body'] = html2bbcode($doc->saveHTML());
     if (!strlen($item['body'])) {
         logger('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty', LOGGER_NORMAL);
         return;
