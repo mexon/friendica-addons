@@ -22,14 +22,14 @@ profile: photo thumb about
 if (!defined('PHOTOTRACK_DEFAULT_BATCH_SIZE')) {
     define('PHOTOTRACK_DEFAULT_BATCH_SIZE', 1000);
 }
+// Time in *minutes* between searching for photo uses
 if (!defined('PHOTOTRACK_DEFAULT_SEARCH_INTERVAL')) {
-    define('PHOTOTRACK_DEFAULT_SEARCH_INTERVAL', 60);
+    define('PHOTOTRACK_DEFAULT_SEARCH_INTERVAL', 10);
 }
 
 function phototrack_install() {
     global $db;
 
-// also want post_local_end @@@
     register_hook('post_local_end', 'addon/phototrack/phototrack.php', 'phototrack_post_local_end');
     register_hook('post_remote_end', 'addon/phototrack/phototrack.php', 'phototrack_post_remote_end');
     register_hook('notifier_end', 'addon/phototrack/phototrack.php', 'phototrack_notifier_end');
@@ -59,20 +59,16 @@ function phototrack_uninstall() {
 function phototrack_module() {}
 
 function phototrack_finished_row($table, $id) {
-    logger('@@@ phototrack_finished_row ' . $table . ' ' . $id);
     $existing = q("SELECT id FROM phototrack_row_check WHERE `table` = '$table' AND `row-id` = '$id'");
-logger('@@@ how many existing? ' . count($existing));
     if (count($existing)) {
         q("UPDATE phototrack_row_check SET checked = NOW() WHERE `table` = '$table' AND `row-id` = '$id'");
     }
     else {
-logger('@@@ insert phototrack_row_check values ' . $table. ' ' . $id);
         q("INSERT INTO phototrack_row_check (`table`, `row-id`, `checked`) VALUES ('$table', '$id', NOW())");
     }
 }
 
 function phototrack_photo_use($photo, $table, $field, $id) {
-    logger('@@@ phototrack_field_use ' . $photo . ' ' . $table . ' ' . $field . ' ' . $id);
     foreach (Photo::supportedTypes() as $m => $e) {
         $photo = str_replace(".$e", '', $photo);
     }
@@ -81,69 +77,52 @@ function phototrack_photo_use($photo, $table, $field, $id) {
         $photo = substr($photo,0,-2);
     }
     if (strlen($photo) != 32) {
-        logger('@@@ not a guid ' . $photo);
         return;
     }
-    logger('@@@ look for existing photo resource '. $photo);
     $r = q("SELECT `resource-id` FROM `photo` WHERE `resource-id` = '%s' LIMIT 1", dbesc($photo));
     if (!count($r)) {
-        logger('@@@ no such resource ' . $photo);
         return;
     }
-logger('@@@ tried to find resource id ' . $photo . ' got ' . print_r($r, true));
     $rid = $r[0]['resource-id'];
     $existing = q("SELECT id FROM phototrack_photo_use WHERE `resource-id` = '$rid' AND `table` = '$table' AND `field` = '$field' AND `row-id` = '$id'");
     if (count($existing)) {
         q("UPDATE phototrack_photo_use SET checked = NOW() WHERE `resource-id` = '$rid' AND `table` = '$table' AND `field` = '$field' AND `row-id` = '$id'");
     }
     else {
-logger('@@@ insert new photo use ' . $rid . ' ' . $table . ' ' . $field . ' ' . $id);
         q("INSERT INTO phototrack_photo_use (`resource-id`, `table`, `field`, `row-id`, `checked`) VALUES ('$rid', '$table', '$field', '$id', NOW())");
     }
 }
 
 function phototrack_check_field_url($a, $table, $field, $id, $url) {
-    logger('@@@ phototrack_check_field_url got url ' . $url);
     $baseurl = $a->get_baseurl();
     if (strpos($url, $baseurl) !== FALSE) {
-        logger('@@@ url matches baseurl ' . $baseurl);
         $url = substr($url, strlen($baseurl));
     }
     if (strpos($url, '/photo/') !== FALSE) {
-        logger('@@@ this has a photo url');
         $rid = substr($url, strlen('/photo/'));
-        logger('@@@ got a use of a photo ' . $rid . ' about to call phototrack_field_use');
         phototrack_photo_use($rid, $table, $field, $id);
-        logger('@@@ finished call to phototrack_field_use');
     }
 }
 
 function phototrack_check_field_bbcode($a, $table, $field, $id, $value) {
-    logger('@@@ phototrack_check_field_bbcode ' . $table . ' ' . $field . ' ' . $id . ' value ' . $value);
     $baseurl = $a->get_baseurl();
     $matches = array();
     preg_match_all("/\[img(\=([0-9]*)x([0-9]*))?\](.*?)\[\/img\]/ism", $value, $matches);
     foreach ($matches[4] as $url) {
-logger('@@@ after iterating over matches 4 I have this URL ' . $url);
         phototrack_check_field_url($a, $table, $field, $id, $url);
     }
 }
 
 function phototrack_post_local_end(&$a, &$item) {
-logger('@@@ phototrack_post_local_end item ' . $item['id']);
     phototrack_check_row($a, 'item', $item);
 }
 
 function phototrack_post_remote_end(&$a, &$item) {
-logger('@@@ phototrack_post_remote_end item ' . $item['id']);
     phototrack_check_row($a, 'item', $item);
 }
 
 function phototrack_notifier_end($item) {
         $a = get_app();
-
-logger('@@@ phototrack_notifier_end item ' . $item['id']);
-logger('@@@ base url ' . $a->get_baseurl());
 }
 
 function phototrack_check_row($a, $table, $row) {
@@ -199,7 +178,7 @@ function phototrack_search_table($a, $table) {
     }
     $r = q("SELECT COUNT(*) FROM `$table` LEFT OUTER JOIN phototrack_row_check ON ( phototrack_row_check.`table` = '$table' AND phototrack_row_check.`row-id` = `$table`.id ) WHERE ( ( phototrack_row_check.checked IS NULL ) OR ( phototrack_row_check.checked < DATE_SUB(NOW(), INTERVAL 1 MONTH) ) )");
     $remaining = $r[0]['COUNT(*)'];
-    logger('@@@ remaining items table ' .$table . ' is ' . $remaining);
+    logger('phototrack: searched ' . count($rows) . ' rows in table ' . $table . ', ' . $remaining . ' still remaining to search');
     return $remaining;
 }
 
@@ -238,24 +217,26 @@ function phototrack_cron($a, $b) {
     $remaining += phototrack_search_table($a, 'fsuggest');
     $remaining += phototrack_search_table($a, 'gcontact');
 
-    logger('@@@ total remaining items ' . $remaining);
     set_config('phototrack', 'remaining_items', $remaining);
     if ($remaining === 0) {
         phototrack_tidy();
     }
-    logger('@@@ phototrack cron finished');
 }
 
 function phototrack_tidy() {
     $batch_size = phototrack_batch_size();
-    $rows = q('SELECT id FROM phototrack_photo_use WHERE checked < DATE_SUB(NOW(), INTERVAL 2 MONTH)');
+    q('CREATE TABLE IF NOT EXISTS `phototrack-temp` (`resource-id` char(255) not null)');
+    q('INSERT INTO `phototrack-temp` SELECT DISTINCT(`resource-id`) FROM photo WHERE photo.`created` < DATE_SUB(NOW(), INTERVAL 2 MONTH)');
+    $rows = q('SELECT `phototrack-temp`.`resource-id` FROM `phototrack-temp` LEFT OUTER JOIN phototrack_photo_use ON (`phototrack-temp`.`resource-id` = phototrack_photo_use.`resource-id`) WHERE phototrack_photo_use.id IS NULL limit ' . /*$batch_size*/1000);
+    foreach ($rows as $row) {
+        logger('phototrack: remove photo ' . $row['resource-id']);
+        q('DELETE FROM photo WHERE `resource-id` = "' . $row['resource-id'] . '"');
+    }
+    q('DROP TABLE `phototrack-temp`');
+    logger('phototrack_tidy: deleted ' . count($rows) . ' photos');
+    $rows = q('SELECT id FROM phototrack_photo_use WHERE checked < DATE_SUB(NOW(), INTERVAL 14 DAY)');
     foreach ($rows as $row) {
         q('DELETE FROM phototrack_photo_use WHERE id = ' . $row['id']);
     }
     logger('phototrack_tidy: deleted ' . count($rows) . ' phototrack_photo_use rows');
-    $rows = q('SELECT id FROM photo WHERE `id` IN (SELECT * FROM (SELECT photo.`id` FROM photo LEFT OUTER JOIN phototrack_photo_use ON (photo.`resource-id` = phototrack_photo_use.`resource-id`) WHERE phototrack_photo_use.id IS NULL AND photo.`created` < DATE_SUB(NOW(), INTERVAL 1 MONTH) AND `album` = "Retrieved Images") AS X) LIMIT ' . $batch_size);
-    foreach ($rows as $row) {
-        q('DELETE FROM photo WHERE `id` = ' . $row['id']);
-    }
-    logger('phototrack_tidy: deleted ' . count($rows) . ' photos');
 }
