@@ -8,25 +8,28 @@
  * Author: Mike Macgirvin <http://macgirvin.com/profile/mike>
  *
  */
+use Friendica\Core\Addon;
+use Friendica\Core\L10n;
+use Friendica\Core\PConfig;
 
 function superblock_install() {
 
-	register_hook('plugin_settings', 'addon/superblock/superblock.php', 'superblock_addon_settings');
-	register_hook('plugin_settings_post', 'addon/superblock/superblock.php', 'superblock_addon_settings_post');
-	register_hook('conversation_start', 'addon/superblock/superblock.php', 'superblock_conversation_start');
-	register_hook('item_photo_menu', 'addon/superblock/superblock.php', 'superblock_item_photo_menu');
-	register_hook('enotify_store', 'addon/superblock/superblock.php', 'superblock_enotify_store');
+	Addon::registerHook('addon_settings', 'addon/superblock/superblock.php', 'superblock_addon_settings');
+	Addon::registerHook('addon_settings_post', 'addon/superblock/superblock.php', 'superblock_addon_settings_post');
+	Addon::registerHook('conversation_start', 'addon/superblock/superblock.php', 'superblock_conversation_start');
+	Addon::registerHook('item_photo_menu', 'addon/superblock/superblock.php', 'superblock_item_photo_menu');
+	Addon::registerHook('enotify_store', 'addon/superblock/superblock.php', 'superblock_enotify_store');
 
 }
 
 
 function superblock_uninstall() {
 
-	unregister_hook('plugin_settings', 'addon/superblock/superblock.php', 'superblock_addon_settings');
-	unregister_hook('plugin_settings_post', 'addon/superblock/superblock.php', 'superblock_addon_settings_post');
-	unregister_hook('conversation_start', 'addon/superblock/superblock.php', 'superblock_conversation_start');
-	unregister_hook('item_photo_menu', 'addon/superblock/superblock.php', 'superblock_item_photo_menu');
-	unregister_hook('enotify_store', 'addon/superblock/superblock.php', 'superblock_enotify_store');
+	Addon::unregisterHook('addon_settings', 'addon/superblock/superblock.php', 'superblock_addon_settings');
+	Addon::unregisterHook('addon_settings_post', 'addon/superblock/superblock.php', 'superblock_addon_settings_post');
+	Addon::unregisterHook('conversation_start', 'addon/superblock/superblock.php', 'superblock_conversation_start');
+	Addon::unregisterHook('item_photo_menu', 'addon/superblock/superblock.php', 'superblock_item_photo_menu');
+	Addon::unregisterHook('enotify_store', 'addon/superblock/superblock.php', 'superblock_enotify_store');
 
 }
 
@@ -44,24 +47,24 @@ function superblock_addon_settings(&$a,&$s) {
 
 	$a->page['htmlhead'] .= '<link rel="stylesheet"  type="text/css" href="' . $a->get_baseurl() . '/addon/superblock/superblock.css' . '" media="all" />' . "\r\n";
 
-	$words = get_pconfig(local_user(),'system','blocked');
+	$words = PConfig::get(local_user(),'system','blocked');
 	if(! $words) {
 		$words = '';
 	}
 
 	$s .= '<span id="settings_superblock_inflated" class="settings-block fakelink" style="display: block;" onclick="openClose(\'settings_superblock_expanded\'); openClose(\'settings_superblock_inflated\');">';
-	$s .= '<h3>' . t('"Superblock"') . '</h3>';
+	$s .= '<h3>' . L10n::t('"Superblock"') . '</h3>';
 	$s .= '</span>';
 	$s .= '<div id="settings_superblock_expanded" class="settings-block" style="display: none;">';
 	$s .= '<span class="fakelink" onclick="openClose(\'settings_superblock_expanded\'); openClose(\'settings_superblock_inflated\');">';
-	$s .= '<h3>' . t('"Superblock"') . '</h3>';
+	$s .= '<h3>' . L10n::t('"Superblock"') . '</h3>';
 	$s .= '</span>';
 	$s .= '<div id="superblock-wrapper">';
-	$s .= '<label id="superblock-label" for="superblock-words">' . t('Comma separated profile URLS to block') . ' </label>';
+	$s .= '<label id="superblock-label" for="superblock-words">' . L10n::t('Comma separated profile URLS to block') . ' </label>';
 	$s .= '<textarea id="superblock-words" type="text" name="superblock-words" >' . htmlspecialchars($words) . '</textarea>';
 	$s .= '</div><div class="clear"></div>';
 
-	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="superblock-submit" name="superblock-submit" class="settings-submit" value="' . t('Save Settings') . '" /></div></div>';
+	$s .= '<div class="settings-submit-wrapper" ><input type="submit" id="superblock-submit" name="superblock-submit" class="settings-submit" value="' . L10n::t('Save Settings') . '" /></div></div>';
 
 	return;
 }
@@ -72,14 +75,14 @@ function superblock_addon_settings_post(&$a,&$b) {
 		return;
 
 	if($_POST['superblock-submit']) {
-		set_pconfig(local_user(),'system','blocked',trim($_POST['superblock-words']));
-		info( t('SUPERBLOCK Settings saved.') . EOL);
+		PConfig::set(local_user(),'system','blocked',trim($_POST['superblock-words']));
+		info(L10n::t('SUPERBLOCK Settings saved.') . EOL);
 	}
 }
 
 function superblock_enotify_store(&$a,&$b) {
 
-	$words = get_pconfig($b['uid'],'system','blocked');
+	$words = PConfig::get($b['uid'],'system','blocked');
 	if($words) {
 		$arr = explode(',',$words);
 	}
@@ -111,7 +114,7 @@ function superblock_conversation_start(&$a,&$b) {
 	if(! local_user())
 		return;
 
-	$words = get_pconfig(local_user(),'system','blocked');
+	$words = PConfig::get(local_user(),'system','blocked');
 	if($words) {
 		$a->data['superblock'] = explode(',',$words);
 	}
@@ -145,7 +148,7 @@ function superblock_item_photo_menu(&$a,&$b) {
 		}
 	}
 
-	$b['menu'][ t('Block Completely')] = 'javascript:superblockBlock(\'' . $author . '\'); return false;';
+	$b['menu'][L10n::t('Block Completely')] = 'javascript:superblockBlock(\'' . $author . '\'); return false;';
 }
 
 function superblock_module() {}
@@ -156,7 +159,7 @@ function superblock_init(&$a) {
 	if(! local_user())
 		return;
 
-	$words = get_pconfig(local_user(),'system','blocked');
+	$words = PConfig::get(local_user(),'system','blocked');
 
 	if(array_key_exists('block',$_GET) && $_GET['block']) {
 		if(strlen($words))
@@ -164,7 +167,7 @@ function superblock_init(&$a) {
 		$words .= trim($_GET['block']);
 	}
 
-	set_pconfig(local_user(),'system','blocked',$words);
-	info( t('superblock settings updated') . EOL );
+	PConfig::set(local_user(),'system','blocked',$words);
+	info(L10n::t('superblock settings updated') . EOL );
 	killme();
 }

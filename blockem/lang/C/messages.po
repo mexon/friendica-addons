@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2014-06-22 13:18+0200\n"
+"POT-Creation-Date: 2018-04-01 11:11-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,12 +17,18 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: blockem.php:53 blockem.php:57
+#: blockem.php:52 blockem.php:56
 msgid "\"Blockem\""
 msgstr ""
 
+#: blockem.php:60
+msgid ""
+"Hides user's content by collapsing posts. Also replaces their avatar with "
+"generic image."
+msgstr ""
+
 #: blockem.php:61
-msgid "Comma separated profile URLS to block"
+msgid "Comma separated profile URLS:"
 msgstr ""
 
 #: blockem.php:65
@@ -33,19 +39,19 @@ msgstr ""
 msgid "BLOCKEM Settings saved."
 msgstr ""
 
-#: blockem.php:142
+#: blockem.php:136
 #, php-format
-msgid "Blocked %s - Click to open/close"
+msgid "Filtered user: %s"
 msgstr ""
 
-#: blockem.php:197
+#: blockem.php:189
 msgid "Unblock Author"
 msgstr ""
 
-#: blockem.php:199
+#: blockem.php:191
 msgid "Block Author"
 msgstr ""
 
-#: blockem.php:231
+#: blockem.php:223
 msgid "blockem settings updated"
 msgstr ""

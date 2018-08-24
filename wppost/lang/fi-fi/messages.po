@@ -1,0 +1,75 @@
+# ADDON wppost
+# Copyright (C)
+# This file is distributed under the same license as the Friendica wppost addon package.
+# 
+# 
+# Translators:
+# Kris, 2018
+# Kris, 2018
+msgid ""
+msgstr ""
+"Project-Id-Version: friendica\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2017-01-24 21:06+0100\n"
+"PO-Revision-Date: 2018-05-12 13:12+0000\n"
+"Last-Translator: Kris\n"
+"Language-Team: Finnish (Finland) (http://www.transifex.com/Friendica/friendica/language/fi_FI/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fi_FI\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: wppost.php:42
+msgid "Post to Wordpress"
+msgstr "Lähetä WordPressiin"
+
+#: wppost.php:80 wppost.php:84
+msgid "Wordpress Export"
+msgstr "WordPress vienti"
+
+#: wppost.php:87
+msgid "Enable WordPress Post Addon"
+msgstr "Ota WordPress -viestilisäosa käyttöön"
+
+#: wppost.php:92
+msgid "WordPress username"
+msgstr "WordPress -käyttäjätunnus"
+
+#: wppost.php:97
+msgid "WordPress password"
+msgstr "WordPress -salasana"
+
+#: wppost.php:102
+msgid "WordPress API URL"
+msgstr "WordPress API URL-osoite"
+
+#: wppost.php:107
+msgid "Post to WordPress by default"
+msgstr "Lähetä WordPressiin oletuksena"
+
+#: wppost.php:112
+msgid "Provide a backlink to the Friendica post"
+msgstr "Lisää backlinkki alkuperäiseen Friendica -julkaisuun"
+
+#: wppost.php:116
+msgid ""
+"Text for the backlink, e.g. Read the original post and comment stream on "
+"Friendica."
+msgstr "Backlinkin teksti, esim. Katso alkuperäinen julkaisu ja kommentit Friendicassa."
+
+#: wppost.php:121
+msgid "Don't post messages that are too short"
+msgstr "Älä julkaise lyhyitä viestejä"
+
+#: wppost.php:127
+msgid "Save Settings"
+msgstr "Tallenna asetukset"
+
+#: wppost.php:206
+msgid "Read the orig­i­nal post and com­ment stream on Friendica"
+msgstr "Katso alkuperäinen julkaisu ja kommentit Friendicassa"
+
+#: wppost.php:269
+msgid "Post from Friendica"
+msgstr "Lähetä Friendicasta"

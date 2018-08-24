@@ -7,8 +7,10 @@
  */
 
 use Friendica\App;
-
-require_once 'include/Emailer.php';
+use Friendica\Core\Addon;
+use Friendica\Core\L10n;
+use Friendica\Core\PConfig;
+use Friendica\Util\Emailer;
 
 /* because the fraking openpgp-php is in composer, require libs in composer
  * and then don't use autoloader to load classes... */
@@ -23,19 +25,19 @@ require_once 'openpgp_crypt_symmetric.php';
 
 
 function securemail_install() {
-    register_hook('plugin_settings', 'addon/securemail/securemail.php', 'securemail_settings');
-    register_hook('plugin_settings_post', 'addon/securemail/securemail.php', 'securemail_settings_post');
+    Addon::registerHook('addon_settings', 'addon/securemail/securemail.php', 'securemail_settings');
+    Addon::registerHook('addon_settings_post', 'addon/securemail/securemail.php', 'securemail_settings_post');
 
-    register_hook('emailer_send_prepare', 'addon/securemail/securemail.php', 'securemail_emailer_send_prepare');
+    Addon::registerHook('emailer_send_prepare', 'addon/securemail/securemail.php', 'securemail_emailer_send_prepare');
 
     logger('installed securemail');
 }
 
 function securemail_uninstall() {
-    unregister_hook('plugin_settings', 'addon/securemail/securemail.php', 'securemail_settings');
-    unregister_hook('plugin_settings_post', 'addon/securemail/securemail.php', 'securemail_settings_post');
+    Addon::unregisterHook('addon_settings', 'addon/securemail/securemail.php', 'securemail_settings');
+    Addon::unregisterHook('addon_settings_post', 'addon/securemail/securemail.php', 'securemail_settings_post');
 
-    unregister_hook('emailer_send_prepare', 'addon/securemail/securemail.php', 'securemail_emailer_send_prepare');
+    Addon::unregisterHook('emailer_send_prepare', 'addon/securemail/securemail.php', 'securemail_emailer_send_prepare');
 
     logger('removed securemail');
 }
@@ -43,7 +45,7 @@ function securemail_uninstall() {
 /**
  * @brief Build user settings form
  *
- * @link https://github.com/friendica/friendica/blob/develop/doc/Plugins.md#plugin_settings 'plugin_settings' hook
+ * @link https://github.com/friendica/friendica/blob/develop/doc/Addons.md#addon_settings 'addon_settings' hook
  *
  * @param App $a App instance
  * @param string $s output html
@@ -55,24 +57,24 @@ function securemail_settings(App &$a, &$s){
         return;
     }
 
-    $enable = intval(get_pconfig(local_user(), 'securemail', 'enable'));
-    $publickey = get_pconfig(local_user(), 'securemail', 'pkey');
+    $enable = intval(PConfig::get(local_user(), 'securemail', 'enable'));
+    $publickey = PConfig::get(local_user(), 'securemail', 'pkey');
 
     $t = get_markup_template('admin.tpl', 'addon/securemail/');
 
-    $s .= replace_macros($t, array(
-        '$title' => t('"Secure Mail" Settings'),
-        '$submit' => t('Save Settings'),
-        '$test' => t('Save and send test'), //NOTE: update also in 'post'
-        '$enable' => array('securemail-enable', t('Enable Secure Mail'), $enable, ''),
-        '$publickey' => array('securemail-pkey', t('Public key'), $publickey, t('Your public PGP key, ascii armored format'), 'rows="10"')
-    ));
+    $s .= replace_macros($t, [
+        '$title' => L10n::t('"Secure Mail" Settings'),
+        '$submit' => L10n::t('Save Settings'),
+        '$test' => L10n::t('Save and send test'), //NOTE: update also in 'post'
+        '$enable' => ['securemail-enable', L10n::t('Enable Secure Mail'), $enable, ''],
+        '$publickey' => ['securemail-pkey', L10n::t('Public key'), $publickey, L10n::t('Your public PGP key, ascii armored format'), 'rows="10"']
+    ]);
 }
 
 /**
  * @brief Handle data from user settings form
  *
- * @link https://github.com/friendica/friendica/blob/develop/doc/Plugins.md#plugin_settings_post 'plugin_settings_post' hook
+ * @link https://github.com/friendica/friendica/blob/develop/doc/Addons.md#addon_settings_post 'addon_settings_post' hook
  *
  * @param App $a App instance
  * @param array $b hook data
@@ -86,12 +88,12 @@ function securemail_settings_post(App &$a, array &$b){
     }
 
     if ($_POST['securemail-submit']) {
-        set_pconfig(local_user(), 'securemail', 'pkey', trim($_POST['securemail-pkey']));
+        PConfig::set(local_user(), 'securemail', 'pkey', trim($_POST['securemail-pkey']));
         $enable = ((x($_POST, 'securemail-enable')) ? 1 : 0);
-        set_pconfig(local_user(), 'securemail', 'enable', $enable);
-        info(t('Secure Mail Settings saved.') . EOL);
+        PConfig::set(local_user(), 'securemail', 'enable', $enable);
+        info(L10n::t('Secure Mail Settings saved.') . EOL);
 
-        if ($_POST['securemail-submit'] == t('Save and send test')) {
+        if ($_POST['securemail-submit'] == L10n::t('Save and send test')) {
             $sitename = $a->config['sitename'];
 
             $hostname = $a->get_hostname();
@@ -107,7 +109,7 @@ function securemail_settings_post(App &$a, array &$b){
             $subject = 'Friendica - Secure Mail - Test';
             $message = 'This is a test message from your Friendica Secure Mail addon.';
 
-            $params = array(
+            $params = [
                 'uid' => local_user(),
                 'fromName' => $sitename,
                 'fromEmail' => $sender_email,
@@ -115,20 +117,20 @@ function securemail_settings_post(App &$a, array &$b){
                 'messageSubject' => $subject,
                 'htmlVersion' => "<p>{$message}</p>",
                 'textVersion' => $message,
-            );
+            ];
 
             // enable addon for test
-            set_pconfig(local_user(), 'securemail', 'enable', 1);
+            PConfig::set(local_user(), 'securemail', 'enable', 1);
 
             $res = Emailer::send($params);
 
             // revert to saved value
-            set_pconfig(local_user(), 'securemail', 'enable', $enable);
+            PConfig::set(local_user(), 'securemail', 'enable', $enable);
 
             if ($res) {
-                info(t('Test email sent') . EOL);
+                info(L10n::t('Test email sent') . EOL);
             } else {
-                notice(t('There was an error sending the test email') . EOL);
+                notice(L10n::t('There was an error sending the test email') . EOL);
             }
         }
     }
@@ -137,7 +139,7 @@ function securemail_settings_post(App &$a, array &$b){
 /**
  * @brief Encrypt notification emails text
  *
- * @link https://github.com/friendica/friendica/blob/develop/doc/Plugins.md#emailer_send_prepare 'emailer_send_prepare' hook
+ * @link https://github.com/friendica/friendica/blob/develop/doc/Addons.md#emailer_send_prepare 'emailer_send_prepare' hook
  *
  * @param App $a App instance
  * @param array $b hook data
@@ -151,12 +153,12 @@ function securemail_emailer_send_prepare(App &$a, array &$b) {
 
     $uid = $b['uid'];
 
-    $enable_checked = get_pconfig($uid, 'securemail', 'enable');
+    $enable_checked = PConfig::get($uid, 'securemail', 'enable');
     if (!$enable_checked) {
         return;
     }
 
-    $public_key_ascii = get_pconfig($uid, 'securemail', 'pkey');
+    $public_key_ascii = PConfig::get($uid, 'securemail', 'pkey');
 
     preg_match('/-----BEGIN ([A-Za-z ]+)-----/', $public_key_ascii, $matches);
     $marker = (empty($matches[1])) ? 'MESSAGE' : $matches[1];
@@ -164,11 +166,11 @@ function securemail_emailer_send_prepare(App &$a, array &$b) {
 
     $key = OpenPGP_Message::parse($public_key);
 
-    $data = new OpenPGP_LiteralDataPacket($b['textVersion'], array(
+    $data = new OpenPGP_LiteralDataPacket($b['textVersion'], [
         'format' => 'u',
         'filename' => 'encrypted.gpg'
-    ));
-    $encrypted = OpenPGP_Crypt_Symmetric::encrypt($key, new OpenPGP_Message(array($data)));
+    ]);
+    $encrypted = OpenPGP_Crypt_Symmetric::encrypt($key, new OpenPGP_Message([$data]));
     $armored_encrypted = wordwrap(
         OpenPGP::enarmor($encrypted->to_bytes(), 'PGP MESSAGE'),
         64,

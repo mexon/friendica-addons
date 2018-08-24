@@ -1,0 +1,57 @@
+# ADDON js_upload
+# Copyright (C)
+# This file is distributed under the same license as the Friendica js_upload addon package.
+# 
+# 
+# Translators:
+# Kris, 2018
+# Kris, 2018
+msgid ""
+msgstr ""
+"Project-Id-Version: friendica\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2013-02-27 05:01-0500\n"
+"PO-Revision-Date: 2018-05-12 13:00+0000\n"
+"Last-Translator: Kris\n"
+"Language-Team: Finnish (Finland) (http://www.transifex.com/Friendica/friendica/language/fi_FI/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fi_FI\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: js_upload.php:43
+msgid "Upload a file"
+msgstr "Lähetä tiedosto"
+
+#: js_upload.php:44
+msgid "Drop files here to upload"
+msgstr ""
+
+#: js_upload.php:45
+msgid "Cancel"
+msgstr "Peruuta"
+
+#: js_upload.php:46
+msgid "Failed"
+msgstr "Epäonnistui"
+
+#: js_upload.php:303
+msgid "No files were uploaded."
+msgstr "Tiedostoja ei lähetetty."
+
+#: js_upload.php:309
+msgid "Uploaded file is empty"
+msgstr "Lähetetty tiedosto on tyhjä"
+
+#: js_upload.php:321
+msgid "Image exceeds size limit of "
+msgstr "Kuva ylittää kokorajoituksen "
+
+#: js_upload.php:332
+msgid "File has an invalid extension, it should be one of "
+msgstr "Tiedostopääte on virheellinen. Sallitut tiedostopäätteet:"
+
+#: js_upload.php:343
+msgid "Upload was cancelled, or server error encountered"
+msgstr "Lataus peruutettu, tai palvelimessa tapahtui virhe."

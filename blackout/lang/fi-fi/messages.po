@@ -1,0 +1,54 @@
+# ADDON blackout
+# Copyright (C)
+# This file is distributed under the same license as the Friendica blackout addon package.
+# 
+# 
+# Translators:
+# Kris, 2018
+# Kris, 2018
+# Samuli Valavuo <svalavuo@gmail.com>, 2018
+msgid ""
+msgstr ""
+"Project-Id-Version: friendica\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2014-06-22 13:18+0200\n"
+"PO-Revision-Date: 2018-05-04 06:49+0000\n"
+"Last-Translator: Samuli Valavuo <svalavuo@gmail.com>\n"
+"Language-Team: Finnish (Finland) (http://www.transifex.com/Friendica/friendica/language/fi_FI/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fi_FI\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: blackout.php:99
+msgid "Save Settings"
+msgstr "Tallenna asetukset"
+
+#: blackout.php:100
+msgid "Redirect URL"
+msgstr "Uudelleenohjaus URL-osoite"
+
+#: blackout.php:100
+msgid "all your visitors from the web will be redirected to this URL"
+msgstr "kaikki kävijät uudelleenohjataan tähän URL-osoitteeseen"
+
+#: blackout.php:101
+msgid "Begin of the Blackout"
+msgstr "Blackout alkaa"
+
+#: blackout.php:101
+msgid ""
+"format is <em>YYYY</em> year, <em>MM</em> month, <em>DD</em> day, "
+"<em>hh</em> hour and <em>mm</em> minute"
+msgstr "formaati on <em>VVVV</em> vuosi, <em>KK</em> kuukausi, <em>PP</em> päivä, <em>tt</em> tunti ja <em>mm</em> minuutti"
+
+#: blackout.php:102
+msgid "End of the Blackout"
+msgstr "Blackout loppuu"
+
+#: blackout.php:108
+msgid ""
+"The end-date is prior to the start-date of the blackout, you should fix "
+"this."
+msgstr "Blackoutin päättymispäivä on ennen alkamispäivää, korjaa tämä."

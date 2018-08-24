@@ -1,5 +1,8 @@
 <?php
 
+use Friendica\Core\L10n;
+use Friendica\Core\PConfig;
+
 abstract class wdcal_local
 {
 
@@ -36,7 +39,7 @@ abstract class wdcal_local
 	 * @return wdcal_local
 	 */
 	static function getInstanceByUser($uid = 0) {
-		$dateformat = get_pconfig($uid, "dav", "dateformat");
+		$dateformat = PConfig::get($uid, "dav", "dateformat");
 		$format = self::getInstance($dateformat);
 		if ($format == null) $format = self::getInstance(self::LOCAL_US);
 		return $format;
@@ -147,7 +150,7 @@ class wdcal_local_us extends wdcal_local {
 	 * @return string
 	 */
 	static function getName() {
-		return t("U.S. Time Format (mm/dd/YYYY)");
+		return L10n::t("U.S. Time Format (mm/dd/YYYY)");
 	}
 
 	/**
@@ -242,7 +245,7 @@ class wdcal_local_de extends  wdcal_local {
 	 * @return string
 	 */
 	static function getName() {
-		return t("German Time Format (dd.mm.YYYY)");
+		return L10n::t("German Time Format (dd.mm.YYYY)");
 	}
 
 	/**

@@ -5,18 +5,21 @@
  * Version: 0.1
  * Author: Michael Vogel <https://pirati.ca/profile/heluecht>
  */
+use Friendica\Core\Addon;
+use Friendica\Core\Config;
+use Friendica\Util\Network;
 
 function leistungsschutzrecht_install() {
-	register_hook('cron', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_cron');
-	register_hook('getsiteinfo', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_getsiteinfo');
-	register_hook('page_info_data', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_getsiteinfo');
+	Addon::registerHook('cron', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_cron');
+	Addon::registerHook('getsiteinfo', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_getsiteinfo');
+	Addon::registerHook('page_info_data', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_getsiteinfo');
 }
 
 
 function leistungsschutzrecht_uninstall() {
-	unregister_hook('cron', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_cron');
-	unregister_hook('getsiteinfo', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_getsiteinfo');
-	unregister_hook('page_info_data', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_getsiteinfo');
+	Addon::unregisterHook('cron', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_cron');
+	Addon::unregisterHook('getsiteinfo', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_getsiteinfo');
+	Addon::unregisterHook('page_info_data', 'addon/leistungsschutzrecht/leistungsschutzrecht.php', 'leistungsschutzrecht_getsiteinfo');
 }
 
 function leistungsschutzrecht_getsiteinfo($a, &$siteinfo) {
@@ -34,7 +37,7 @@ function leistungsschutzrecht_getsiteinfo($a, &$siteinfo) {
 }
 
 function leistungsschutzrecht_cuttext($text) {
-	$text = str_replace(array("\r", "\n"), array(" ", " "), $text);
+	$text = str_replace(["\r", "\n"], [" ", " "], $text);
 
 	do {
 		$oldtext = $text;
@@ -63,18 +66,17 @@ function leistungsschutzrecht_cuttext($text) {
 	return $text;
 }
 
-function leistungsschutzrecht_fetchsites() {
-	require_once("include/network.php");
-
+function leistungsschutzrecht_fetchsites()
+{
 	// This list works - but question is how current it is
 	$url = "http://leistungsschutzrecht-stoppen.d-64.org/blacklist.txt";
-	$sitelist = fetch_url($url);
+	$sitelist = Network::fetchUrl($url);
 	$siteurls = explode(',', $sitelist);
 
-	$whitelist = array('tagesschau.de', 'heute.de', 'wdr.de');
+	$whitelist = ['tagesschau.de', 'heute.de', 'wdr.de'];
 
-	$sites = array();
-	foreach ($siteurls AS $site) {
+	$sites = [];
+	foreach ($siteurls as $site) {
 		if (!in_array($site, $whitelist)) {
 			$sites[$site] = $site;
 		}
@@ -87,7 +89,7 @@ function leistungsschutzrecht_fetchsites() {
 
 	$url = "http://www.vg-media.de/lizenzen/digitale-verlegerische-angebote/wahrnehmungsberechtigte-digitale-verlegerische-angebote.html";
 
-	$site = fetch_url($url);
+	$site = Network::fetchUrl($url);
 
 	$doc = new DOMDocument();
 	@$doc->loadHTML($site);
@@ -115,12 +117,12 @@ function leistungsschutzrecht_fetchsites() {
 */
 
 	if (sizeof($sites)) {
-		set_config('leistungsschutzrecht','sites',$sites);
+		Config::set('leistungsschutzrecht','sites',$sites);
 	}
 }
 
 function leistungsschutzrecht_is_member_site($url) {
-	$sites = get_config('leistungsschutzrecht','sites');
+	$sites = Config::get('leistungsschutzrecht','sites');
 
 	if ($sites == "")
 		return(false);
@@ -142,7 +144,7 @@ function leistungsschutzrecht_is_member_site($url) {
 }
 
 function leistungsschutzrecht_cron($a,$b) {
-	$last = get_config('leistungsschutzrecht','last_poll');
+	$last = Config::get('leistungsschutzrecht','last_poll');
 
 	if($last) {
 		$next = $last + 86400;
@@ -152,6 +154,6 @@ function leistungsschutzrecht_cron($a,$b) {
 		}
 	}
 	leistungsschutzrecht_fetchsites();
-	set_config('leistungsschutzrecht','last_poll', time());
+	Config::set('leistungsschutzrecht','last_poll', time());
 }
 ?>

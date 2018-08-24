@@ -1,5 +1,8 @@
 <?php
 
+use Friendica\Core\L10n;
+use Friendica\Util\DateTimeFormat;
+
 class Sabre_CalDAV_Backend_Friendica extends Sabre_CalDAV_Backend_Virtual
 {
 
@@ -33,7 +36,7 @@ class Sabre_CalDAV_Backend_Friendica extends Sabre_CalDAV_Backend_Virtual
 	 * @return string
 	 */
 	public static function getBackendTypeName() {
-		return t("Friendica-Native events");
+		return L10n::t("Friendica-Native events");
 	}
 
 	/**
@@ -65,8 +68,8 @@ class Sabre_CalDAV_Backend_Friendica extends Sabre_CalDAV_Backend_Virtual
 			$component = dav_get_eventComponent($vevent);
 
 			if ($row["adjust"]) {
-				$start  = datetime_convert('UTC', date_default_timezone_get(), $row["start"]);
-				$finish = datetime_convert('UTC', date_default_timezone_get(), $row["finish"]);
+				$start  = DateTimeFormat::local($row["start"]);
+				$finish = DateTimeFormat::local($row["finish"]);
 			} else {
 				$start  = $row["start"];
 				$finish = $row["finish"];
@@ -85,9 +88,9 @@ class Sabre_CalDAV_Backend_Friendica extends Sabre_CalDAV_Backend_Virtual
 			$type           = ($allday ? Sabre\VObject\Property\DateTime::DATE : Sabre\VObject\Property\DateTime::LOCALTZ);
 
 			$datetime_start = new Sabre\VObject\Property\DateTime("DTSTART");
-			$datetime_start->setDateTime(new DateTime(date("Y-m-d H:i:s", $ts_start)), $type);
+			$datetime_start->setDateTime(new DateTime(date(DateTimeFormat::MYSQL, $ts_start)), $type);
 			$datetime_end = new Sabre\VObject\Property\DateTime("DTEND");
-			$datetime_end->setDateTime(new DateTime(date("Y-m-d H:i:s", $ts_end)), $type);
+			$datetime_end->setDateTime(new DateTime(date(DateTimeFormat::MYSQL, $ts_end)), $type);
 
 			$component->add($datetime_start);
 			$component->add($datetime_end);
@@ -113,8 +116,8 @@ class Sabre_CalDAV_Backend_Friendica extends Sabre_CalDAV_Backend_Virtual
 	private function jqcal2wdcal($row, $calendar, $base_path)
 	{
 		if ($row["adjust"]) {
-			$start  = datetime_convert('UTC', date_default_timezone_get(), $row["start"]);
-			$finish = datetime_convert('UTC', date_default_timezone_get(), $row["finish"]);
+			$start  = DateTimeFormat::local($row["start"]);
+			$finish = DateTimeFormat::local($row["finish"]);
 		} else {
 			$start  = $row["start"];
 			$finish = $row["finish"];
@@ -124,7 +127,7 @@ class Sabre_CalDAV_Backend_Friendica extends Sabre_CalDAV_Backend_Virtual
 
 		$summary = (($row["summary"]) ? $row["summary"] : substr(preg_replace("/\[[^\]]*\]/", "", $row["desc"]), 0, 100));
 
-		return array(
+		return [
 			"jq_id"             => $row["id"],
 			"ev_id"             => $row["id"],
 			"summary"           => escape_tags($summary),
@@ -142,7 +145,7 @@ class Sabre_CalDAV_Backend_Friendica extends Sabre_CalDAV_Backend_Virtual
 			"url_detail"        => $base_path . "/events/event/" . $row["id"],
 			"url_edit"          => "",
 			"special_type"      => ($row["type"] == "birthday" ? "birthday" : ""),
-		);
+		];
 	}
 
 
@@ -172,14 +175,14 @@ class Sabre_CalDAV_Backend_Friendica extends Sabre_CalDAV_Backend_Virtual
 		}
 
 		if ($date_from != "") {
-			if (is_numeric($date_from)) $sql_where .= " AND `finish` >= '" . date("Y-m-d H:i:s", $date_from) . "'";
+			if (is_numeric($date_from)) $sql_where .= " AND `finish` >= '" . date(DateTimeFormat::MYSQL, $date_from) . "'";
 			else $sql_where .= " AND `finish` >= '" . dbesc($date_from) . "'";
 		}
 		if ($date_to != "") {
-			if (is_numeric($date_to)) $sql_where .= " AND `start` <= '" . date("Y-m-d H:i:s", $date_to) . "'";
+			if (is_numeric($date_to)) $sql_where .= " AND `start` <= '" . date(DateTimeFormat::MYSQL, $date_to) . "'";
 			else $sql_where .= " AND `start` <= '" . dbesc($date_to) . "'";
 		}
-		$ret = array();
+		$ret = [];
 
 		$r = q("SELECT * FROM `event` WHERE `uid` = %d " . $sql_where . " ORDER BY `start`", IntVal($calendar["namespace_id"]));
 
@@ -214,21 +217,21 @@ class Sabre_CalDAV_Backend_Friendica extends Sabre_CalDAV_Backend_Virtual
 	public function getCalendarsForUser($principalUri)
 	{
 		$n = dav_compat_principal2namespace($principalUri);
-		if ($n["namespace"] != $this->getNamespace()) return array();
+		if ($n["namespace"] != $this->getNamespace()) return [];
 
 		$cals = q("SELECT * FROM %s%scalendars WHERE `namespace` = %d AND `namespace_id` = %d", CALDAV_SQL_DB, CALDAV_SQL_PREFIX, $this->getNamespace(), IntVal($n["namespace_id"]));
-		$ret  = array();
+		$ret  = [];
 		foreach ($cals as $cal) {
 			if (!in_array($cal["uri"], $GLOBALS["CALDAV_PRIVATE_SYSTEM_CALENDARS"])) continue;
 
-			$dat = array(
+			$dat = [
 				"id"                                                      => $cal["id"],
 				"uri"                                                     => $cal["uri"],
 				"principaluri"                                            => $principalUri,
 				'{' . Sabre_CalDAV_Plugin::NS_CALENDARSERVER . '}getctag' => $cal['ctag'] ? $cal['ctag'] : '0',
-				'{' . Sabre_CalDAV_Plugin::NS_CALDAV . '}supported-calendar-component-set' => new Sabre_CalDAV_Property_SupportedCalendarComponentSet(array("VEVENT")),
+				'{' . Sabre_CalDAV_Plugin::NS_CALDAV . '}supported-calendar-component-set' => new Sabre_CalDAV_Property_SupportedCalendarComponentSet(["VEVENT"]),
 				"calendar_class"                                          => "Sabre_CalDAV_Calendar_Virtual",
-			);
+			];
 			foreach ($this->propertyMap as $key=> $field) $dat[$key] = $cal[$field];
 
 			$ret[] = $dat;

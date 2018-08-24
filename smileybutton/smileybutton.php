@@ -5,29 +5,29 @@
  * Version: 0.2
  * Author: Johannes Schwab <https://friendica.jschwab.org/profile/ddorian>
  */
-
+use Friendica\Core\Addon;
 
 function smileybutton_install() {
-	//Register hooks 
-	register_hook('jot_tool', 'addon/smileybutton/smileybutton.php', 'show_button');
- 
+	//Register hooks
+	Addon::registerHook('jot_tool', 'addon/smileybutton/smileybutton.php', 'show_button');
+
 	logger("installed smileybutton");
 }
 
 
 function smileybutton_uninstall() {
 	//Delet registered hooks
-	unregister_hook('jot_tool',    'addon/smileybutton/smileybutton.php', 'show_button');	
+	Addon::unregisterHook('jot_tool',    'addon/smileybutton/smileybutton.php', 'show_button');
 
 	logger("removed smileybutton");
 }
 
 
 
-function show_button($a, &$b) {
+function show_button(Friendica\App $a, &$b) {
 	// Disable if theme is quattro
 	// TODO add style for quattro
-	if (current_theme() == 'quattro')
+	if ($a->getCurrentTheme() == 'quattro')
 		return;
 
 	// Disable for mobile because most mobiles have a smiley key for ther own
@@ -41,34 +41,34 @@ function show_button($a, &$b) {
 	 *
 	 */
 
-	$texts =  array( 
-		'&lt;3', 
-		'&lt;/3', 
-		':-)', 
-		';-)', 
-		':-(', 
-		':-P', 
-		':-X', 
-		':-D', 
-		':-O', 
-		'\\\\o/', 
-		'O_o', 
-		":\'(", 
-		":-!", 
-		":-/", 
-		":-[", 
+	$texts =  [
+		'&lt;3',
+		'&lt;/3',
+		':-)',
+		';-)',
+		':-(',
+		':-P',
+		':-X',
+		':-D',
+		':-O',
+		'\\\\o/',
+		'O_o',
+		":\'(",
+		":-!",
+		":-/",
+		":-[",
 		"8-)",
-		':beer', 
-		':coffee', 
+		':beer',
+		':coffee',
 		':facepalm',
 		':like',
 		':dislike',
                 '~friendica',
                 'red#'
 
-	);
+	];
 
-	$icons = array(
+	$icons = [
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-heart.gif" alt="<3" />',
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-brokenheart.gif" alt="</3" />',
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-smile.gif" alt=":-)" />',
@@ -77,7 +77,7 @@ function show_button($a, &$b) {
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-tongue-out.gif" alt=":-P" />',
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-kiss.gif" alt=":-X" />',
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-laughing.gif" alt=":-D" />',
-		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-surprised.gif" alt=":-O" />',                
+		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-surprised.gif" alt=":-O" />',
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-thumbsup.gif" alt="\\o/" />',
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-Oo.gif" alt="O_o" />',
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/smiley-cry.gif" alt=":\'(" />',
@@ -92,11 +92,11 @@ function show_button($a, &$b) {
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/dislike.gif" alt=":dislike" />',
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/friendica-16.png" alt="~friendica" />',
 		'<img class="smiley" src="' . $a->get_baseurl() . '/images/rhash-16.png" alt="red" />'
-	);
-	
+	];
+
 	// Call hooks to get aditional smileies from other addons
-	$params = array('texts' => $texts, 'icons' => $icons, 'string' => ""); //changed
-	call_hooks('smilie', $params);
+	$params = ['texts' => $texts, 'icons' => $icons, 'string' => ""]; //changed
+	Addon::callHooks('smilie', $params);
 
 	//Generate html for smiley list
 	$s = "<table class=\"smiley-preview\"><tr>\n\t";
@@ -112,17 +112,17 @@ function show_button($a, &$b) {
 	$s .= "\t</tr></table>";
 
 	//Add css to header
-	$css_file = 'addon/smileybutton/view/'.current_theme().'.css';
-	if (! file_exists($css_file)) 
+	$css_file = 'addon/smileybutton/view/' . $a->getCurrentTheme() . '.css';
+	if (! file_exists($css_file))
 		$css_file = 'addon/smileybutton/view/default.css';
 	$css_url = $a->get_baseurl().'/'.$css_file;
 
 	$a->page['htmlhead'] .= '<link rel="stylesheet" type="text/css" href="'.$css_url.'" media="all" />'."\r\n";
 
-	
+
 	//Get the correct image for the theme
-	$image = 'addon/smileybutton/view/'.current_theme().'.png';
-	if (! file_exists($image)) 
+	$image = 'addon/smileybutton/view/' . $a->getCurrentTheme() . '.png';
+	if (! file_exists($image))
 		$image = 'addon/smileybutton/view/default.png';
 	$image_url = $a->get_baseurl().'/'.$image;
 

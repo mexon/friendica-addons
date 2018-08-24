@@ -1,5 +1,7 @@
 <?php
 
+use Friendica\Core\L10n;
+
 class Sabre_CardDAV_Backend_Friendica extends Sabre_CardDAV_Backend_Virtual
 {
 
@@ -33,7 +35,7 @@ class Sabre_CardDAV_Backend_Friendica extends Sabre_CardDAV_Backend_Virtual
 	 * @return string
 	 */
 	public static function getBackendTypeName() {
-		return t("Friendica-Contacts");
+		return L10n::t("Friendica-Contacts");
 	}
 
 	/**
@@ -46,22 +48,22 @@ class Sabre_CardDAV_Backend_Friendica extends Sabre_CardDAV_Backend_Virtual
 	{
 		$uid = dav_compat_principal2uid($principalUri);
 
-		$addressBooks = array();
+		$addressBooks = [];
 
 		$books = q("SELECT id, ctag FROM %s%saddressbooks WHERE `namespace` = %d AND `namespace_id` = %d AND `uri` = '%s'",
 			CALDAV_SQL_DB, CALDAV_SQL_PREFIX, CARDDAV_NAMESPACE_PRIVATE, IntVal($uid), dbesc(CARDDAV_FRIENDICA_CONTACT));
 		$ctag = $books[0]["ctag"];
 
-		$addressBooks[] = array(
+		$addressBooks[] = [
 			'id'                                                                => $books[0]["id"],
 			'uri'                                                               => "friendica",
 			'principaluri'                                                      => $principalUri,
-			'{DAV:}displayname'                                                 => t("Friendica-Contacts"),
-			'{' . Sabre_CardDAV_Plugin::NS_CARDDAV . '}addressbook-description' => t("Your Friendica-Contacts"),
+			'{DAV:}displayname'                                                 => L10n::t("Friendica-Contacts"),
+			'{' . Sabre_CardDAV_Plugin::NS_CARDDAV . '}addressbook-description' => L10n::t("Your Friendica-Contacts"),
 			'{http://calendarserver.org/ns/}getctag'                            => $ctag,
 			'{' . Sabre_CardDAV_Plugin::NS_CARDDAV . '}supported-address-data'  =>
 			new Sabre_CardDAV_Property_SupportedAddressData(),
-		);
+		];
 
 		return $addressBooks;
 
@@ -76,7 +78,7 @@ class Sabre_CardDAV_Backend_Friendica extends Sabre_CardDAV_Backend_Virtual
 	{
 		$name        = explode(" ", $contact["name"]);
 		$first_name  = $last_name = "";
-		$middle_name = array();
+		$middle_name = [];
 		$num         = count($name);
 		for ($i = 0; $i < $num && $first_name == ""; $i++) if ($name[$i] != "") {
 			$first_name = $name[$i];
@@ -114,14 +116,14 @@ class Sabre_CardDAV_Backend_Friendica extends Sabre_CardDAV_Backend_Virtual
 		}
 
 		$vcard = vcard_source_compile($vcarddata);
-		return array(
+		return [
 			"id"           => $contact["id"],
 			"carddata"     => $vcard,
 			"uri"          => $contact["id"] . ".vcf",
 			"lastmodified" => wdcal_mySql2PhpTime($vcarddata->last_update),
 			"etag"         => md5($vcard),
 			"size"         => strlen($vcard),
-		);
+		];
 
 	}
 
