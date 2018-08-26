@@ -19,6 +19,10 @@ profile: photo thumb about
 
 */
 
+use Friendica\Core\Addon;
+use Friendica\Core\Config;
+use Friendica\Object\Image;
+
 if (!defined('PHOTOTRACK_DEFAULT_BATCH_SIZE')) {
     define('PHOTOTRACK_DEFAULT_BATCH_SIZE', 1000);
 }
@@ -30,12 +34,12 @@ if (!defined('PHOTOTRACK_DEFAULT_SEARCH_INTERVAL')) {
 function phototrack_install() {
     global $db;
 
-    register_hook('post_local_end', 'addon/phototrack/phototrack.php', 'phototrack_post_local_end');
-    register_hook('post_remote_end', 'addon/phototrack/phototrack.php', 'phototrack_post_remote_end');
-    register_hook('notifier_end', 'addon/phototrack/phototrack.php', 'phototrack_notifier_end');
-    register_hook('cron', 'addon/phototrack/phototrack.php', 'phototrack_cron');
+    Addon::registerHook('post_local_end', 'addon/phototrack/phototrack.php', 'phototrack_post_local_end');
+    Addon::registerHook('post_remote_end', 'addon/phototrack/phototrack.php', 'phototrack_post_remote_end');
+    Addon::registerHook('notifier_end', 'addon/phototrack/phototrack.php', 'phototrack_notifier_end');
+    Addon::registerHook('cron', 'addon/phototrack/phototrack.php', 'phototrack_cron');
 
-    if (get_config('phototrack', 'dbversion') != '0.1') {
+    if (Config::get('phototrack', 'dbversion') != '0.1') {
         $schema = file_get_contents(dirname(__file__).'/database.sql');
         $arr = explode(';', $schema);
         foreach ($arr as $a) {
@@ -45,15 +49,15 @@ function phototrack_install() {
                 return;
             }
         }
-        set_config('phototrack', 'dbversion', '0.1');
+        Config::set('phototrack', 'dbversion', '0.1');
     }
 }
 
 function phototrack_uninstall() {
-    unregister_hook('post_local_end', 'addon/phototrack/phototrack.php', 'phototrack_post_local_end');
-    unregister_hook('post_remote_end', 'addon/phototrack/phototrack.php', 'phototrack_post_remote_end');
-    unregister_hook('notifier_end', 'addon/phototrack/phototrack.php', 'phototrack_notifier_end');
-    unregister_hook('cron', 'addon/phototrack/phototrack.php', 'phototrack_cron');
+    Addon::unregisterHook('post_local_end', 'addon/phototrack/phototrack.php', 'phototrack_post_local_end');
+    Addon::unregisterHook('post_remote_end', 'addon/phototrack/phototrack.php', 'phototrack_post_remote_end');
+    Addon::unregisterHook('notifier_end', 'addon/phototrack/phototrack.php', 'phototrack_notifier_end');
+    Addon::unregisterHook('cron', 'addon/phototrack/phototrack.php', 'phototrack_cron');
 }
 
 function phototrack_module() {}
@@ -69,7 +73,7 @@ function phototrack_finished_row($table, $id) {
 }
 
 function phototrack_photo_use($photo, $table, $field, $id) {
-    foreach (Photo::supportedTypes() as $m => $e) {
+    foreach (Image::supportedTypes() as $m => $e) {
         $photo = str_replace(".$e", '', $photo);
     }
     if (substr($photo, -2, 1) == '-') {
@@ -163,7 +167,7 @@ function phototrack_check_row($a, $table, $row) {
 }
 
 function phototrack_batch_size() {
-    $batch_size = get_config('phototrack', 'batch_size');
+    $batch_size = Config::get('phototrack', 'batch_size');
     if ($batch_size > 0) {
         return $batch_size;
     }
@@ -183,13 +187,13 @@ function phototrack_search_table($a, $table) {
 }
 
 function phototrack_cron_time() {
-    $prev_remaining = get_config('phototrack', 'remaining_items');
+    $prev_remaining = Config::get('phototrack', 'remaining_items');
     if ($prev_remaining > 10 * phototrack_batch_size()) {
         logger('@@@ lots of things still remaining, always cron time now');
         return true;
     }
-    $last = get_config('phototrack', 'last_search');
-    $search_interval = intval(get_config('phototrack', 'search_interval'));
+    $last = Config::get('phototrack', 'last_search');
+    $search_interval = intval(Config::get('phototrack', 'search_interval'));
     if (!$search_interval) {
         $search_interval = PHOTOTRACK_DEFAULT_SEARCH_INTERVAL;
     }
@@ -208,7 +212,7 @@ function phototrack_cron($a, $b) {
     if (!phototrack_cron_time()) {
         return;
     }
-    set_config('phototrack', 'last_search', time());
+    Config::set('phototrack', 'last_search', time());
 
     $remaining = 0;
     $remaining += phototrack_search_table($a, 'item');
@@ -217,7 +221,7 @@ function phototrack_cron($a, $b) {
     $remaining += phototrack_search_table($a, 'fsuggest');
     $remaining += phototrack_search_table($a, 'gcontact');
 
-    set_config('phototrack', 'remaining_items', $remaining);
+    Config::set('phototrack', 'remaining_items', $remaining);
     if ($remaining === 0) {
         phototrack_tidy();
     }
