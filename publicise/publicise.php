@@ -6,13 +6,15 @@
  * Author: Matthew Exon <http://mat.exon.name>
  */
 
+use Friendica\Core\Addon;
+
 function publicise_install() {
-    register_hook('post_remote', 'addon/publicise/publicise.php', 'publicise_post_remote_hook');
+    Addon::registerHook('post_remote', 'addon/publicise/publicise.php', 'publicise_post_remote_hook');
 }
 
 function publicise_uninstall() {
-    unregister_hook('post_remote', 'addon/publicise/publicise.php', 'publicise_post_remote_hook');
-    unregister_hook('post_remote_end', 'addon/publicise/publicise.php', 'publicise_post_remote_end_hook');
+    Addon::unregisterHook('post_remote', 'addon/publicise/publicise.php', 'publicise_post_remote_hook');
+    Addon::unregisterHook('post_remote_end', 'addon/publicise/publicise.php', 'publicise_post_remote_end_hook');
 }
 
 function publicise_get_contacts() {
