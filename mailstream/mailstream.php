@@ -291,6 +291,7 @@ function mailstream_send(\Friendica\App $a, $message_id, $item, $user) {
 		$mail->IsHTML(true);
 		$mail->CharSet = 'utf-8';
 		$template = Renderer::getMarkupTemplate('mail.tpl', 'addon/mailstream/');
+		$mail->AltBody = $item['body'];
 		$item['body'] = BBCode::convert($item['body']);
 		$item['url'] = $a->getBaseURL() . '/display/' . $item['guid'];
 		$mail->Body = Renderer::replaceMacros($template, [
