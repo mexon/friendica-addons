@@ -512,7 +512,8 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
     logger('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['uri'] . ' contact ' . $item['contact-id'], LOGGER_DEBUG);
 
-    if (!$retriever['data']['include'] && !$retriever['data']['customxslt']) {
+    if (!array_key_exists('include', $retriever['data']) && !array_key_exists('customxslt', $retriever['data'])) {
+        logger('retriever_apply_dom_filter: no include and no customxslt', LOGGER_INFO);
         return;
     }
     if (!$resource['data']) {
@@ -564,8 +565,8 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $item['body'] .= "\n\n" . L10n::t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
     $item['body'] .=  $item['plink'];
     $item['body'] .= ']' . $item['plink'] . '[/url]';
-    q("UPDATE `item` SET `body` = '%s' WHERE `id` = %d",
-      DBA::escape($item['body']), intval($item['id']));
+    DBA::update('item', ['body' => $item['body']], ['id' => $item['id']]);
+    DBA::update('item-content', ['body' => $item['body']], ['uri' => $item['uri']]);
 }
 
 function retrieve_images(&$item, $a) {
@@ -642,9 +643,9 @@ function retriever_transform_images($a, &$item, $resource) {
         logger('retriever_transform_images caught exception ' . $e->getMessage());
         return;
     }
-    foreach ($photo as $k => $v)
-    {
-        logger('@@@ photo key ' . $k);
+    if (!array_key_exists('full', $photo)) {
+        logger('retriever_transform_images: no replacement URL for image ' . $resource['url']);
+        return;
     }
     $new_url = $photo['full'];
     logger('retriever_transform_images: replacing ' . $resource['url'] . ' with ' .
