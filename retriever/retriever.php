@@ -11,6 +11,7 @@ use Friendica\Core\Addon;
 use Friendica\Core\Config;
 use Friendica\Core\PConfig;
 use Friendica\Core\Logger;
+use Friendica\Core\Renderer;
 use Friendica\Content\Text\HTML;
 use Friendica\Content\Text\BBCode;
 use Friendica\Object\Image;
@@ -533,8 +534,8 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     }
 
     $params = array('$spec' => $retriever['data']);
-    $extract_template = get_markup_template('extract.tpl', 'addon/retriever/');
-    $extract_xslt = replace_macros($extract_template, $params);
+    $extract_template = Renderer::getMarkupTemplate('extract.tpl', 'addon/retriever/');
+    $extract_xslt = Renderer::replaceMacros($extract_template, $params);
     if ($retriever['data']['include']) {
         $doc = retriever_apply_xslt_text($extract_xslt, $doc);
     }
@@ -550,8 +551,8 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $rooturl = $components['scheme'] . "://" . $components['host'];
     $dirurl = $rooturl . dirname($components['path']) . "/";
     $params = array('$dirurl' => $dirurl, '$rooturl' => $rooturl);
-    $fix_urls_template = get_markup_template('fix-urls.tpl', 'addon/retriever/');
-    $fix_urls_xslt = replace_macros($fix_urls_template, $params);
+    $fix_urls_template = Renderer::getMarkupTemplate('fix-urls.tpl', 'addon/retriever/');
+    $fix_urls_xslt = Renderer::replaceMacros($fix_urls_template, $params);
     $doc = retriever_apply_xslt_text($fix_urls_xslt, $doc);
     if (!$doc) {
         Logger::log('retriever_apply_dom_filter: failed to apply fix urls XSLT template', Logger::INFO);
@@ -675,8 +676,8 @@ function retriever_content($a) {
         foreach ($feeds as $k=>$v) {
             $feeds[$k]['url'] = $a->getBaseUrl() . '/retriever/' . $v['id'];
         }
-        $template = get_markup_template('/help.tpl', 'addon/retriever/');
-        $a->page['content'] .= replace_macros($template, array(
+        $template = Renderer::getMarkupTemplate('/help.tpl', 'addon/retriever/');
+        $a->page['content'] .= Renderer::replaceMacros($template, array(
                                                   '$config' => $a->get_baseurl() . '/settings/addon',
                                                   '$feeds' => $feeds));
         return;
@@ -718,8 +719,8 @@ function retriever_content($a) {
             $a->page['content'] .= ".</p></b>";
         }
 
-        $template = get_markup_template('/rule-config.tpl', 'addon/retriever/');
-        $a->page['content'] .= replace_macros($template, array(
+        $template = Renderer::getMarkupTemplate('/rule-config.tpl', 'addon/retriever/');
+        $a->page['content'] .= Renderer::replaceMacros($template, array(
                                                   '$enable' => array(
                                                       'retriever_enable',
                                                       L10n::t('Enabled'),
@@ -801,8 +802,8 @@ function retriever_post_remote_hook(&$a, &$item) {
 function retriever_plugin_settings(&$a,&$s) {
     $all_photos = PConfig::get(local_user(), 'retriever', 'all_photos');
     $oembed = PConfig::get(local_user(), 'retriever', 'oembed');
-    $template = get_markup_template('/settings.tpl', 'addon/retriever/');
-    $s .= replace_macros($template, array(
+    $template = Renderer::getMarkupTemplate('/settings.tpl', 'addon/retriever/');
+    $s .= Renderer::replaceMacros($template, array(
                              '$allphotos' => array(
                                  'retriever_all_photos',
                                  L10n::t('All Photos'),
