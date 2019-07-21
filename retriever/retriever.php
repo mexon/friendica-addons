@@ -587,7 +587,7 @@ function retriever_content($a) {
         if (!empty($_POST["id"])) {
             $retriever = get_retriever($a->argv[1], local_user(), true);
             $retriever["data"] = array();
-            foreach (array('pattern', 'replace', 'enable', 'images', 'customxslt') as $setting) {
+            foreach (array('pattern', 'replace', 'enable', 'images', 'customxslt', 'storecookies', 'cookiedata') as $setting) {
                 if (!empty($_POST['retriever_' . $setting])) {
                     $retriever["data"][$setting] = $_POST['retriever_' . $setting];
                 }
@@ -643,11 +643,16 @@ function retriever_content($a) {
                                                       L10n::t('Retrospectively Apply'),
                                                       '0',
                                                       L10n::t('Reapply the rules to this number of posts')),
-                                                  '$cookies' => array(
-                                                      'retriever_cookies',
-                                                      L10n::t('Cookies'),
-                                                      $retriever['data']['cookies'],
-                                                      L10n::t("Persistent cookies for this feed.  Netscape cookie file format.")),
+                                                  'storecookies' => array(
+                                                      'retriever_storecookies',
+                                                      L10n::t('Store cookies'),
+                                                      $retriever['data']['storecookies'],
+                                                      L10n::t("Preserve cookie data across fetches.")),
+                                                  '$cookiedata' => array(
+                                                      'retriever_cookiedata',
+                                                      L10n::t('Cookie Data'),
+                                                      $retriever['data']['cookiedata'],
+                                                      L10n::t("Latest cookie data for this feed.  Netscape cookie file format.")),
                                                   '$customxslt' => array(
                                                       'retriever_customxslt',
                                                       L10n::t('Custom XSLT'),
