@@ -643,6 +643,11 @@ function retriever_content($a) {
                                                       L10n::t('Retrospectively Apply'),
                                                       '0',
                                                       L10n::t('Reapply the rules to this number of posts')),
+                                                  '$cookies' => array(
+                                                      'retriever_cookies',
+                                                      L10n::t('Cookies'),
+                                                      $retriever['data']['cookies'],
+                                                      L10n::t("Persistent cookies for this feed.  Netscape cookie file format.")),
                                                   '$customxslt' => array(
                                                       'retriever_customxslt',
                                                       L10n::t('Custom XSLT'),
