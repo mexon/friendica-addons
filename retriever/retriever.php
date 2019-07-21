@@ -18,6 +18,7 @@ use Friendica\Object\Image;
 use Friendica\Util\Network;
 use Friendica\Core\L10n;
 use Friendica\Database\DBA;
+use Friendica\Model\ItemURI;
 
 function retriever_install() {
     Addon::registerHook('plugin_settings', 'addon/retriever/retriever.php', 'retriever_plugin_settings');
@@ -27,116 +28,6 @@ function retriever_install() {
     Addon::registerHook('cron', 'addon/retriever/retriever.php', 'retriever_cron');
 
     $r = q("SELECT `id` FROM `pconfig` WHERE `cat` LIKE 'retriever_%%'");
-    if (count($r) || (Config::get('retriever', 'dbversion') == '0.1')) {
-        $retrievers = array();
-        $r = q("SELECT SUBSTRING(`cat`, 10) AS `contact`, `k`, `v` FROM `pconfig` WHERE `cat` LIKE 'retriever%%'");
-        foreach ($r as $rr) {
-            $retrievers[$rr['contact']][$rr['k']] = $rr['v'];
-        }
-        foreach ($retrievers as $k => $v) {
-            $rr = q("SELECT `uid` FROM `contact` WHERE `id` = %d", intval($k));
-            $uid = $rr[0]['uid'];
-            $v['images'] = 'on';
-            q("INSERT INTO `retriever_rule` (`uid`, `contact-id`, `data`) VALUES (%d, %d, '%s')",
-              intval($uid), intval($k), DBA::escape(json_encode($v)));
-        }
-        q("DELETE FROM `pconfig` WHERE `cat` LIKE 'retriever_%%'");
-        Config::set('retriever', 'dbversion', '0.2');
-    }
-    if (Config::get('retriever', 'dbversion') == '0.2') {
-        q("ALTER TABLE `retriever_resource` DROP COLUMN `retriever`");
-        Config::set('retriever', 'dbversion', '0.3');
-    }
-    if (Config::get('retriever', 'dbversion') == '0.3') {
-        q("ALTER TABLE `retriever_item` MODIFY COLUMN `item-uri` varchar(800) CHARACTER SET ascii NOT NULL");
-        q("ALTER TABLE `retriever_resource` MODIFY COLUMN `url` varchar(800) CHARACTER SET ascii NOT NULL");
-        Config::set('retriever', 'dbversion', '0.4');
-    }
-    if (Config::get('retriever', 'dbversion') == '0.4') {
-        q("ALTER TABLE `retriever_item` ADD COLUMN `finished` tinyint(1) unsigned NOT NULL DEFAULT '0'");
-        Config::set('retriever', 'dbversion', '0.5');
-    }
-    if (Config::get('retriever', 'dbversion') == '0.5') {
-        q('ALTER TABLE `retriever_resource` CHANGE `created` `created` timestamp NOT NULL DEFAULT now()');
-        q('ALTER TABLE `retriever_resource` CHANGE `completed` `completed` timestamp NULL DEFAULT NULL');
-        q('ALTER TABLE `retriever_resource` CHANGE `last-try` `last-try` timestamp NULL DEFAULT NULL');
-        q('ALTER TABLE `retriever_item` DROP KEY `all`');
-        q('ALTER TABLE `retriever_item` ADD KEY `all` (`item-uri`, `item-uid`, `contact-id`)');
-        Config::set('retriever', 'dbversion', '0.6');
-    }
-    if (Config::get('retriever', 'dbversion') == '0.6') {
-        q('ALTER TABLE `retriever_item` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
-        q('ALTER TABLE `retriever_item` CHANGE `item-uri` `item-uri`  varchar(800) CHARACTER SET ascii COLLATE ascii_bin NOT NULL');
-        q('ALTER TABLE `retriever_resource` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
-        q('ALTER TABLE `retriever_resource` CHANGE `url` `url`  varchar(800) CHARACTER SET ascii COLLATE ascii_bin NOT NULL');
-        q('ALTER TABLE `retriever_rule` CONVERT TO CHARACTER SET utf8 COLLATE utf8_bin');
-        Config::set('retriever', 'dbversion', '0.7');
-    }
-    if (Config::get('retriever', 'dbversion') == '0.7') {
-        $r = q("SELECT `id`, `data` FROM `retriever_rule`");
-        foreach ($r as $rr) {
-            Logger::log('retriever_install: retriever ' . $rr['id'] . ' old config ' . $rr['data'], Logger::DATA);
-            $data = json_decode($rr['data'], true);
-            if ($data['pattern']) {
-                $matches = array();
-                if (preg_match("/\/(.*)\//", $data['pattern'], $matches)) {
-                    $data['pattern'] = $matches[1];
-                }
-            }
-            if ($data['match']) {
-                $include = array();
-                foreach (explode('|', $data['match']) as $component) {
-                    $matches = array();
-                    if (preg_match("/([A-Za-z][A-Za-z0-9]*)\[@([A-Za-z][a-z0-9]*)='([^']*)'\]/", $component, $matches)) {
-                        $include[] = array(
-                            'element' => $matches[1],
-                            'attribute' => $matches[2],
-                            'value' => $matches[3]);
-                    }
-                    if (preg_match("/([A-Za-z][A-Za-z0-9]*)\[contains(concat(' ',normalize-space(@class),' '),' ([^ ']+) ')]/", $component, $matches)) {
-                        $include[] = array(
-                            'element' => $matches[1],
-                            'attribute' => $matches[2],
-                            'value' => $matches[3]);
-                    }
-                }
-                $data['include'] = $include;
-                unset($data['match']);
-            }
-            if ($data['remove']) {
-                $exclude = array();
-                foreach (explode('|', $data['remove']) as $component) {
-                    $matches = array();
-                    if (preg_match("/([A-Za-z][A-Za-z0-9]*)\[@([A-Za-z][a-z0-9]*)='([^']*)'\]/", $component, $matches)) {
-                        $exclude[] = array(
-                            'element' => $matches[1],
-                            'attribute' => $matches[2],
-                            'value' => $matches[3]);
-                    }
-                    if (preg_match("/([A-Za-z][A-Za-z0-9]*)\[contains(concat(' ',normalize-space(@class),' '),' ([^ ']+) ')]/", $component, $matches)) {
-                        $exclude[] = array(
-                            'element' => $matches[1],
-                            'attribute' => $matches[2],
-                            'value' => $matches[3]);
-                    }
-                }
-                $data['exclude'] = $exclude;
-                unset($data['remove']);
-            }
-            $r = q('UPDATE `retriever_rule` SET `data` = "%s" WHERE `id` = %d', DBA::escape(json_encode($data)), $rr['id']);
-            Logger::log('retriever_install: retriever ' . $rr['id'] . ' new config ' . json_encode($data), Logger::DATA);
-        }
-        Config::set('retriever', 'dbversion', '0.8');
-    }
-    if (Config::get('retriever', 'dbversion') == '0.8') {
-        q("ALTER TABLE `retriever_resource` ADD COLUMN `http-code` smallint(1) unsigned NULL DEFAULT NULL");
-        Config::set('retriever', 'dbversion', '0.9');
-    }
-    if (Config::get('retriever', 'dbversion') == '0.9') {
-        q("ALTER TABLE `retriever_item` DROP COLUMN `parent`");
-        q("ALTER TABLE `retriever_resource` ADD COLUMN `redirect-url` varchar(800) CHARACTER SET ascii COLLATE ascii_bin NULL DEFAULT NULL");
-        Config::set('retriever', 'dbversion', '0.10');
-    }
     if (Config::get('retriever', 'dbversion') == '0.10') {
         q("ALTER TABLE `retriever_resource` MODIFY COLUMN `type` char(255) NULL DEFAULT NULL");
         q("ALTER TABLE `retriever_resource` MODIFY COLUMN `data` mediumblob NULL DEFAULT NULL");
@@ -347,6 +238,7 @@ function retriever_get_retriever_item($id) {
 }
 
 function retriever_get_item($retriever_item) {
+    // @@@ Need to replace this with Item::selectFirst
     $items = q("SELECT * FROM `item` WHERE `uri` = '%s' AND `uid` = %d AND `contact-id` = %d",
                DBA::escape($retriever_item['item-uri']),
                intval($retriever_item['item-uid']),
@@ -537,9 +429,11 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $extract_template = Renderer::getMarkupTemplate('extract.tpl', 'addon/retriever/');
     $extract_xslt = Renderer::replaceMacros($extract_template, $params);
     if ($retriever['data']['include']) {
+        Logger::log('retriever_apply_dom_filter: applying include/exclude template \"' . $extract_xslt . '\"', Logger::DEBUG);
         $doc = retriever_apply_xslt_text($extract_xslt, $doc);
     }
     if (array_key_exists('customxslt', $retriever['data']) && $retriever['data']['customxslt']) {
+        Logger::log('retriever_apply_dom_filter: applying custom XSLT \"' . $retriever['data']['customxslt'] . '\"', Logger::DEBUG);
         $doc = retriever_apply_xslt_text($retriever['data']['customxslt'], $doc);
     }
     if (!$doc) {
@@ -559,16 +453,21 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
         return;
     }
 
-    $item['body'] = HTML::toBBCode($doc->saveHTML());
-    if (!strlen($item['body'])) {
+    $body = HTML::toBBCode($doc->saveHTML());
+    if (!strlen($body)) {
         Logger::log('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty', Logger::INFO);
         return;
     }
-    $item['body'] .= "\n\n" . L10n::t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
-    $item['body'] .=  $item['plink'];
-    $item['body'] .= ']' . $item['plink'] . '[/url]';
-    DBA::update('item', ['body' => $item['body']], ['id' => $item['id']]);
-    DBA::update('item-content', ['body' => $item['body']], ['uri' => $item['uri']]);
+    $body .= "\n\n" . L10n::t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
+    $body .=  $item['plink'];
+    $body .= ']' . $item['plink'] . '[/url]';
+
+    $uri_id = ItemURI::getIdByURI($item['uri']);
+    //@@@ remove this
+    $item['body'] = $body;
+    Logger::log('retriever_apply_dom_filter: XSLT result \"' . $body . '\"', Logger::DATA);
+    DBA::update('item', ['body' => $body], ['id' => $item['id']]);
+    DBA::update('item-content', ['body' => $body], ['uri-id' => $uri_id]);
 }
 
 function retrieve_images(&$item, $a) {
@@ -678,18 +577,18 @@ function retriever_content($a) {
         }
         $template = Renderer::getMarkupTemplate('/help.tpl', 'addon/retriever/');
         $a->page['content'] .= Renderer::replaceMacros($template, array(
-                                                  '$config' => $a->get_baseurl() . '/settings/addon',
+                                                  '$config' => $a->getBaseUrl() . '/settings/addon',
                                                   '$feeds' => $feeds));
         return;
     }
     if ($a->argv[1]) {
         $retriever = get_retriever($a->argv[1], local_user(), false);
 
-        if (x($_POST["id"])) {
+        if (!empty($_POST["id"])) {
             $retriever = get_retriever($a->argv[1], local_user(), true);
             $retriever["data"] = array();
             foreach (array('pattern', 'replace', 'enable', 'images', 'customxslt') as $setting) {
-                if (x($_POST['retriever_' . $setting])) {
+                if (!empty($_POST['retriever_' . $setting])) {
                     $retriever["data"][$setting] = $_POST['retriever_' . $setting];
                 }
             }
@@ -712,7 +611,7 @@ function retriever_content($a) {
             q("UPDATE `retriever_rule` SET `data`='%s' WHERE `id` = %d",
               DBA::escape(json_encode($retriever["data"])), intval($retriever["id"]));
             $a->page['content'] .= "<p><b>Settings Updated";
-            if (x($_POST["retriever_retrospective"])) {
+            if (!empty($_POST["retriever_retrospective"])) {
                 apply_retrospective($a, $retriever, $_POST["retriever_retrospective"]);
                 $a->page['content'] .= " and retrospectively applied to " . $_POST["apply"] . " posts";
             }
@@ -750,7 +649,7 @@ function retriever_content($a) {
                                                       $retriever['data']['customxslt'],
                                                       L10n::t("When standard rules aren't enough, apply custom XSLT to the article")),
                                                   '$title' => L10n::t('Retrieve Feed Content'),
-                                                  '$help' => $a->get_baseurl() . '/retriever/help',
+                                                  '$help' => $a->getBaseUrl() . '/retriever/help',
                                                   '$help_t' => L10n::t('Get Help'),
                                                   '$submit_t' => L10n::t('Submit'),
                                                   '$submit' => L10n::t('Save Settings'),
@@ -773,7 +672,7 @@ function retriever_contact_photo_menu($a, &$args) {
         return;
     }
     if ($args["contact"]["network"] == "feed") {
-        $args["menu"][ 'retriever' ] = array(L10n::t('Retriever'), $a->get_baseurl() . '/retriever/' . $args["contact"]['id']);
+        $args["menu"][ 'retriever' ] = array(L10n::t('Retriever'), $a->getBaseUrl() . '/retriever/' . $args["contact"]['id']);
     }
 }
 
@@ -816,7 +715,7 @@ function retriever_plugin_settings(&$a,&$s) {
                                  L10n::t('Check this to attempt to retrieve embedded content for all posts - useful e.g. for Facebook posts')),
                              '$submit' => L10n::t('Save Settings'),
                              '$title' => L10n::t('Retriever Settings'),
-                             '$help' => $a->get_baseurl() . '/retriever/help'));
+                             '$help' => $a->getBaseUrl() . '/retriever/help'));
 }
 
 function retriever_plugin_settings_post($a,$post) {
