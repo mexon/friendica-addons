@@ -40,6 +40,22 @@ function retriever_remove_row(id, number)
     var row = document.getElementById(id + '-' + number);
     tbody.removeChild(row);
 }
+
+function retriever_toggle_cookiedata_block()
+{
+    var div = document.querySelector("#id_retriever_cookiedata").parentNode;
+    if (document.querySelector("#id_retriever_storecookies").checked) {
+        div.style.display = "block";
+    }
+    else {
+        div.style.display = "none";
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    retriever_toggle_cookiedata_block();
+    document.querySelector("#id_retriever_storecookies").addEventListener('change', retriever_toggle_cookiedata_block, false);
+}, false);
   </script>
   <h2>{{$title}}</h2>
   <p><a href="{{$help}}">{{$help_t}}</a></p>
@@ -106,8 +122,9 @@ function retriever_remove_row(id, number)
       </table>
       <input type="button" onclick="retriever_add_row('retriever-exclude')" value="{{$add_t}}">
     </div>
-{{include file="field_textarea.tpl" field=$cookies}}
 {{include file="field_textarea.tpl" field=$customxslt}}
+{{include file="field_checkbox.tpl" field=$storecookies}}
+{{include file="field_textarea.tpl" field=$cookiedata}}
     <input type="submit" size="70" value="{{$submit_t}}">
   </form>
 </div>
