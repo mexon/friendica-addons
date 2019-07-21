@@ -106,6 +106,7 @@ function retriever_remove_row(id, number)
       </table>
       <input type="button" onclick="retriever_add_row('retriever-exclude')" value="{{$add_t}}">
     </div>
+{{include file="field_textarea.tpl" field=$cookies}}
 {{include file="field_textarea.tpl" field=$customxslt}}
     <input type="submit" size="70" value="{{$submit_t}}">
   </form>
