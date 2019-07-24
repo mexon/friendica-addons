@@ -41,6 +41,10 @@ function retriever_install() {
         q("ALTER TABLE `retriever_item` ADD INDEX `item-uid` (`item-uid`)");
         Config::set('retriever', 'dbversion', '0.12');
     }
+    /* if (Config::get('retriever', 'dbversion') == '0.12') { */
+    /*     q("ALTER TABLE `retriever_resource` ADD COLUMN `contact-id` int(10) unsigned NULL AFTER `id`"); */
+    /*     Config::set('retriever', 'dbversion', '0.13'); */
+    /* } */
     if (Config::get('retriever', 'dbversion') != '0.12') {
         $schema = file_get_contents(dirname(__file__).'/database.sql');
         $arr = explode(';', $schema);
