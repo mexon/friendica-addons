@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `retriever_item` (
 
 CREATE TABLE IF NOT EXISTS `retriever_resource` (
        `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
+       `contact-id` int(10) unsigned NOT NULL DEFAULT '0',
        `type` char(255) NULL DEFAULT NULL,
        `binary` int(1) NOT NULL DEFAULT 0,
        `url` varchar(800) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
