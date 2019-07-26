@@ -189,9 +189,9 @@ function retrieve_resource($resource) {
     try {
         Logger::log('retrieve_resource: ' . ($resource['num-tries'] + 1) .
                ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], Logger::DEBUG);
-        $redirects;
+        $redirects = 0;
         $cookiejar = tempnam(get_temppath(), 'cookiejar-retriever-');
-        $fetch_result = Network::fetchUrlFull($resource['url'], $resource['binary'], $redirects, array('cookiejar' => $cookiejar));
+        $fetch_result = Network::fetchUrlFull($resource['url'], $resource['binary'], $redirects, '', $cookiejar);
         unlink($cookiejar);
         $resource['data'] = $fetch_result->getBody();
         $resource['http-code'] = $fetch_result->getReturnCode();
