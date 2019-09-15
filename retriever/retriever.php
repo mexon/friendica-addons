@@ -367,6 +367,15 @@ function add_retriever_resource($a, $url, $binary = false) {
 function add_retriever_item(&$item, $resource) {
     Logger::log('add_retriever_item: ' . $resource['url'] . ' for ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], Logger::DEBUG);
 
+    $r = q("SELECT COUNT(*) FROM `retriever_item` WHERE " .
+           "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d",
+           DBA::escape($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource['id']));
+    if ($r[0]['COUNT(*)'] > 0) {
+        Logger::log("add_retriever_item: retriever item already present for " .
+               $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'],
+               Logger::INFO);
+        return;
+    }
     q("INSERT INTO `retriever_item` (`item-uri`, `item-uid`, `contact-id`, `resource`) " .
       "VALUES ('%s', %d, %d, %d)",
       DBA::escape($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource["id"]));
@@ -536,6 +545,7 @@ function retriever_apply_completed_resource_to_item($retriever, &$item, $resourc
 }
 
 function retriever_transform_images($a, &$item, $resource) {
+    return; //@@@ not working
     if (!$resource["data"]) {
         Logger::log('retriever_transform_images: no data available for '
                . $resource['id'] . ' ' . $resource['url'], Logger::INFO);
