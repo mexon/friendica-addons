@@ -84,7 +84,7 @@ function retriever_cron($a, $b) {
 $retriever_item_count = 0;
 
 function retriever_retrieve_items($max_items, $a) {
-    Logger::log('@@@ retriever_retrieve_items', Logger::INFO);
+    Logger::info('@@@ retriever_retrieve_items');
     global $retriever_item_count;
 
     $retriever_schedule = array(array(1,'minute'),
@@ -105,10 +105,10 @@ function retriever_retrieve_items($max_items, $a) {
     }
 
     $retrieve_items = $max_items - $retriever_item_count;
-    Logger::log('retriever_retrieve_items: asked for maximum ' . $max_items . ', already retrieved ' . $retriever_item_count . ', retrieve ' . $retrieve_items, Logger::DEBUG);
+    Logger::debug('retriever_retrieve_items: asked for maximum ' . $max_items . ', already retrieved ' . $retriever_item_count . ', retrieve ' . $retrieve_items);
     do {
-        Logger::log('@@@ retriever_retrieve_items loop max ' . $max_items . ' count ' . $retriever_item_count, Logger::INFO);
-        Logger::log("@@@ SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR " . implode($schedule_clauses, ' OR ') . ") ORDER BY `last-try` ASC LIMIT " . $retrieve_items, Logger::INFO);
+        Logger::info('@@@ retriever_retrieve_items loop max ' . $max_items . ' count ' . $retriever_item_count);
+        Logger::info("@@@ SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR " . implode($schedule_clauses, ' OR ') . ") ORDER BY `last-try` ASC LIMIT " . $retrieve_items);
         $retriever_resources = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
                DBA::escape(implode($schedule_clauses, ' OR ')),
                intval($retrieve_items));
@@ -118,9 +118,9 @@ function retriever_retrieve_items($max_items, $a) {
         if (count($retriever_resources) == 0) {
             break;
         }
-        Logger::log('retriever_retrieve_items: found ' . count($retriever_resources) . ' waiting resources in database', Logger::DEBUG);
+        Logger::debug('retriever_retrieve_items: found ' . count($retriever_resources) . ' waiting resources in database');
         foreach ($retriever_resources as $retriever_resource) {
-            Logger::log('@@@ need to get the retriever config here cid ' . $retriever_resource['contact-id'] . ' uid ' . $retriever_resource['item-uid'], Logger::INFO);
+            Logger::info('@@@ need to get the retriever config here cid ' . $retriever_resource['contact-id'] . ' uid ' . $retriever_resource['item-uid']);
             retrieve_resource($retriever_resource);
             $retriever_item_count++;
         }
@@ -128,7 +128,7 @@ function retriever_retrieve_items($max_items, $a) {
     }
     while ($retrieve_items > 0);
     // @@@ todo: when items add further items (i.e. images), do the new images go round this loop again?
-    Logger::log('@@@ retriever_retrieve_items: finished retrieving items', Logger::INFO);
+    Logger::info('@@@ retriever_retrieve_items: finished retrieving items');
 }
 
 /* Look for items that are waiting even though the resource has
@@ -141,25 +141,25 @@ function retriever_clean_up_completed_resources($max_items, $a) {
     if (!$r) {
         $r = array();
     }
-    Logger::log('retriever_clean_up_completed_resources: items waiting even though resource has completed: ' . count($r), Logger::DEBUG);
+    Logger::debug('retriever_clean_up_completed_resources: items waiting even though resource has completed: ' . count($r));
     foreach ($r as $rr) {
         $resource = q("SELECT * FROM retriever_resource WHERE `id` = %d", $rr['resource']);
         $retriever_item = retriever_get_retriever_item($rr['item']);
         if (!DBA::isResult($retriever_item)) {
-            Logger::log('retriever_clean_up_completed_resources: no retriever item with id ' . $rr['item'], Logger::WARNING);
+            Logger::warning('retriever_clean_up_completed_resources: no retriever item with id ' . $rr['item']);
             continue;
         }
         $item = retriever_get_item($retriever_item);
         if (!$item) {
-            Logger::log('retriever_clean_up_completed_resources: no item ' . $retriever_item['item-uri'], Logger::WARNING);
+            Logger::warning('retriever_clean_up_completed_resources: no item ' . $retriever_item['item-uri']);
             continue;
         }
         $retriever_rule = get_retriever_rule($retriever_item['contact-id'], $item['uid']);
         if (!$retriever_rule) {
-            Logger::log('retriever_clean_up_completed_resources: no retriever for uri ' . $retriever_item['item-uri'] . ' uid ' . $retriever_item['uid'] . ' ' . $retriever_item['contact-id'], Logger::WARNING);
+            Logger::warning('retriever_clean_up_completed_resources: no retriever for uri ' . $retriever_item['item-uri'] . ' uid ' . $retriever_item['uid'] . ' ' . $retriever_item['contact-id']);
             continue;
         }
-        Logger::log('@@@ retriever_clean_up_completed_resources: about to retriever_apply_completed_resource_to_item', Logger::INFO);
+        Logger::info('@@@ retriever_clean_up_completed_resources: about to retriever_apply_completed_resource_to_item');
         retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource[0], $a);
         q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d", intval($retriever_item['id']));
         retriever_check_item_completed($item);
@@ -171,7 +171,7 @@ function retriever_tidy() {
     q("DELETE FROM retriever_resource WHERE completed IS NULL AND created < DATE_SUB(now(), INTERVAL 3 MONTH)");
 
     $r = q("SELECT retriever_item.id FROM retriever_item LEFT OUTER JOIN retriever_resource ON (retriever_item.resource = retriever_resource.id) WHERE retriever_resource.id is null");
-    Logger::log('retriever_tidy: found ' . count($r) . ' retriever_items with no retriever_resource', Logger::INFO);
+    Logger::info('retriever_tidy: found ' . count($r) . ' retriever_items with no retriever_resource');
     foreach ($r as $rr) {
         q('DELETE FROM retriever_item WHERE id = %d', intval($rr['id']));
     }
@@ -179,7 +179,7 @@ function retriever_tidy() {
 
 function retrieve_dataurl_resource($resource) {
     if (!preg_match("/date:(.*);base64,(.*)/", $resource['url'], $matches)) {
-        Logger::log('retrieve_dataurl_resource: ' . $resource['id'] . ' does not match pattern', Logger::INFO);
+        Logger::info('retrieve_dataurl_resource: ' . $resource['id'] . ' does not match pattern');
     } else {
         $resource['type'] = $matches[1];
         $resource['data'] = base64url_decode($matches[2]);
@@ -194,7 +194,7 @@ function retrieve_dataurl_resource($resource) {
 }
 
 function retrieve_resource($resource) {
-    Logger::log('@@@ retrieve_resource: url ' . $resource['url'] . ' uid ' . $resource['item-uid'] . ' cid ' . $resource['contact-id'], Logger::INFO);
+    Logger::info('@@@ retrieve_resource: url ' . $resource['url'] . ' uid ' . $resource['item-uid'] . ' cid ' . $resource['contact-id']);
 
     if (substr($resource['url'], 0, 5) == "data:") {
         return retrieve_dataurl_resource($resource);
@@ -205,14 +205,14 @@ function retrieve_resource($resource) {
     $retriever_rule = get_retriever_rule($resource['contact-id'], $resource['item-uid']);
 
     try {
-        Logger::log('retrieve_resource: ' . ($resource['num-tries'] + 1) . ' attempt at resource ' . $resource['id'] . ' ' . $resource['url'], Logger::DEBUG);
+        Logger::debug('retrieve_resource: ' . ($resource['num-tries'] + 1) . ' attempt at resource ' . $resource['id'] . ' ' . $resource['url']);
         $redirects = 0;
         $cookiejar = tempnam(get_temppath(), 'cookiejar-retriever-');
-        if ($retriever_rule['storecookies']) {
+        if (array_key_exists('storecookies', $retriever_rule) && $retriever_rule['storecookies']) {
             file_put_contents($cookiejar, $retriever_rule['cookiedata']);
         }
         $fetch_result = Network::fetchUrlFull($resource['url'], $resource['binary'], $redirects, '', $cookiejar);
-        if ($retriever_rule['storecookies']) {
+        if (array_key_exists('storecookies', $retriever_rule) && $retriever_rule['storecookies']) {
             $retriever_rule['cookiedata'] = file_get_contents($cookiejar);
             //@@@ do the store here
         }
@@ -221,9 +221,9 @@ function retrieve_resource($resource) {
         $resource['http-code'] = $fetch_result->getReturnCode();
         $resource['type'] = $fetch_result->getContentType();
         $resource['redirect-url'] = $fetch_result->getRedirectUrl();
-        Logger::log('retrieve_resource: got code ' . $resource['http-code'] . ' retrieving resource ' . $resource['id'] . ' final url ' . $resource['redirect-url'], Logger::DEBUG);
+        Logger::debug('retrieve_resource: got code ' . $resource['http-code'] . ' retrieving resource ' . $resource['id'] . ' final url ' . $resource['redirect-url']);
     } catch (Exception $e) {
-        Logger::log('retrieve_resource: unable to retrieve ' . $resource['url'] . ' - ' . $e->getMessage(), Logger::INFO);
+        Logger::info('retrieve_resource: unable to retrieve ' . $resource['url'] . ' - ' . $e->getMessage());
     }
     q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1, `http-code` = %d, `redirect-url` = '%s' WHERE id = %d",
       intval($resource['http-code']),
@@ -236,17 +236,17 @@ function retrieve_resource($resource) {
           intval($resource['id']));
         retriever_resource_completed($resource, $a);
     }
-    Logger::log('@@@ retrieve_resource finished: ' . $resource['url'], Logger::INFO);
+    Logger::info('@@@ retrieve_resource finished: ' . $resource['url']);
 }
 
 function get_retriever_rule($contact_id, $uid, $create = false) {
-    Logger::log('@@@ get_retriever_rule ' . "SELECT * FROM `retriever_rule` WHERE `contact-id` = " . intval($contact_id) . " AND `uid` = " . intval($uid), Logger::INFO);
+    Logger::info('@@@ get_retriever_rule ' . "SELECT * FROM `retriever_rule` WHERE `contact-id` = " . intval($contact_id) . " AND `uid` = " . intval($uid));
     $r = q("SELECT * FROM `retriever_rule` WHERE `contact-id` = %d AND `uid` = %d",
            intval($contact_id), intval($uid));
-    Logger::log('@@@ get_retriever_rule count is ' . count($r), Logger::INFO);
+    Logger::info('@@@ get_retriever_rule count is ' . count($r));
     if (count($r)) {
         $r[0]['data'] = json_decode($r[0]['data'], true);
-        Logger::log('@@@ get_retriever_rule returning an actual thing', Logger::INFO);
+        Logger::info('@@@ get_retriever_rule returning an actual thing');
         return $r[0];
     }
     if ($create) {
@@ -267,7 +267,7 @@ function retriever_class_of_item($item) { //@@@
         return 'false';
     }
     if (array_key_exists('finished', $item)) {
-        Logger::log('@@@ oh no this is a bad thing', Logger::INFO);
+        Logger::info('@@@ oh no this is a bad thing');
         return 'retriever_item';
     }
     if (array_key_exists('moderated', $item)) {
@@ -282,33 +282,33 @@ function mat_test($item) { //@@@
 
 function retriever_get_item($retriever_item) {
     // @@@ add contact id as a search term
-    Logger::log('@@@ retriever_get_item uri ' . $retriever_item['item-uri'] . ' uid ' . $retriever_item['item-uid'] . ' cid ' . $retriever_item['contact-id'], Logger::INFO);
+    Logger::info('@@@ retriever_get_item uri ' . $retriever_item['item-uri'] . ' uid ' . $retriever_item['item-uid'] . ' cid ' . $retriever_item['contact-id']);
     try {//@@@ not necessary
         $item = Item::selectFirst([], ['uri' => $retriever_item['item-uri'], 'uid' => intval($retriever_item['item-uid'])]);
         Logger::log('@@@ 1 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
         if (!DBA::isResult($item)) {
-            Logger::log('retriever_get_item: no item found for uri ' . $retriever_item['item-uri'], Logger::INFO);
+            Logger::log('retriever_get_item: no item found for uri ' . $retriever_item['item-uri']);
             return;
         }
-        Logger::log('@@@ retriever_get_item: yay item found for uri ' . $retriever_item['item-uri'] . ' guid ' . $item['guid'] . ' plink ' . $item['plink'], Logger::INFO);
+        Logger::info('@@@ retriever_get_item: yay item found for uri ' . $retriever_item['item-uri'] . ' guid ' . $item['guid'] . ' plink ' . $item['plink']);
         return $item;
     } catch (Exception $e) {
-        Logger::log('retriever_get_item: exception ' . $e->getMessage(), Logger::INFO);
+        Logger::info('retriever_get_item: exception ' . $e->getMessage());
     }
 }
 
 function retriever_item_completed($retriever_item_id, $resource, $a) {
-    Logger::log('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url'], Logger::DEBUG);
+    Logger::debug('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url']);
 
     $retriever_item = retriever_get_retriever_item($retriever_item_id);
     if (!DBA::isResult($retriever_item)) {
-        Logger::log('retriever_item_completed: no retriever item with id ' . $retriever_item_id, Logger::INFO);
+        Logger::info('retriever_item_completed: no retriever item with id ' . $retriever_item_id);
         return;
     }
     $item = retriever_get_item($retriever_item);
         Logger::log('@@@ 2 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
     if (!$item) {
-        Logger::log('retriever_item_completed: no item ' . $retriever_item['item-uri'], Logger::INFO);
+        Logger::log('retriever_item_completed: no item ' . $retriever_item['item-uri']);
         return;
     }
     // Note: the retriever might be null.  Doesn't matter.
@@ -322,7 +322,7 @@ function retriever_item_completed($retriever_item_id, $resource, $a) {
 }
 
 function retriever_resource_completed($resource, $a) {
-    Logger::log('retriever_resource_completed: id ' . $resource['id'] . ' url ' . $resource['url'], Logger::DEBUG);
+    Logger::debug('retriever_resource_completed: id ' . $resource['id'] . ' url ' . $resource['url']);
     $r = q("SELECT `id` FROM `retriever_item` WHERE `resource` = %d", $resource['id']);
     foreach ($r as $rr) {
         retriever_item_completed($rr['id'], $resource, $a);
@@ -343,31 +343,31 @@ function apply_retrospective($a, $retriever, $num) {
 //@@@ make this trigger a retriever immediately somehow
 //@@@ need a lock to say something is doing something
 function retriever_on_item_insert($a, $retriever, &$item) {
-        Logger::log('@@@ 4 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
-    Logger::log('@@@ retriever_on_item_insert start ' . $item['plink'], Logger::INFO);
+    Logger::info('@@@ 4 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
+        Logger::info('@@@ retriever_on_item_insert start ' . $item['plink']);
     if (!$retriever || !$retriever['id']) {
-        Logger::log('retriever_on_item_insert: No retriever supplied', Logger::INFO);
+        Logger::info('retriever_on_item_insert: No retriever supplied');
         return;
     }
     if (!$retriever["data"]['enable'] == "on") {
-        Logger::log('@@@ retriever_on_item_insert: Disabled', Logger::INFO);
+        Logger::info('@@@ retriever_on_item_insert: Disabled');
         return;
     }
     if (array_key_exists('pattern', $retriever["data"]) && $retriever["data"]['pattern']) {
         $url = preg_replace('/' . $retriever["data"]['pattern'] . '/', $retriever["data"]['replace'], $item['plink']);
-        Logger::log('retriever_on_item_insert: Changed ' . $item['plink'] . ' to ' . $url, Logger::DATA);
+        Logger::debug('retriever_on_item_insert: Changed ' . $item['plink'] . ' to ' . $url);
     }
     else {
         $url = $item['plink'];
     }
 
-    Logger::log('@@@ retriever_on_item_insert: about to add_retriever_resource uid ' . $item['uid'] . ' cid ' . $item['contact-id'], Logger::DEBUG);
+    Logger::debug('@@@ retriever_on_item_insert: about to add_retriever_resource uid ' . $item['uid'] . ' cid ' . $item['contact-id']);
     $resource = add_retriever_resource($a, $url, $item['uid'], $item['contact-id']);
     $retriever_item_id = add_retriever_item($item, $resource);
 }
 
 function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
-    Logger::log('add_retriever_resource: url ' . $url . ' uid ' . $uid . ' contact-id ' . $cid, Logger::DEBUG);
+    Logger::debug('add_retriever_resource: url ' . $url . ' uid ' . $uid . ' contact-id ' . $cid);
 
     $scheme = parse_url($url, PHP_URL_SCHEME);
     if ($scheme == 'data') {
@@ -381,11 +381,11 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
         $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s' AND `item-uid` = %d AND `contact-id` = %d", DBA::escape($url), intval($uid), intval($cid));
         $resource = $r[0];
         if (count($r)) {
-            Logger::log('add_retriever_resource: Resource ' . $url . ' already requested', Logger::DEBUG);
+            Logger::debug('add_retriever_resource: Resource ' . $url . ' already requested');
             return $resource;
         }
 
-        Logger::log('retrieve_resource: got data URL type ' . $resource['type'], Logger::DEBUG);
+        Logger::debug('retrieve_resource: got data URL type ' . $resource['type']);
         q("INSERT INTO `retriever_resource` (`item-uid`, `contact-id`, `type`, `binary`, `url`, `completed`, `data`) " .
           "VALUES (%d, %d, '%s', %d, '%s', now(), '%s')",
           intval($uid),
@@ -403,12 +403,12 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
     }
 
     if (strlen($url) > 800) {
-        Logger::log('add_retriever_resource: URL is longer than 800 characters', Logger::WARNING);
+        Logger::warning('add_retriever_resource: URL is longer than 800 characters');
     }
 
     $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s' AND `item-uid` = %d AND `contact-id` = %d", DBA::escape($url), intval($uid), intval($cid));
     if (count($r)) {
-        Logger::log('add_retriever_resource: Resource ' . $url . ' uid ' . $uid . ' cid ' . $cid . ' already requested', Logger::DEBUG);
+        Logger::debug('add_retriever_resource: Resource ' . $url . ' uid ' . $uid . ' cid ' . $cid . ' already requested');
         return $r[0];
     }
 
@@ -419,14 +419,14 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
 }
 
 function add_retriever_item(&$item, $resource) {
-    Logger::log('@@@ 5 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item), Logger::DEBUG);
-    Logger::log('add_retriever_item: ' . $resource['url'] . ' for ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], Logger::DEBUG);
+    Logger::debug('@@@ 5 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
+    Logger::debug('add_retriever_item: ' . $resource['url'] . ' for ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
 
     $r = q("SELECT COUNT(*) FROM `retriever_item` WHERE " .
            "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d",
            DBA::escape($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource['id']));
     if ($r[0]['COUNT(*)'] > 0) {
-        Logger::log("add_retriever_item: retriever item already present for " . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], Logger::INFO);
+        Logger::info("add_retriever_item: retriever item already present for " . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
         return;
     }
     q("INSERT INTO `retriever_item` (`item-uri`, `item-uid`, `contact-id`, `resource`) " .
@@ -436,10 +436,10 @@ function add_retriever_item(&$item, $resource) {
            "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d ORDER BY id DESC",
            DBA::escape($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource['id']));
     if (!count($r)) {
-        Logger::log("add_retriever_item: couldn't create retriever item for " . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], Logger::INFO);
+        Logger::info("add_retriever_item: couldn't create retriever item for " . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
         return;
     }
-    Logger::log('add_retriever_item: created retriever_item ' . $r[0]['id'] . ' for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], Logger::DEBUG);
+    Logger::debug('add_retriever_item: created retriever_item ' . $r[0]['id'] . ' for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
     return $r[0]['id'];
 }
 
@@ -453,12 +453,12 @@ function retriever_get_encoding($resource) {
 
 function retriever_apply_xslt_text($xslt_text, $doc) {
     if (!$xslt_text) {
-        Logger::log('retriever_apply_xslt_text: empty XSLT text', Logger::INFO);
+        Logger::info('retriever_apply_xslt_text: empty XSLT text');
         return $doc;
     }
     $xslt_doc = new DOMDocument();
     if (!$xslt_doc->loadXML($xslt_text)) {
-        Logger::log('retriever_apply_xslt_text: could not load XML', Logger::INFO);
+        Logger::info('retriever_apply_xslt_text: could not load XML');
         return $doc;
     }
     $xp = new XsltProcessor();
@@ -469,15 +469,15 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
 
 //@@@ is that an item or a resource_item?  I really want an item here so I can update it
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
-    Logger::log('@@@ 6 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item), Logger::DEBUG);
-    Logger::log('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['uri'] . ' contact ' . $item['contact-id'], Logger::DEBUG);
+    Logger::debug('@@@ 6 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
+    Logger::debug('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['uri'] . ' contact ' . $item['contact-id']);
 
     if (!array_key_exists('include', $retriever['data']) && !array_key_exists('customxslt', $retriever['data'])) {
-        Logger::log('retriever_apply_dom_filter: no include and no customxslt', Logger::INFO);
+        Logger::info('retriever_apply_dom_filter: no include and no customxslt');
         return;
     }
     if (!$resource['data']) {
-        Logger::log('retriever_apply_dom_filter: no text to work with', Logger::INFO);
+        Logger::info('retriever_apply_dom_filter: no text to work with');
         return;
     }
 
@@ -495,104 +495,104 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $extract_template = Renderer::getMarkupTemplate('extract.tpl', 'addon/retriever/');
     $extract_xslt = Renderer::replaceMacros($extract_template, $params);
     if ($retriever['data']['include']) {
-        Logger::log('retriever_apply_dom_filter: applying include/exclude template \"' . $extract_xslt . '\"', Logger::DEBUG);
+        Logger::debug('retriever_apply_dom_filter: applying include/exclude template \"' . $extract_xslt . '\"');
         $doc = retriever_apply_xslt_text($extract_xslt, $doc);
     }
     if (array_key_exists('customxslt', $retriever['data']) && $retriever['data']['customxslt']) {
-        Logger::log('retriever_apply_dom_filter: applying custom XSLT \"' . $retriever['data']['customxslt'] . '\"', Logger::DEBUG);
+        Logger::debug('retriever_apply_dom_filter: applying custom XSLT \"' . $retriever['data']['customxslt'] . '\"');
         $doc = retriever_apply_xslt_text($retriever['data']['customxslt'], $doc);
     }
     if (!$doc) {
-        Logger::log('retriever_apply_dom_filter: failed to apply extract XSLT template', Logger::INFO);
+        Logger::info('retriever_apply_dom_filter: failed to apply extract XSLT template');
         return;
     }
 
-    Logger::log('@@@ retriever_apply_dom_filter: 1', Logger::INFO);
+    Logger::info('@@@ retriever_apply_dom_filter: 1');
     $components = parse_url($resource['redirect-url']);
     $rooturl = $components['scheme'] . "://" . $components['host'];
     $dirurl = $rooturl . dirname($components['path']) . "/";
-    Logger::log('@@@ retriever_apply_dom_filter: 2', Logger::INFO);
+    Logger::info('@@@ retriever_apply_dom_filter: 2');
     $params = array('$dirurl' => $dirurl, '$rooturl' => $rooturl);
     $fix_urls_template = Renderer::getMarkupTemplate('fix-urls.tpl', 'addon/retriever/');
     $fix_urls_xslt = Renderer::replaceMacros($fix_urls_template, $params);
-    Logger::log('@@@ retriever_apply_dom_filter: 3', Logger::INFO);
+    Logger::info('@@@ retriever_apply_dom_filter: 3');
     $doc = retriever_apply_xslt_text($fix_urls_xslt, $doc);
-    Logger::log('@@@ retriever_apply_dom_filter: 4', Logger::INFO);
+    Logger::info('@@@ retriever_apply_dom_filter: 4');
     if (!$doc) {
-        Logger::log('retriever_apply_dom_filter: failed to apply fix urls XSLT template', Logger::INFO);
+        Logger::info('retriever_apply_dom_filter: failed to apply fix urls XSLT template');
         return;
     }
 
-    Logger::log('@@@ retriever_apply_dom_filter: 5', Logger::INFO);
+    Logger::info('@@@ retriever_apply_dom_filter: 5');
     $body = HTML::toBBCode($doc->saveHTML());
     if (!strlen($body)) {
-        Logger::log('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty', Logger::INFO);
+        Logger::info('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty');
         return;
     }
     $body .= "\n\n" . L10n::t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
     $body .=  $item['plink'];
     $body .= ']' . $item['plink'] . '[/url]';
 
-    Logger::log('@@@ retriever_apply_dom_filter: 6', Logger::INFO);
+    Logger::info('@@@ retriever_apply_dom_filter: 6');
     $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
-    Logger::log('@@@ retriever_apply_dom_filter: item id is ' . $item['id'] . ' uri id is ' . $uri_id, Logger::INFO);
-    Logger::log('retriever_apply_dom_filter: XSLT result \"' . $body . '\"', Logger::DATA);
+    Logger::info('@@@ retriever_apply_dom_filter: item id is ' . $item['id'] . ' uri id is ' . $uri_id);
+    Logger::debug('retriever_apply_dom_filter: XSLT result \"' . $body . '\"');
     DBA::update('item-content', ['body' => $body], ['uri-id' => $uri_id]); //@@@ isn't there a better interface to that?
     //@@@ probably Item::updateContent
 }
 
 function retrieve_images(&$item, $a) {
     $blah_item_class = retriever_class_of_item($item) . ' ' . mat_test($item);
-    Logger::log('@@@ 7 item class is ' . $blah_item_class, Logger::DEBUG);
+    Logger::debug('@@@ 7 item class is ' . $blah_item_class);
 
     $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
 
     $content = DBA::selectFirst('item-content', [], ['uri-id' => $uri_id]);
     $body = $content['body'];
     if (!strlen($body)) {
-        Logger::log('retrieve_images: no body for uri-id ' . $uri_id, Logger::WARNING);
+        Logger::warning('retrieve_images: no body for uri-id ' . $uri_id);
         return;
     }
 
-    Logger::log('@@@ retrieve_images start looking in body "' . $body . '"', Logger::INFO);
+    Logger::info('@@@ retrieve_images start looking in body "' . $body . '"');
     $matches1 = array();
     preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $body, $matches1);
     $matches2 = array();
     preg_match_all("/\[img\](.*?)\[\/img\]/ism", $body, $matches2);
     $matches = array_merge($matches1[3], $matches2[1]);
-    Logger::log('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], Logger::DEBUG);
+    Logger::debug('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
     foreach ($matches as $url) {
-        Logger::log('@@@ retrieve_images: url ' . $url, Logger::DEBUG);
+        Logger::debug('@@@ retrieve_images: url ' . $url);
         if (strpos($url, get_app()->getBaseUrl()) === FALSE) {
-            Logger::log('@@@ retrieve_images: it is from somewhere else', Logger::DEBUG);
-            Logger::log('@@@ retrieve_images: about to add_retriever_resource uid ' . $item['uid'] . ' cid ' . $item['contact-id'], Logger::DEBUG);
+            Logger::debug('@@@ retrieve_images: it is from somewhere else');
+            Logger::debug('@@@ retrieve_images: about to add_retriever_resource uid ' . $item['uid'] . ' cid ' . $item['contact-id']);
             $resource = add_retriever_resource($a, $url, $item['uid'], $item['contact-id'], true);
             if (!$resource['completed']) {
-                Logger::log('@@@ retrieve_images: do not have it yet, get it later', Logger::DEBUG);
+                Logger::debug('@@@ retrieve_images: do not have it yet, get it later');
                 add_retriever_item($item, $resource);
             }
             else {
-                Logger::log('@@@ retrieve_images: got it already, transform', Logger::DEBUG);
+                Logger::debug('@@@ retrieve_images: got it already, transform');
                 retriever_transform_images($a, $item, $resource);
             }
         }
     }
-    Logger::log('@@@ retrieve_images end', Logger::INFO);
+    Logger::info('@@@ retrieve_images end');
 }
 
 function retriever_check_item_completed(&$item)
 {
-    Logger::log('@@@ 9 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item), Logger::DEBUG);
+    Logger::debug('@@@ 9 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
     $r = q('SELECT count(*) FROM retriever_item WHERE `item-uri` = "%s" ' .
            'AND `item-uid` = %d AND `contact-id` = %d AND `finished` = 0',
            DBA::escape($item['uri']), intval($item['uid']),
            intval($item['contact-id']));
     $waiting = $r[0]['count(*)'];
-    Logger::log('retriever_check_item_completed: item ' . $item['uri'] . ' ' . $item['uid'] . ' '. $item['contact-id'] . ' waiting for ' . $waiting . ' resources', Logger::DEBUG);
+    Logger::debug('retriever_check_item_completed: item ' . $item['uri'] . ' ' . $item['uid'] . ' '. $item['contact-id'] . ' waiting for ' . $waiting . ' resources');
     $old_visible = $item['visible'];
     $item['visible'] = $waiting ? 0 : 1;
     if (array_key_exists('id', $item) && ($item['id'] > 0) && ($old_visible != $item['visible'])) {
-        Logger::log('retriever_check_item_completed: changing visible flag to ' . $item['visible'], Logger::DEBUG);
+        Logger::debug('retriever_check_item_completed: changing visible flag to ' . $item['visible']);
         q("UPDATE `item` SET `visible` = %d WHERE `id` = %d",
           intval($item['visible']),
           intval($item['id']));
@@ -603,10 +603,10 @@ function retriever_check_item_completed(&$item)
 }
 
 function retriever_apply_completed_resource_to_item($retriever, &$item, $resource, $a) {
-    Logger::log('@@@ 10 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item), Logger::DEBUG);
-    Logger::log('retriever_apply_completed_resource_to_item: retriever ' . ($retriever ? $retriever['id'] : 'none') . ' resource ' . $resource['url'] . ' plink ' . $item['plink'], Logger::DEBUG);
+    Logger::debug('@@@ 10 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
+    Logger::debug('retriever_apply_completed_resource_to_item: retriever ' . ($retriever ? $retriever['id'] : 'none') . ' resource ' . $resource['url'] . ' plink ' . $item['plink']);
     if (strpos($resource['type'], 'image') !== false) {
-        Logger::log('@@@ retriever_apply_completed_resource_to_item this is an image must transform', Logger::INFO);
+        Logger::info('@@@ retriever_apply_completed_resource_to_item this is an image must transform');
         retriever_transform_images($a, $item, $resource);
     }
     if (!$retriever) {
@@ -621,13 +621,13 @@ function retriever_apply_completed_resource_to_item($retriever, &$item, $resourc
     }
 }
 
-//@@@ todo: change all Logger::log to Logger::info etc
+//@@@ todo: change all Logger::info t etc
 //@@@ todo: what is this reference for?  document if needed delete if not
 function retriever_transform_images($a, &$item, $resource) {
-    Logger::log('@@@ 11 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item), Logger::DEBUG);
-    Logger::log('@@@ retriever_transform_images', Logger::INFO);
+    Logger::debug('@@@ 11 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
+    Logger::info('@@@ retriever_transform_images');
     if (!$resource["data"]) {
-        Logger::log('retriever_transform_images: no data available for ' . $resource['id'] . ' ' . $resource['url'], Logger::INFO);
+        Logger::info('retriever_transform_images: no data available for ' . $resource['id'] . ' ' . $resource['url']);
         return;
     }
 
@@ -642,42 +642,42 @@ function retriever_transform_images($a, &$item, $resource) {
         $path = parse_url($resource['url'], PHP_URL_PATH);
         $parts = pathinfo($path);
         $filename = $parts['filename'] . (array_key_exists('extension', $parts) ? '.' . $parts['extension'] : '');
-        Logger::log('@@@ retriever_transform_images url ' . $resource['url'] . ' path ' . $path . ' filename ' . $parts['filename'], Logger::INFO);
+        Logger::info('@@@ retriever_transform_images url ' . $resource['url'] . ' path ' . $path . ' filename ' . $parts['filename']);
         $album = 'Wall Photos';
         $scale = 0;
         $desc = ''; // TODO: store alt text with resource when it's requested so we can fill this in
-        Logger::log('retriever_transform_images storing ' . strlen($data) . ' bytes type ' . $type . ': uid ' . $uid . ' cid ' . $cid . ' rid ' . $rid . ' filename ' . $filename . ' album ' . $album . ' scale ' . $scale . ' desc ' . $desc, Logger::DEBUG);
-        Logger::log('@@@ retriever_transform_images before new Image', Logger::INFO);
+        Logger::debug('retriever_transform_images storing ' . strlen($data) . ' bytes type ' . $type . ': uid ' . $uid . ' cid ' . $cid . ' rid ' . $rid . ' filename ' . $filename . ' album ' . $album . ' scale ' . $scale . ' desc ' . $desc);
+        Logger::info('@@@ retriever_transform_images before new Image');
         $image = new Image($data, $type);
-        Logger::log('@@@ retriever_transform_images after new Image', Logger::INFO);
+        Logger::info('@@@ retriever_transform_images after new Image');
         if (!$image->isValid()) {
-            Logger::log('retriever_transform_images: invalid image found at URL ' . $resource['url'] ' for item ' . $item['id'], Logger::WARNING);
+            Logger::warning('retriever_transform_images: invalid image found at URL ' . $resource['url'] . ' for item ' . $item['id']);
             return;
         }
-        Logger::log('@@@ retriever_transform_images before Photo::store', Logger::INFO);
+        Logger::info('@@@ retriever_transform_images before Photo::store');
         $photo = Photo::store($image, $uid, $cid, $rid, $filename, $album, 0, 0, "", "", "", "", $desc);
-        Logger::log('@@@ retriever_transform_images after Photo::store', Logger::INFO);
+        Logger::info('@@@ retriever_transform_images after Photo::store');
         $new_url = System::baseUrl() . '/photo/' . $rid . '-0.' . $image->getExt();
-        Logger::log('@@@ retriever_transform_images new url ' . $new_url . ' rid ' . $rid . ' ext ' . $image->getExt(), Logger::INFO);
+        Logger::info('@@@ retriever_transform_images new url ' . $new_url . ' rid ' . $rid . ' ext ' . $image->getExt());
         if (!strlen($new_url)) {
-            Logger::log('retriever_transform_images: no replacement URL for image ' . $resource['url'], Logger::WARNING);
+            Logger::warning('retriever_transform_images: no replacement URL for image ' . $resource['url']);
             return;
         }
 
         $content = DBA::selectFirst('item-content', [], ['uri-id' => $uri_id]);
         $body = $content['body'];
-        Logger::log('@@@ retriever_transform_images: found body for uri id ' . $uri_id . ': ' . $body, Logger::INFO);
+        Logger::info('@@@ retriever_transform_images: found body for uri id ' . $uri_id . ': ' . $body);
 
-        Logger::log('retriever_transform_images: replacing ' . $resource['url'] . ' with ' . $new_url . ' in item ' . $item['uri'], Logger::DEBUG);
-        Logger::log('@@@ retriever_transform_images: replacing ' . $resource['url'] . ' with ' . $new_url . ' in body ' . $body, Logger::DEBUG);
+        Logger::debug('retriever_transform_images: replacing ' . $resource['url'] . ' with ' . $new_url . ' in item ' . $item['uri']);
+        Logger::debug('@@@ retriever_transform_images: replacing ' . $resource['url'] . ' with ' . $new_url . ' in body ' . $body);
         $body = str_replace($resource["url"], $new_url, $body);
 
-        Logger::log('@@@ retriever_transform_images: result \"' . $body . '\"', Logger::INFO);
+        Logger::info('@@@ retriever_transform_images: result \"' . $body . '\"');
         DBA::update('item-content', ['body' => $body], ['uri-id' => $uri_id]); //@@@ isn't there a better interface to that?
         //@@@ probably Item::updateContent
         //@@ actually no, Item::update
     } catch (Exception $e) {
-        Logger::log('retriever_transform_images caught exception ' . $e->getMessage(), Logger::INFO);
+        Logger::info('retriever_transform_images caught exception ' . $e->getMessage());
         return;
     }
 }
@@ -805,8 +805,8 @@ function retriever_contact_photo_menu($a, &$args) {
 }
 
 function retriever_post_remote_hook(&$a, &$item) {
-        Logger::log('@@@ 12 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
-    Logger::log('retriever_post_remote_hook: ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id'], Logger::DEBUG);
+    Logger::info('@@@ 12 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
+    Logger::info('retriever_post_remote_hook: ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
 
     $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
     $retriever_rule = get_retriever_rule($item['contact-id'], $item["uid"], false);
@@ -818,7 +818,7 @@ function retriever_post_remote_hook(&$a, &$item) {
             // Convert to HTML and back to take advantage of bbcode's resolution of oembeds.
             $content = DBA::selectFirst('item-content', [], ['uri-id' => $uri_id]);
             $body = HTML::toBBCode(BBCode::convert($content['body']));
-            Logger::log('@@@ retriever_post_remote_hook item uri-id ' . $uri_id . ' body "' . $item['body'] . '" item content body "' . $body . '"', Logger::DEBUG);
+            Logger::debug('@@@ retriever_post_remote_hook item uri-id ' . $uri_id . ' body "' . $item['body'] . '" item content body "' . $body . '"');
             if ($body) {
                 $item['body'] = $body;
                 DBA::update('item-content', ['body' => $body], ['uri-id' => $uri_id]); //@@@ isn't there a better interface to that?
