@@ -650,6 +650,10 @@ function retriever_transform_images($a, &$item, $resource) {
         Logger::log('@@@ retriever_transform_images before new Image', Logger::INFO);
         $image = new Image($data, $type);
         Logger::log('@@@ retriever_transform_images after new Image', Logger::INFO);
+        if (!$image->isValid()) {
+            Logger::log('retriever_transform_images: invalid image found at URL ' . $resource['url'] ' for item ' . $item['id'], Logger::WARNING);
+            return;
+        }
         Logger::log('@@@ retriever_transform_images before Photo::store', Logger::INFO);
         $photo = Photo::store($image, $uid, $cid, $rid, $filename, $album, 0, 0, "", "", "", "", $desc);
         Logger::log('@@@ retriever_transform_images after Photo::store', Logger::INFO);
