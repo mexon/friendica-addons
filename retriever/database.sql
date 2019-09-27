@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `retriever_resource` (
        `data` mediumblob NULL DEFAULT NULL,
        `http-code` smallint(1) unsigned NULL DEFAULT NULL,
        `redirect-url` varchar(800) CHARACTER SET ascii COLLATE ascii_bin NULL DEFAULT NULL,
-       KEY `retriever_resource` ADD INDEX `url` (`url`),
-       KEY `retriever_resource` ADD INDEX `completed` (`completed`),
+       KEY `url` (`url`),
+       KEY `completed` (`completed`),
        PRIMARY KEY (`id`)
 ) DEFAULT CHARSET=utf8 COLLATE=utf8_bin
