@@ -30,7 +30,6 @@ function retriever_install() {
     Addon::registerHook('contact_photo_menu', 'addon/retriever/retriever.php', 'retriever_contact_photo_menu');
     Addon::registerHook('cron', 'addon/retriever/retriever.php', 'retriever_cron');
 
-    $r = q("SELECT `id` FROM `pconfig` WHERE `cat` LIKE 'retriever_%%'");
     if (Config::get('retriever', 'dbversion') == '0.10') {
         q("ALTER TABLE `retriever_resource` MODIFY COLUMN `type` char(255) NULL DEFAULT NULL");
         q("ALTER TABLE `retriever_resource` MODIFY COLUMN `data` mediumblob NULL DEFAULT NULL");
@@ -537,8 +536,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
     Logger::info('@@@ retriever_apply_dom_filter: item id is ' . $item['id'] . ' uri id is ' . $uri_id);
     Logger::debug('retriever_apply_dom_filter: XSLT result \"' . $body . '\"');
-    DBA::update('item-content', ['body' => $body], ['uri-id' => $uri_id]); //@@@ isn't there a better interface to that?
-    //@@@ probably Item::updateContent
+    Item::update(['body' => $body], ['uri-id' => $uri_id]);
 }
 
 function retrieve_images(&$item, $a) {
@@ -673,9 +671,7 @@ function retriever_transform_images($a, &$item, $resource) {
         $body = str_replace($resource["url"], $new_url, $body);
 
         Logger::info('@@@ retriever_transform_images: result \"' . $body . '\"');
-        DBA::update('item-content', ['body' => $body], ['uri-id' => $uri_id]); //@@@ isn't there a better interface to that?
-        //@@@ probably Item::updateContent
-        //@@ actually no, Item::update
+        Item::update(['body' => $body], ['uri-id' => $uri_id]);
     } catch (Exception $e) {
         Logger::info('retriever_transform_images caught exception ' . $e->getMessage());
         return;
@@ -821,7 +817,7 @@ function retriever_post_remote_hook(&$a, &$item) {
             Logger::debug('@@@ retriever_post_remote_hook item uri-id ' . $uri_id . ' body "' . $item['body'] . '" item content body "' . $body . '"');
             if ($body) {
                 $item['body'] = $body;
-                DBA::update('item-content', ['body' => $body], ['uri-id' => $uri_id]); //@@@ isn't there a better interface to that?
+                Item::update(['body' => $body], ['uri-id' => $uri_id]);
             }
         }
         if (PConfig::get($item["uid"], 'retriever', 'all_photos')) {
