@@ -4,7 +4,6 @@
  * Description: Follow the permalink of RSS/Atom feed items and replace the summary with the full content.
  * Version: 1.1
  * Author: Matthew Exon <http://mat.exon.name>
- * Status: Unsupported
  */
 
 use Friendica\Core\Addon;
@@ -53,6 +52,7 @@ function retriever_install() {
         $arr = explode(';', $schema);
         foreach ($arr as $a) {
             $r = q($a);
+            //@@@ check for errors
         }
         Config::set('retriever', 'dbversion', '0.13');
     }
@@ -332,7 +332,6 @@ function apply_retrospective($a, $retriever, $num) {
     $r = q("SELECT * FROM `item` WHERE `contact-id` = %d ORDER BY `received` DESC LIMIT %d",
            intval($retriever['contact-id']), intval($num));
     foreach ($r as $item) {
-        Logger::log('@@@ 3 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item)); //@@@ already know this is wrong
         q('UPDATE `item` SET `visible` = 0 WHERE `id` = %d', $item['id']);
         q('UPDATE `thread` SET `visible` = 0 WHERE `iid` = %d', $item['id']);
         retriever_on_item_insert($a, $retriever, $item);
@@ -343,7 +342,10 @@ function apply_retrospective($a, $retriever, $num) {
 //@@@ need a lock to say something is doing something
 function retriever_on_item_insert($a, $retriever, &$item) {
     Logger::info('@@@ 4 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
-        Logger::info('@@@ retriever_on_item_insert start ' . $item['plink']);
+            foreach ($item as $key => $value) {
+                Logger::info("@@@    $key => $value");
+            }
+    Logger::info('@@@ retriever_on_item_insert start ' . ' plink ' . $item['plink']);
     if (!$retriever || !$retriever['id']) {
         Logger::info('retriever_on_item_insert: No retriever supplied');
         return;
@@ -352,15 +354,29 @@ function retriever_on_item_insert($a, $retriever, &$item) {
         Logger::info('@@@ retriever_on_item_insert: Disabled');
         return;
     }
-    if (array_key_exists('pattern', $retriever["data"]) && $retriever["data"]['pattern']) {
-        $url = preg_replace('/' . $retriever["data"]['pattern'] . '/', $retriever["data"]['replace'], $item['plink']);
-        Logger::debug('retriever_on_item_insert: Changed ' . $item['plink'] . ' to ' . $url);
-    }
-    else {
+    if (array_key_exists('plink', $item)) {
         $url = $item['plink'];
     }
+    else {
+        if (!array_key_exists('uri_id', $item)) {
+            Logger::warning('retriever_on_item_insert: item ' . ' has no plink and no uri-id');
+            // @@@ find an identifier and put it in warning
+            Logger::warning('@@@ retriever_on_item_insert: item has: ' . print_r($item, true));
+            foreach ($item as $key => $value) {
+                Logger::warning("@@@    $key => $value");
+            }
+            return;
+        }
+        $content = DBA::selectFirst('item-content', [], ['uri-id' => $item['uri_id']]);
+        $url = $content['plink'];
+    }
 
-    Logger::debug('@@@ retriever_on_item_insert: about to add_retriever_resource uid ' . $item['uid'] . ' cid ' . $item['contact-id']);
+    if (array_key_exists('pattern', $retriever["data"]) && $retriever["data"]['pattern']) {
+        $url = preg_replace('/' . $retriever["data"]['pattern'] . '/', $retriever["data"]['replace'], $url);
+        Logger::debug('retriever_on_item_insert: Changed ' . $item['plink'] . ' to ' . $url);
+    }
+
+    Logger::debug('@@@ retriever_on_item_insert: about to add_retriever_resource uid ' . $item['uid'] . ' cid ' . $item['contact-id'] . ' url ' . $url);
     $resource = add_retriever_resource($a, $url, $item['uid'], $item['contact-id']);
     $retriever_item_id = add_retriever_item($item, $resource);
 }
