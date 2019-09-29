@@ -147,14 +147,10 @@ function retriever_retrieve_items($max_items, $a) {
         $retrieve_items = $max_items - $retriever_item_count;
     }
     while ($retrieve_items > 0);
-    // @@@ todo: when items add further items (i.e. images), do the new images go round this loop again?
     Logger::debug('retriever_retrieve_items: finished retrieving items');
 }
 
-/* Look for items that are waiting even though the resource has
- * completed.  This usually happens because we've been asked to
- * retrospectively apply a config change.  It could also happen due to
- * a cron job dying or something. */
+// Look for items that are waiting even though the resource has completed.  This shouldn't happen, but is worth cleaning up if it does.
 function retriever_clean_up_completed_resources($max_items, $a) {
     // TODO: figure out how to do this with DBA module
     $r = q('SELECT retriever_resource.`id` as resource, retriever_item.`id` as item FROM retriever_resource, retriever_item, retriever_rule WHERE retriever_item.`finished` = 0 AND retriever_item.`resource` = retriever_resource.`id` AND retriever_resource.`completed` IS NOT NULL AND retriever_item.`contact-id` = retriever_rule.`contact-id` AND retriever_item.`item-uid` = retriever_rule.`uid` LIMIT %d',
@@ -181,13 +177,14 @@ function retriever_clean_up_completed_resources($max_items, $a) {
         }
         $resource = DBA::selectFirst('retriever_resource', [], ['id' => intval($rr['resource'])]);
         retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource, $a);
-        //@@@ next one to do
-        q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d", intval($retriever_item['id']));
+        Logger::info('@@@ retriever_clean_up_completed_resources tried to update id ' . $retriver_item['id'] . ' to finished, better check that it really worked!');
+        DBA::update('retriever_item', ['finished' => 1], ['id' => intval($retriever_item['id'])], ['finished']);
         retriever_check_item_completed($item);
     }
 }
 
 function retriever_tidy() {
+    // TODO: figure out how to do this with DBA module
     q("DELETE FROM retriever_resource WHERE completed IS NOT NULL AND completed < DATE_SUB(now(), INTERVAL 1 WEEK)");
     q("DELETE FROM retriever_resource WHERE completed IS NULL AND created < DATE_SUB(now(), INTERVAL 3 MONTH)");
 
@@ -581,8 +578,6 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
 
 function retrieve_images(&$item, $a) {
     // Note that $item doesn't necessarily contain all the fields you would expect, in particular 'id'
-    $blah_item_class = retriever_class_of_item($item) . ' ' . mat_test($item);
-    Logger::debug('@@@ 7 item class is ' . $blah_item_class);
 
     Logger::debug('@@@ retrieve_images start item '. $item['id'] . ' uri ' . $item['uri'] . ' uri id ' . $item['uri-id'] . ' plink ' . $item['plink'] . ' guid ' . $item['guid']);
     $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
@@ -595,27 +590,21 @@ function retrieve_images(&$item, $a) {
     }
 
     Logger::info('@@@ retrieve_images looking in body "' . $body . '"');
-    // I suspect that matches1 and matches2 are not used any more?
-    $matches1 = array();
-    preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $body, $matches1);
-    $matches2 = array();
-    preg_match_all("/\[img\](.*?)\[\/img\]/ism", $body, $matches2);
-    $matches3 = array();
-    preg_match_all("/\[img\=([^\]]*)\]([^[]*)\[\/img\]/ism", $body, $matches3);
+    // I suspect that the first two are not used any more?
+    preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $item["body"], $matches1);
+    preg_match_all("/\[img\](.*?)\[\/img\]/ism", $item["body"], $matches2);
+    preg_match_all("/\[img\=([^\]]*)\]([^[]*)\[\/img\]/ism", $item["body"], $matches3);
     $matches = array_merge($matches1[3], $matches2[1], $matches3[1]);
     Logger::debug('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
     foreach ($matches as $url) {
         Logger::debug('@@@ retrieve_images: url ' . $url);
         if (strpos($url, get_app()->getBaseUrl()) === FALSE) {
-            Logger::debug('@@@ retrieve_images: it is from somewhere else');
             Logger::debug('@@@ retrieve_images: about to add_retriever_resource uid ' . $item['uid'] . ' cid ' . $item['contact-id']);
             $resource = add_retriever_resource($a, $url, $item['uid'], $item['contact-id'], true);
             if (!$resource['completed']) {
-                Logger::debug('@@@ retrieve_images: do not have it yet, get it later');
                 add_retriever_item($item, $resource);
             }
             else {
-                Logger::debug('@@@ retrieve_images: got it already, transform');
                 retriever_transform_images($a, $item, $resource);
             }
         }
