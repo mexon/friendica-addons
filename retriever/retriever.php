@@ -144,8 +144,6 @@ function retriever_clean_up_completed_resources($max_items, $a) {
     }
     Logger::debug('retriever_clean_up_completed_resources: items waiting even though resource has completed: ' . count($r));
     foreach ($r as $rr) {
-        $resource = DBA::selectFirst('retriever_resource', [], ['id' => intval($rr['resource'])]);
-        Logger::info('@@@ retriever_clean_up_completed_resources did alternate thing resource type ' . $resource['type']);
         $retriever_item = retriever_get_retriever_item($rr['item']);
         if (!DBA::isResult($retriever_item)) {
             Logger::warning('retriever_clean_up_completed_resources: no retriever item with id ' . $rr['item']);
@@ -161,7 +159,7 @@ function retriever_clean_up_completed_resources($max_items, $a) {
             Logger::warning('retriever_clean_up_completed_resources: no retriever for uri ' . $retriever_item['item-uri'] . ' uid ' . $retriever_item['uid'] . ' ' . $retriever_item['contact-id']);
             continue;
         }
-        Logger::info('@@@ retriever_clean_up_completed_resources: about to retriever_apply_completed_resource_to_item');
+        $resource = DBA::selectFirst('retriever_resource', [], ['id' => intval($rr['resource'])]);
         retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource, $a);
         q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d", intval($retriever_item['id']));
         retriever_check_item_completed($item);
