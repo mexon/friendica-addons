@@ -51,8 +51,10 @@ function retriever_install() {
         $schema = file_get_contents(dirname(__file__).'/database.sql');
         $arr = explode(';', $schema);
         foreach ($arr as $a) {
-            $r = q($a);
-            //@@@ check for errors
+            if (!DBA::e($a)) {
+                Logger::warning('Unable to create database table: ' . DBA::errorMessage());
+                return;
+            }
         }
         Config::set('retriever', 'dbversion', '0.13');
     }
@@ -142,7 +144,8 @@ function retriever_clean_up_completed_resources($max_items, $a) {
     }
     Logger::debug('retriever_clean_up_completed_resources: items waiting even though resource has completed: ' . count($r));
     foreach ($r as $rr) {
-        $resource = q("SELECT * FROM retriever_resource WHERE `id` = %d", $rr['resource']);
+        $resource = DBA::selectFirst('retriever_resource', [], ['id' => intval($rr['resource'])]);
+        Logger::info('@@@ retriever_clean_up_completed_resources did alternate thing resource type ' . $resource['type']);
         $retriever_item = retriever_get_retriever_item($rr['item']);
         if (!DBA::isResult($retriever_item)) {
             Logger::warning('retriever_clean_up_completed_resources: no retriever item with id ' . $rr['item']);
@@ -159,7 +162,7 @@ function retriever_clean_up_completed_resources($max_items, $a) {
             continue;
         }
         Logger::info('@@@ retriever_clean_up_completed_resources: about to retriever_apply_completed_resource_to_item');
-        retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource[0], $a);
+        retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource, $a);
         q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d", intval($retriever_item['id']));
         retriever_check_item_completed($item);
     }
