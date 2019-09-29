@@ -47,7 +47,10 @@ function retriever_install() {
         q("ALTER TABLE `retriever_resource` ADD COLUMN `item-uid` int(10) unsigned NOT NULL DEFAULT '0' AFTER `id`");
         Config::set('retriever', 'dbversion', '0.13');
     }
-    if (Config::get('retriever', 'dbversion') != '0.13') {
+    if (Config::get('retriever', 'dbversion') == '0.13') {
+        Config::set('retriever', 'downloads_per_cron', '100');
+    }
+    if (Config::get('retriever', 'dbversion') != '0.14') {
         $schema = file_get_contents(dirname(__file__).'/database.sql');
         $arr = explode(';', $schema);
         foreach ($arr as $a) {
@@ -56,7 +59,8 @@ function retriever_install() {
                 return;
             }
         }
-        Config::set('retriever', 'dbversion', '0.13');
+        Config::set('retriever', 'downloads_per_cron', '100');
+        Config::set('retriever', 'dbversion', '0.14');
     }
 }
 
@@ -72,20 +76,37 @@ function retriever_uninstall() {
 
 function retriever_module() {}
 
+function retriever_addon_admin(&$a, &$o) {
+    $downloads_per_cron = Config::get('retriever', 'downloads_per_cron');
+    $template = Renderer::getMarkupTemplate('admin.tpl', 'addon/retriever/');
+    $config = ['downloads_per_cron',
+            L10n::t('Downloads per Cron'),
+            $downloads_per_cron,
+            L10n::t('Maximum number of downloads to attempt during each run of the cron job.')];
+    $o .= Renderer::replaceMacros($template, [
+                 '$downloads_per_cron' => $config,
+                 '$submit' => L10n::t('Save Settings')]);
+}
+
+function retriever_addon_admin_post ($a) {
+    if (!empty($_POST['downloads_per_cron'])) {
+        Config::set('retriever', 'downloads_per_cron', $_POST['downloads_per_cron']);
+    }
+}
+
 function retriever_cron($a, $b) {
-    // 100 is a nice sane number.  Maybe this should be configurable. @@@
+    $downloads_per_cron = Config::get('retriever', 'downloads_per_cron');
 
-    // Do this first, otherwise it can interfere with retreiver_retrieve_items
-    retriever_clean_up_completed_resources(100, $a);
+    // Do this first, otherwise it can interfere with retriever_retrieve_items
+    retriever_clean_up_completed_resources($downloads_per_cron, $a);
 
-    retriever_retrieve_items(100, $a);
+    retriever_retrieve_items($downloads_per_cron, $a);
     retriever_tidy();
 }
 
 $retriever_item_count = 0;
 
 function retriever_retrieve_items($max_items, $a) {
-    Logger::info('@@@ retriever_retrieve_items');
     global $retriever_item_count;
 
     $retriever_schedule = array(array(1,'minute'),
@@ -108,8 +129,7 @@ function retriever_retrieve_items($max_items, $a) {
     $retrieve_items = $max_items - $retriever_item_count;
     Logger::debug('retriever_retrieve_items: asked for maximum ' . $max_items . ', already retrieved ' . $retriever_item_count . ', retrieve ' . $retrieve_items);
     do {
-        Logger::info('@@@ retriever_retrieve_items loop max ' . $max_items . ' count ' . $retriever_item_count);
-        Logger::info("@@@ SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR " . implode($schedule_clauses, ' OR ') . ") ORDER BY `last-try` ASC LIMIT " . $retrieve_items);
+        // TODO: figure out how to do this with DBA module
         $retriever_resources = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
                DBA::escape(implode($schedule_clauses, ' OR ')),
                intval($retrieve_items));
@@ -121,7 +141,6 @@ function retriever_retrieve_items($max_items, $a) {
         }
         Logger::debug('retriever_retrieve_items: found ' . count($retriever_resources) . ' waiting resources in database');
         foreach ($retriever_resources as $retriever_resource) {
-            Logger::info('@@@ need to get the retriever config here cid ' . $retriever_resource['contact-id'] . ' uid ' . $retriever_resource['item-uid']);
             retrieve_resource($retriever_resource);
             $retriever_item_count++;
         }
@@ -129,7 +148,7 @@ function retriever_retrieve_items($max_items, $a) {
     }
     while ($retrieve_items > 0);
     // @@@ todo: when items add further items (i.e. images), do the new images go round this loop again?
-    Logger::info('@@@ retriever_retrieve_items: finished retrieving items');
+    Logger::debug('retriever_retrieve_items: finished retrieving items');
 }
 
 /* Look for items that are waiting even though the resource has
@@ -137,7 +156,8 @@ function retriever_retrieve_items($max_items, $a) {
  * retrospectively apply a config change.  It could also happen due to
  * a cron job dying or something. */
 function retriever_clean_up_completed_resources($max_items, $a) {
-    $r = q("SELECT retriever_resource.`id` as resource, retriever_item.`id` as item FROM retriever_resource, retriever_item, retriever_rule WHERE retriever_item.`finished` = 0 AND retriever_item.`resource` = retriever_resource.`id` AND retriever_resource.`completed` IS NOT NULL AND retriever_item.`contact-id` = retriever_rule.`contact-id` AND retriever_item.`item-uid` = retriever_rule.`uid` LIMIT %d",
+    // TODO: figure out how to do this with DBA module
+    $r = q('SELECT retriever_resource.`id` as resource, retriever_item.`id` as item FROM retriever_resource, retriever_item, retriever_rule WHERE retriever_item.`finished` = 0 AND retriever_item.`resource` = retriever_resource.`id` AND retriever_resource.`completed` IS NOT NULL AND retriever_item.`contact-id` = retriever_rule.`contact-id` AND retriever_item.`item-uid` = retriever_rule.`uid` LIMIT %d',
            intval($max_items));
     if (!$r) {
         $r = array();
@@ -161,6 +181,7 @@ function retriever_clean_up_completed_resources($max_items, $a) {
         }
         $resource = DBA::selectFirst('retriever_resource', [], ['id' => intval($rr['resource'])]);
         retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource, $a);
+        //@@@ next one to do
         q("UPDATE `retriever_item` SET `finished` = 1 WHERE id = %d", intval($retriever_item['id']));
         retriever_check_item_completed($item);
     }
@@ -208,8 +229,10 @@ function retrieve_resource($resource) {
         Logger::debug('retrieve_resource: ' . ($resource['num-tries'] + 1) . ' attempt at resource ' . $resource['id'] . ' ' . $resource['url']);
         $redirects = 0;
         $cookiejar = '';
+        Logger::debug('@@@ retrieve_resource storecookies ' . $retriever_rule['storecookies']);
         if (array_key_exists('storecookies', $retriever_rule) && $retriever_rule['storecookies']) {
             $cookiejar = tempnam(get_temppath(), 'cookiejar-retriever-');
+            Logger::debug('@@@ retrieve_resource cookie file ' . $cookiejar . ' content ' . $retriever_rule['cookiedata']);
             file_put_contents($cookiejar, $retriever_rule['cookiedata']);
         }
         $fetch_result = Network::fetchUrlFull($resource['url'], $resource['binary'], $redirects, '', $cookiejar);
@@ -218,7 +241,7 @@ function retrieve_resource($resource) {
             Logger::debug('@@@ retriever_resource update cookie ' . json_encode($retriever_rule['data'] . ' id ' . $retriever_rule['id']));
             q("UPDATE `retriever_rule` SET `data`='%s' WHERE `id` = %d",
               DBA::escape(json_encode($retriever_rule['data'])), intval($retriever_rule["id"]));
-            unlink($cookiejar);
+            /* unlink($cookiejar); */ //@@@
         }
         $resource['data'] = $fetch_result->getBody();
         $resource['http-code'] = $fetch_result->getReturnCode();
@@ -350,8 +373,8 @@ function apply_retrospective($a, $retriever, $num) {
     }
 }
 
-//@@@ make this trigger a retriever immediately somehow
-//@@@ need a lock to say something is doing something
+// TODO: Currently this waits until the next cron before actually downloading.  Should do it immediately.
+// TODO: This queries then inserts.  It should use some kind of lock to avoid requesting the same resource twice.
 function retriever_on_item_insert($a, $retriever, &$item) {
     Logger::info('@@@ retriever_on_item_insert start plink ' . $item['plink'] . ' id ' . $item['id']);
     if (!$retriever || !$retriever['id']) {
@@ -397,6 +420,7 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
         fclose($fp);
 
         $url = 'md5://' . hash('md5', $url);
+        //@@@ fix this
         $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s' AND `item-uid` = %d AND `contact-id` = %d", DBA::escape($url), intval($uid), intval($cid));
         $resource = $r[0];
         if (count($r)) {
@@ -405,6 +429,7 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
         }
 
         Logger::debug('retrieve_resource: got data URL type ' . $resource['type']);
+        //@@@ fix this
         q("INSERT INTO `retriever_resource` (`item-uid`, `contact-id`, `type`, `binary`, `url`, `completed`, `data`) " .
           "VALUES (%d, %d, '%s', %d, '%s', now(), '%s')",
           intval($uid),
@@ -425,6 +450,7 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
         Logger::warning('add_retriever_resource: URL is longer than 800 characters');
     }
 
+    //@@@ fix this
     $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s' AND `item-uid` = %d AND `contact-id` = %d", DBA::escape($url), intval($uid), intval($cid));
     if (count($r)) {
         Logger::debug('add_retriever_resource: Resource ' . $url . ' uid ' . $uid . ' cid ' . $cid . ' already requested');
@@ -554,24 +580,29 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
 }
 
 function retrieve_images(&$item, $a) {
+    // Note that $item doesn't necessarily contain all the fields you would expect, in particular 'id'
     $blah_item_class = retriever_class_of_item($item) . ' ' . mat_test($item);
     Logger::debug('@@@ 7 item class is ' . $blah_item_class);
 
+    Logger::debug('@@@ retrieve_images start item '. $item['id'] . ' uri ' . $item['uri'] . ' uri id ' . $item['uri-id'] . ' plink ' . $item['plink'] . ' guid ' . $item['guid']);
     $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
 
-    $content = DBA::selectFirst('item-content', [], ['uri-id' => $uri_id]);
+    $content = DBA::selectFirst('item-content', ['body'], ['uri-id' => $uri_id]);
     $body = $content['body'];
     if (!strlen($body)) {
         Logger::warning('retrieve_images: no body for uri-id ' . $uri_id);
         return;
     }
 
-    Logger::info('@@@ retrieve_images start looking in body "' . $body . '"');
+    Logger::info('@@@ retrieve_images looking in body "' . $body . '"');
+    // I suspect that matches1 and matches2 are not used any more?
     $matches1 = array();
     preg_match_all("/\[img\=([0-9]*)x([0-9]*)\](.*?)\[\/img\]/ism", $body, $matches1);
     $matches2 = array();
     preg_match_all("/\[img\](.*?)\[\/img\]/ism", $body, $matches2);
-    $matches = array_merge($matches1[3], $matches2[1]);
+    $matches3 = array();
+    preg_match_all("/\[img\=([^\]]*)\]([^[]*)\[\/img\]/ism", $body, $matches3);
+    $matches = array_merge($matches1[3], $matches2[1], $matches3[1]);
     Logger::debug('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
     foreach ($matches as $url) {
         Logger::debug('@@@ retrieve_images: url ' . $url);
@@ -615,7 +646,6 @@ function retriever_check_item_completed(&$item)
 }
 
 function retriever_apply_completed_resource_to_item($retriever, &$item, $resource, $a) {
-    Logger::debug('@@@ 10 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
     Logger::debug('retriever_apply_completed_resource_to_item: retriever ' . ($retriever ? $retriever['id'] : 'none') . ' resource ' . $resource['url'] . ' plink ' . $item['plink']);
     if (strpos($resource['type'], 'image') !== false) {
         Logger::info('@@@ retriever_apply_completed_resource_to_item this is an image must transform');
@@ -676,7 +706,7 @@ function retriever_transform_images($a, &$item, $resource) {
             return;
         }
 
-        $content = DBA::selectFirst('item-content', [], ['uri-id' => $uri_id]);
+        $content = DBA::selectFirst('item-content', ['body'], ['uri-id' => $uri_id]);
         $body = $content['body'];
         Logger::info('@@@ retriever_transform_images: found body for uri id ' . $uri_id . ': ' . $body);
 
