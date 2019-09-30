@@ -308,9 +308,8 @@ function retriever_get_item($retriever_item) {
     Logger::info('@@@ retriever_get_item uri ' . $retriever_item['item-uri'] . ' uid ' . $retriever_item['item-uid'] . ' cid ' . $retriever_item['contact-id']);
     try {//@@@ not necessary
         $item = Item::selectFirst([], ['uri' => $retriever_item['item-uri'], 'uid' => intval($retriever_item['item-uid'])]);
-        Logger::log('@@@ 1 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
         if (!DBA::isResult($item)) {
-            Logger::log('retriever_get_item: no item found for uri ' . $retriever_item['item-uri']);
+            Logger::warning('retriever_get_item: no item found for uri ' . $retriever_item['item-uri']);
             return;
         }
         Logger::info('@@@ retriever_get_item: yay item found for uri ' . $retriever_item['item-uri'] . ' guid ' . $item['guid'] . ' plink ' . $item['plink']);
@@ -329,9 +328,9 @@ function retriever_item_completed($retriever_item_id, $resource, $a) {
         return;
     }
     $item = retriever_get_item($retriever_item);
-        Logger::log('@@@ 2 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
+        Logger::info('@@@ 2 item class is ' . retriever_class_of_item($item) . ' ' . mat_test($item));
     if (!$item) {
-        Logger::log('retriever_item_completed: no item ' . $retriever_item['item-uri']);
+        Logger::warning('retriever_item_completed: no item ' . $retriever_item['item-uri']);
         return;
     }
     // Note: the retriever might be null.  Doesn't matter.
@@ -348,21 +347,17 @@ function retriever_resource_completed($resource, $a) {
     Logger::debug('retriever_resource_completed: id ' . $resource['id'] . ' url ' . $resource['url']);
     $r = q("SELECT `id` FROM `retriever_item` WHERE `resource` = %d", $resource['id']);
     foreach (DBA::select('retriever_item', ['id'], ['resource' => intval($resource['id'])]) as $retriever_item) {
-        Logger::debug('@@@ retriever_resource_completed got item id ' . $retriever_item['id']);
         retriever_item_completed($retriever_item['id'], $resource, $a);
     }
 }
 
 function apply_retrospective($a, $retriever, $num) {
-    Logger::info('@@@ apply_retrospective');
     $r = q("SELECT * FROM `item` WHERE `contact-id` = %d ORDER BY `received` DESC LIMIT %d",
            intval($retriever['contact-id']), intval($num));
     foreach ($r as $item) {
-        Logger::info('@@@ apply_retrospective item ' . $item['id']);
         q('UPDATE `item` SET `visible` = 0 WHERE `id` = %d', $item['id']);
         q('UPDATE `thread` SET `visible` = 0 WHERE `iid` = %d', $item['id']);
         foreach (DBA::select('retriever_item', [], ['item-uri' => $item['uri'], 'item-uid' => $item['uid'], 'contact-id' => $item['contact-id']]) as $retriever_item) {
-            Logger::info('@@@ about to delete retriever_item id ' . $retriever_item['id'] . ' uri ' . $item['uri'] . ' uid ' . $item['uid'] . ' contact ' . $item['contact-id']);
             DBA::delete('retriever_resource', ['id' => $retriever_item['resource']]);
             DBA::delete('retriever_item', ['id' => $retriever_item['id']]);
         }
@@ -378,7 +373,7 @@ function retriever_on_item_insert($a, $retriever, &$item) {
         Logger::info('retriever_on_item_insert: No retriever supplied');
         return;
     }
-    if (!$retriever['data']['enable'] == "on") {
+    if (!array_key_exists('enable', $retriever['data']) || !$retriever['data']['enable'] == "on") {
         Logger::info('@@@ retriever_on_item_insert: Disabled');
         return;
     }
