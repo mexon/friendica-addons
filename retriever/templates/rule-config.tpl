@@ -41,6 +41,25 @@ function retriever_remove_row(id, number)
     tbody.removeChild(row);
 }
 
+function retriever_toggle_url_block()
+{
+    var pattern = document.querySelector("#id_retriever_pattern").parentNode;
+    if (document.querySelector("#id_retriever_modurl").checked) {
+        pattern.style.display = "block";
+    }
+    else {
+        pattern.style.display = "none";
+    }
+
+    var replace = document.querySelector("#id_retriever_replace").parentNode;
+    if (document.querySelector("#id_retriever_modurl").checked) {
+        replace.style.display = "block";
+    }
+    else {
+        replace.style.display = "none";
+    }
+}
+
 function retriever_toggle_cookiedata_block()
 {
     var div = document.querySelector("#id_retriever_cookiedata").parentNode;
@@ -53,6 +72,8 @@ function retriever_toggle_cookiedata_block()
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    retriever_toggle_url_block();
+    document.querySelector("#id_retriever_modurl").addEventListener('change', retriever_toggle_url_block, false);
     retriever_toggle_cookiedata_block();
     document.querySelector("#id_retriever_storecookies").addEventListener('change', retriever_toggle_cookiedata_block, false);
 }, false);
@@ -62,10 +83,6 @@ document.addEventListener('DOMContentLoaded', function() {
   <form method="post">
     <input type="hidden" name="id" value="{{$id}}">
 {{include file="field_checkbox.tpl" field=$enable}}
-{{include file="field_input.tpl" field=$pattern}}
-{{include file="field_input.tpl" field=$replace}}
-{{include file="field_checkbox.tpl" field=$images}}
-{{include file="field_input.tpl" field=$retrospective}}
     <h3>{{$include_t}}:</h3>
     <div>
       <table>
@@ -98,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div>
       <table>
         <thead>
-          <tr><th>Tag</th><th>Attribute</th><th>Value</th></tr>
+          <tr><th>{{$tag_t}}</th><th>{{$attribute_t}}</th><th>{{$value_t}}</th></tr>
         </thead>
         <tbody id="retriever-exclude">
 {{if $exclude}}
@@ -122,9 +139,14 @@ document.addEventListener('DOMContentLoaded', function() {
       </table>
       <input type="button" onclick="retriever_add_row('retriever-exclude')" value="{{$add_t}}">
     </div>
+{{include file="field_checkbox.tpl" field=$modurl}}
+{{include file="field_input.tpl" field=$pattern}}
+{{include file="field_input.tpl" field=$replace}}
+{{include file="field_checkbox.tpl" field=$images}}
 {{include file="field_textarea.tpl" field=$customxslt}}
 {{include file="field_checkbox.tpl" field=$storecookies}}
 {{include file="field_textarea.tpl" field=$cookiedata}}
+{{include file="field_input.tpl" field=$retrospective}}
     <input type="submit" size="70" value="{{$submit_t}}">
   </form>
 </div>
