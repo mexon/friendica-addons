@@ -127,8 +127,9 @@ function retriever_retrieve_items($max_items, $a) {
     }
 
     $retrieve_items = $max_items - $retriever_item_count;
-    Logger::debug('retriever_retrieve_items: asked for maximum ' . $max_items . ', already retrieved ' . $retriever_item_count . ', retrieve ' . $retrieve_items);
     do {
+        //@@@ check this looks sane after moving inside the loop
+        Logger::debug('retriever_retrieve_items: asked for maximum ' . $max_items . ', already retrieved ' . $retriever_item_count . ', retrieve ' . $retrieve_items);
         // TODO: figure out how to do this with DBA module
         $retriever_resources = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
                DBA::escape(implode($schedule_clauses, ' OR ')),
@@ -178,7 +179,7 @@ function retriever_clean_up_completed_resources($max_items, $a) {
         $resource = DBA::selectFirst('retriever_resource', [], ['id' => intval($rr['resource'])]);
         retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource, $a);
         Logger::info('@@@ retriever_clean_up_completed_resources tried to update id ' . $retriever_item['id'] . ' to finished, better check that it really worked!');
-        DBA::update('retriever_item', ['finished' => 1], ['id' => intval($retriever_item['id'])], ['finished']);
+        DBA::update('retriever_item', ['finished' => 1], ['id' => intval($retriever_item['id'])], ['finished' => 0]);
         retriever_check_item_completed($item);
     }
 }
@@ -232,7 +233,7 @@ function retrieve_resource($resource) {
         $fetch_result = Network::fetchUrlFull($resource['url'], $resource['binary'], $redirects, '', $cookiejar);
         if (array_key_exists('storecookies', $rule_data) && $rule_data['storecookies']) {
             $retriever_rule['data']['cookiedata'] = file_get_contents($cookiejar);
-            DBA::update('retriever_rule', ['data' => json_encode($retriever_rule['data'])], ['id' => intval($retriever_rule["id"])]);
+            DBA::update('retriever_rule', ['data' => json_encode($retriever_rule['data'])], ['id' => intval($retriever_rule["id"])], $retriever_rule);
             //@@@ check the update worked
             unlink($cookiejar);
         }
@@ -305,24 +306,22 @@ function retriever_item_completed($retriever_item_id, $resource, $a) {
 
     retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource, $a);
 
-    DBA::update('retriever_item', ['finished' => 1], ['id' => intval($retriever_item['id'])], ['finished']);
+    DBA::update('retriever_item', ['finished' => 1], ['id' => intval($retriever_item['id'])], ['finished' => 0]);
     retriever_check_item_completed($item);
 }
 
 function retriever_resource_completed($resource, $a) {
     Logger::debug('retriever_resource_completed: id ' . $resource['id'] . ' url ' . $resource['url']);
-    foreach (DBA::select('retriever_item', ['id'], ['resource' => intval($resource['id'])]) as $retriever_item) {
-        retriever_item_completed($retriever_item['id'], $resource, $a);
+    foreach (DBA::selectToArray('retriever_item', ['id'], ['resource' => intval($resource['id'])]) as $retriever_item) {
+        retriever_item_completed($retriever_item['id'], $resource, $a); //@@@ args in wrong order
     }
 }
 
 function apply_retrospective($a, $retriever, $num) {
-    Logger::debug('@@@ apply_retrospective');
-    foreach (Item::select([], ['contact-id' => intval($retriever['contact-id'])], ['order' => ['received' => true], 'limit' => $num]) as $item) {
-        Logger::debug('@@@ apply_retrospective got item id ' . $item['id'] . ' uri ' . $item['uri']);
+    foreach (Item::selectToArray([], ['contact-id' => intval($retriever['contact-id'])], ['order' => ['received' => true], 'limit' => $num]) as $item) {
         Item::update(['visible' => 0], ['id' => intval($item['id'])]);
         //@@@ check that this works
-        foreach (DBA::select('retriever_item', [], ['item-uri' => $item['uri'], 'item-uid' => $item['uid'], 'contact-id' => $item['contact-id']]) as $retriever_item) {
+        foreach (DBA::selectToArray('retriever_item', [], ['item-uri' => $item['uri'], 'item-uid' => $item['uid'], 'contact-id' => $item['contact-id']]) as $retriever_item) {
             DBA::delete('retriever_resource', ['id' => $retriever_item['resource']]);
             DBA::delete('retriever_item', ['id' => $retriever_item['id']]);
         }
@@ -593,7 +592,7 @@ function retrieve_images(&$item, $a) {
 
 function retriever_check_item_completed(&$item)
 {
-    // TODO: figure out how to do this with DBA module
+    // TODO: figure out how to do this with DBA module //@@@ selectFirst works
     $r = q('SELECT count(*) FROM retriever_item WHERE `item-uri` = "%s" ' .
            'AND `item-uid` = %d AND `contact-id` = %d AND `finished` = 0',
            DBA::escape($item['uri']), intval($item['uid']),
@@ -604,7 +603,7 @@ function retriever_check_item_completed(&$item)
     $item['visible'] = $waiting ? 0 : 1;
     if (array_key_exists('id', $item) && ($item['id'] > 0) && ($old_visible != $item['visible'])) {
         Logger::debug('retriever_check_item_completed: changing visible flag to ' . $item['visible']);
-        Item::update(['visible' => 0], ['id' => intval($item['id'])]);
+        Item::update(['visible' => $item['visible']], ['id' => intval($item['id'])]);
     }
 }
 
@@ -615,6 +614,8 @@ function retriever_apply_completed_resource_to_item($retriever, &$item, $resourc
         retriever_transform_images($a, $item, $resource);
     }
     if (!$retriever) {
+        //@@@ log line here: how normal is this?
+        Logger::info('@@@ retriever_apply_completed_resource_to_item no retriever');
         return;
     }
     if ((strpos($resource['type'], 'html') !== false) ||
@@ -674,12 +675,11 @@ function retriever_content($a) {
         return;
     }
     if ($a->argv[1] === 'help') {
-        //@@@ fix me
-        $feeds = q("SELECT `id`, `name`, `thumb` FROM contact WHERE `uid` = %d AND `network` = 'feed'",
-                   local_user());
-        foreach ($feeds as $k=>$v) {
-            $feeds[$k]['url'] = $a->getBaseUrl() . '/retriever/' . $v['id'];
+        $feeds = DBA::selectToArray('contact', ['id', 'name', 'thumb'], ['uid' => local_user(), 'network' => 'feed']);
+        for ($i = 0; $i < count($feeds); ++$i) {
+            $feeds[$i]['url'] = $a->getBaseUrl() . '/retriever/' . $feeds[$i]['id'];
         }
+        //@@@ this is broken
         $template = Renderer::getMarkupTemplate('/help.tpl', 'addon/retriever/');
         $a->page['content'] .= Renderer::replaceMacros($template, array(
                                                   '$config' => $a->getBaseUrl() . '/settings/addon',
