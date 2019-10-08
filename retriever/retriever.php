@@ -262,10 +262,8 @@ function retrieve_resource($resource) {
 
 function get_retriever_rule($contact_id, $uid, $create = false) {
     $retriever_rule = DBA::selectFirst('retriever_rule', [], ['contact-id' => intval($contact_id), 'uid' => intval($uid)]);
-    //@@@ check that this worked
     if ($retriever_rule) {
         $retriever_rule['data'] = json_decode($retriever_rule['data'], true);
-        Logger::info('@@@ get_retriever_rule returning an actual thing');
         return $retriever_rule;
     }
     if ($create) {
@@ -288,7 +286,7 @@ function retriever_get_item($retriever_item) {
     return $item;
 }
 
-function retriever_item_completed($retriever_item_id, $resource, $a) {
+function retriever_item_completed($a, $retriever_item_id, $resource) {
     Logger::debug('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url']);
 
     $retriever_item = retriever_get_retriever_item($retriever_item_id);
@@ -313,7 +311,7 @@ function retriever_item_completed($retriever_item_id, $resource, $a) {
 function retriever_resource_completed($resource, $a) {
     Logger::debug('retriever_resource_completed: id ' . $resource['id'] . ' url ' . $resource['url']);
     foreach (DBA::selectToArray('retriever_item', ['id'], ['resource' => intval($resource['id'])]) as $retriever_item) {
-        retriever_item_completed($retriever_item['id'], $resource, $a); //@@@ args in wrong order
+        retriever_item_completed($a, $retriever_item['id'], $resource);
     }
 }
 
@@ -358,6 +356,7 @@ function retriever_on_item_insert($a, $retriever, &$item) {
     }
 
     $resource = add_retriever_resource($a, $url, $item['uid'], $item['contact-id']);
+    Logger::debug('@@@ check this makes sense: ' . $resource['id'] . ' url ' . $resource['url']);
     $retriever_item_id = add_retriever_item($item, $resource);
 }
 
@@ -374,7 +373,6 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
 
         $url = 'md5://' . hash('md5', $url);
         if (DBA::selectFirst('retriever_resource', [], ['url' => $url, 'item-uid' => intval($uid), 'contact-id' => intval($cid)])) {
-            //@@@ test that this really happens - it should sometimes
             Logger::debug('add_retriever_resource: Resource ' . $url . ' already requested');
             return $resource;
         }
@@ -390,10 +388,7 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
           intval($binary ? 1 : 0),
           DBA::escape($url),
           DBA::escape($data));
-    //@@@ fix this
-        $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", DBA::escape($url));
-        $resource = $r[0];
-        if (count($r)) {
+        if (DBA::selectFirst('retriever_resource', [], ['url' => $url])) {
             retriever_resource_completed($resource, $a);
         }
         return $resource;
@@ -403,19 +398,15 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
         Logger::warning('add_retriever_resource: URL is longer than 800 characters');
     }
 
-    //@@@ fix this
-    $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s' AND `item-uid` = %d AND `contact-id` = %d", DBA::escape($url), intval($uid), intval($cid));
-    if (count($r)) {
+    if (DBA::selectFirst('retriever_resource', [], ['url' => $url, 'item-uid' => intval($uid), 'contact-id' => intval($cid)])) {
         Logger::debug('add_retriever_resource: Resource ' . $url . ' uid ' . $uid . ' cid ' . $cid . ' already requested');
         return $r[0];
     }
 
-    //@@@ fix this
-    q("INSERT INTO `retriever_resource` (`item-uid`, `contact-id`, `binary`, `url`) " .
-      "VALUES (%d, %d, %d, '%s')", intval($uid), intval($cid), intval($binary ? 1 : 0), DBA::escape($url));
-    //@@@ fix this
-    $r = q("SELECT * FROM `retriever_resource` WHERE `url` = '%s'", DBA::escape($url));
-    return $r[0];
+    DBA::insert('retriever_rule', ['item-uid' => intval($uid), 'contact-id' => intval($cid), 'binary' => ($binary ? 1 : 0), 'url' => $url]);
+    Logge::debug('@@@ add_retriever_resource inserting resource ' . $url . ' uid ' . $uid . ' cid ' . $cid);
+    //@@@ check the insert worked
+    return DBA::selectFirst('retriever_resource', [], ['url' => $url, 'item-uid' => intval($uid), 'contact-id' => intval($cid)]);
 }
 
 function add_retriever_item(&$item, $resource) {
@@ -557,7 +548,7 @@ function retriever_globalise_urls($doc, $resource) {
     return $doc;
 }
 
-function retrieve_images(&$item, $a) {
+function retrieve_images($a, &$item) {
     // Note that $item doesn't necessarily contain all the fields you would expect, in particular 'id'
     //@@@ doe sit contain uri-id? //@@@ it definitely does not
 
@@ -580,6 +571,7 @@ function retrieve_images(&$item, $a) {
     foreach ($matches as $url) {
         if (strpos($url, get_app()->getBaseUrl()) === FALSE) {
             $resource = add_retriever_resource($a, $url, $item['uid'], $item['contact-id'], true);
+    Logger::debug('@@@ check this makes sense 2: ' . $resource['id'] . ' url ' . $resource['url']);
             if (!$resource['completed']) {
                 add_retriever_item($item, $resource);
             }
@@ -592,6 +584,8 @@ function retrieve_images(&$item, $a) {
 
 function retriever_check_item_completed(&$item)
 {
+    $waiting = DBA::selectFirst('retriever_item', [], ['item-uri' => $item['uri'], 'item-uid' => intval($item['uid']), 'contact-id' => intval($item['contact-id']), 'finished' => 0]);
+    Logger::debug('@@@ waiting is ' . $waiting);
     // TODO: figure out how to do this with DBA module //@@@ selectFirst works
     $r = q('SELECT count(*) FROM retriever_item WHERE `item-uri` = "%s" ' .
            'AND `item-uid` = %d AND `contact-id` = %d AND `finished` = 0',
@@ -610,19 +604,17 @@ function retriever_check_item_completed(&$item)
 function retriever_apply_completed_resource_to_item($retriever, &$item, $resource, $a) {
     Logger::debug('retriever_apply_completed_resource_to_item: retriever ' . ($retriever ? $retriever['id'] : 'none') . ' resource ' . $resource['url'] . ' plink ' . $item['plink']);
     if (strpos($resource['type'], 'image') !== false) {
-        Logger::info('@@@ retriever_apply_completed_resource_to_item this is an image must transform');
         retriever_transform_images($a, $item, $resource);
     }
     if (!$retriever) {
-        //@@@ log line here: how normal is this?
-        Logger::info('@@@ retriever_apply_completed_resource_to_item no retriever');
+        Logger::warning('retriever_apply_completed_resource_to_item: no retriever');
         return;
     }
     if ((strpos($resource['type'], 'html') !== false) ||
         (strpos($resource['type'], 'xml') !== false)) {
         retriever_apply_dom_filter($retriever, $item, $resource);
         if ($retriever['data']['images'] ) {
-            retrieve_images($item, $a);
+            retrieve_images($a, $item);
         }
     }
 }
@@ -716,9 +708,8 @@ function retriever_content($a) {
                     unset($retriever_rule['data']['exclude'][$k]);
                 }
             }
-            //@@@ fix me
-            q("UPDATE `retriever_rule` SET `data`='%s' WHERE `id` = %d",
-              DBA::escape(json_encode($retriever_rule['data'])), intval($retriever_rule["id"]));
+            //@@@ check that this works
+            DBA::update('retriever_rule', ['data' => json_encode($retriever_rule['data'])], ['id' => intval($retriever_rule["id"])], ['data' => '']);
             $a->page['content'] .= "<p><b>Settings Updated";
             if (!empty($_POST["retriever_retrospective"])) {
                 apply_retrospective($a, $retriever_rule, $_POST["retriever_retrospective"]);
@@ -821,7 +812,7 @@ function retriever_post_remote_hook(&$a, &$item) {
             }
         }
         if (PConfig::get($item["uid"], 'retriever', 'all_photos')) {
-            retrieve_images($item, $a); //@@@ backwards
+            retrieve_images($a, $item);
         }
     }
     retriever_check_item_completed($item);
