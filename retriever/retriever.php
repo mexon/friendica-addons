@@ -332,7 +332,6 @@ function apply_retrospective($retriever, $num) {
 //@@@ I think the above statement is wrong.  Check!
 // TODO: This queries then inserts.  It should use some kind of lock to avoid requesting the same resource twice.
 function retriever_on_item_insert($retriever, &$item) {
-    Logger::debug('@@@ retriever_on_item_insert start');
     if (!$retriever || !$retriever['id']) {
         Logger::info('retriever_on_item_insert: No retriever supplied');
         return;
@@ -359,8 +358,6 @@ function retriever_on_item_insert($retriever, &$item) {
     }
 
     $resource = add_retriever_resource($url, $item['uid'], $item['contact-id']);
-    Logger::debug('@@@ check this makes sense: ' . $resource['id'] . ' url ' . $resource['url']);
-    Logger::debug('@@@ it does not make sense ' . print_r($resource, true));
     $retriever_item_id = add_retriever_item($item, $resource);
 }
 
