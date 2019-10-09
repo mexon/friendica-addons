@@ -538,6 +538,7 @@ function retrieve_images(&$item) {
     $content = DBA::selectFirst('item-content', [], ['body'], ['uri-id' => $uri_id]);
             if ($content['body'] != $item['body']) {
                 Logger::warning('@@@ this is probably bad right 3?');
+                Logger::warning('@@@ content: ' . $content['body'] . ' item ' . $item['body']);
                 //@@@ check for this.
             }
     $body = $content['body'];
@@ -553,6 +554,9 @@ function retrieve_images(&$item) {
     $matches = array_merge($matches1[3], $matches2[1], $matches3[1]);
     Logger::debug('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
     foreach ($matches as $url) {
+        if (!$url) {
+            continue;
+        }
         if (strpos($url, get_app()->getBaseUrl()) === FALSE) {
             $resource = add_retriever_resource($url, $item['uid'], $item['contact-id'], true);
     Logger::debug('@@@ check this makes sense 2: ' . $resource['id'] . ' url ' . $resource['url']);
@@ -794,6 +798,7 @@ function retriever_post_remote_hook(&$a, &$item) {
             $content = DBA::selectFirst('item-content', [], ['uri-id' => $uri_id]);
             if ($content['body'] != $item['body']) {
                 Logger::warning('@@@ this is probably bad right 2?');
+                Logger::warning('@@@ content: ' . $content['body'] . ' item ' . $item['body']);
                 //@@@ check for this.
             }
             $body = HTML::toBBCode(BBCode::convert($content['body']));
