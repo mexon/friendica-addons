@@ -128,8 +128,7 @@ function retriever_retrieve_items($max_items, $a) {
 
     $retrieve_items = $max_items - $retriever_item_count;
     do {
-        //@@@ check this looks sane after moving inside the loop
-        Logger::debug('retriever_retrieve_items: asked for maximum ' . $max_items . ', already retrieved ' . $retriever_item_count . ', retrieve ' . $retrieve_items);
+        Logger::debug('retriever_retrieve_items: asked for maximum ' . $max_items . ', already retrieved ' . intval($retriever_item_count) . ', retrieve ' . $retrieve_items);
         // TODO: figure out how to do this with DBA module
         $retriever_resources = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
                DBA::escape(implode($schedule_clauses, ' OR ')),
@@ -185,9 +184,11 @@ function retriever_clean_up_completed_resources($max_items, $a) {
 }
 
 function retriever_tidy() {
-    // TODO: figure out how to do this with DBA module @@@ it is possible
-    q("DELETE FROM retriever_resource WHERE completed IS NOT NULL AND completed < DATE_SUB(now(), INTERVAL 1 WEEK)");
-    q("DELETE FROM retriever_resource WHERE completed IS NULL AND created < DATE_SUB(now(), INTERVAL 3 MONTH)");
+    DBA::delete('retriever_resource', ['completed IS NOT NULL AND completed < DATE_SUB(now(), INTERVAL 1 WEEK)']);
+    DBA::delete('retriever_resource', ['completed IS NULL AND created < DATE_SUB(now(), INTERVAL 3 MONTH)']);
+    // @@@ check that this worked
+    /* q("DELETE FROM retriever_resource WHERE completed IS NOT NULL AND completed < DATE_SUB(now(), INTERVAL 1 WEEK)"); */
+    /* q("DELETE FROM retriever_resource WHERE completed IS NULL AND created < DATE_SUB(now(), INTERVAL 3 MONTH)"); */
 
     $r = q("SELECT retriever_item.id FROM retriever_item LEFT OUTER JOIN retriever_resource ON (retriever_item.resource = retriever_resource.id) WHERE retriever_resource.id is null");
     Logger::info('retriever_tidy: found ' . count($r) . ' retriever_items with no retriever_resource');
@@ -286,7 +287,7 @@ function retriever_get_item($retriever_item) {
     return $item;
 }
 
-function retriever_item_completed($a, $retriever_item_id, $resource) {
+function retriever_item_completed($retriever_item_id, $resource) {
     Logger::debug('retriever_item_completed: id ' . $retriever_item_id . ' url ' . $resource['url']);
 
     $retriever_item = retriever_get_retriever_item($retriever_item_id);
@@ -302,20 +303,20 @@ function retriever_item_completed($a, $retriever_item_id, $resource) {
     // Note: the retriever might be null.  Doesn't matter.
     $retriever_rule = get_retriever_rule($retriever_item['contact-id'], $retriever_item['item-uid']);
 
-    retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource, $a);
+    retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource);
 
     DBA::update('retriever_item', ['finished' => 1], ['id' => intval($retriever_item['id'])], ['finished' => 0]);
     retriever_check_item_completed($item);
 }
 
-function retriever_resource_completed($resource, $a) {
+function retriever_resource_completed($resource) {
     Logger::debug('retriever_resource_completed: id ' . $resource['id'] . ' url ' . $resource['url']);
     foreach (DBA::selectToArray('retriever_item', ['id'], ['resource' => intval($resource['id'])]) as $retriever_item) {
-        retriever_item_completed($a, $retriever_item['id'], $resource);
+        retriever_item_completed($retriever_item['id'], $resource);
     }
 }
 
-function apply_retrospective($a, $retriever, $num) {
+function apply_retrospective($retriever, $num) {
     foreach (Item::selectToArray([], ['contact-id' => intval($retriever['contact-id'])], ['order' => ['received' => true], 'limit' => $num]) as $item) {
         Item::update(['visible' => 0], ['id' => intval($item['id'])]);
         //@@@ check that this works
@@ -323,13 +324,15 @@ function apply_retrospective($a, $retriever, $num) {
             DBA::delete('retriever_resource', ['id' => $retriever_item['resource']]);
             DBA::delete('retriever_item', ['id' => $retriever_item['id']]);
         }
-        retriever_on_item_insert($a, $retriever, $item);
+        retriever_on_item_insert($retriever, $item);
     }
 }
 
 // TODO: Currently this waits until the next cron before actually downloading.  Should do it immediately.
+//@@@ I think the above statement is wrong.  Check!
 // TODO: This queries then inserts.  It should use some kind of lock to avoid requesting the same resource twice.
-function retriever_on_item_insert($a, $retriever, &$item) {
+function retriever_on_item_insert($retriever, &$item) {
+    Logger::debug('@@@ retriever_on_item_insert start');
     if (!$retriever || !$retriever['id']) {
         Logger::info('retriever_on_item_insert: No retriever supplied');
         return;
@@ -349,18 +352,19 @@ function retriever_on_item_insert($a, $retriever, &$item) {
         $url = $content['plink'];
     }
 
-    if ($retriever['data']['modurl']) {
+    if (array_key_exists('modurl', $retriever['data']) && $retriever['data']['modurl']) {
         $orig_url = $url;
         $url = preg_replace('/' . $retriever['data']['pattern'] . '/', $retriever['data']['replace'], $orig_url);
         Logger::debug('retriever_on_item_insert: Changed ' . $orig_url . ' to ' . $url);
     }
 
-    $resource = add_retriever_resource($a, $url, $item['uid'], $item['contact-id']);
+    $resource = add_retriever_resource($url, $item['uid'], $item['contact-id']);
     Logger::debug('@@@ check this makes sense: ' . $resource['id'] . ' url ' . $resource['url']);
+    Logger::debug('@@@ it does not make sense ' . print_r($resource, true));
     $retriever_item_id = add_retriever_item($item, $resource);
 }
 
-function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
+function add_retriever_resource($url, $uid, $cid, $binary = false) {
     Logger::debug('add_retriever_resource: url ' . $url . ' uid ' . $uid . ' contact-id ' . $cid);
 
     $scheme = parse_url($url, PHP_URL_SCHEME);
@@ -378,18 +382,10 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
         }
 
         Logger::debug('retrieve_resource: got data URL type ' . $resource['type']);
-        // TODO: figure out how to do this with DBA module
-        // @@@ DBA::update('workerqueue', ['executed' => DateTimeFormat::utcNow()], ['pid' => $mypid, 'done' => false]);
-        q("INSERT INTO `retriever_resource` (`item-uid`, `contact-id`, `type`, `binary`, `url`, `completed`, `data`) " .
-          "VALUES (%d, %d, '%s', %d, '%s', now(), '%s')",
-          intval($uid),
-          intval($cid),
-          DBA::escape($type),
-          intval($binary ? 1 : 0),
-          DBA::escape($url),
-          DBA::escape($data));
+        DBA::insert('retriever_resource', ['item-uid' => intval($uid), 'contact-id' => intval($cid), 'type' => $type, 'binary' => ($binary ? 1 : 0), 'url' => $url, 'completed' => DateTimeFormat::utcNow(), 'data' => $data]);
+        // @@@ check that this makes sense
         if (DBA::selectFirst('retriever_resource', [], ['url' => $url])) {
-            retriever_resource_completed($resource, $a);
+            retriever_resource_completed($resource);
         }
         return $resource;
     }
@@ -403,37 +399,31 @@ function add_retriever_resource($a, $url, $uid, $cid, $binary = false) {
         return $r[0];
     }
 
-    DBA::insert('retriever_rule', ['item-uid' => intval($uid), 'contact-id' => intval($cid), 'binary' => ($binary ? 1 : 0), 'url' => $url]);
-    Logge::debug('@@@ add_retriever_resource inserting resource ' . $url . ' uid ' . $uid . ' cid ' . $cid);
-    //@@@ check the insert worked
+    DBA::insert('retriever_resource', ['item-uid' => intval($uid), 'contact-id' => intval($cid), 'binary' => ($binary ? 1 : 0), 'url' => $url]);
     return DBA::selectFirst('retriever_resource', [], ['url' => $url, 'item-uid' => intval($uid), 'contact-id' => intval($cid)]);
 }
 
 function add_retriever_item(&$item, $resource) {
     Logger::debug('add_retriever_item: ' . $resource['url'] . ' for ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
 
-    //@@@ can use selectFirst
-    $r = q("SELECT COUNT(*) FROM `retriever_item` WHERE " .
-           "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d",
-           DBA::escape($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource['id']));
-    if ($r[0]['COUNT(*)'] > 0) {
+    if (!array_key_exists('id', $resource) || !$resource['id']) {
+        Logger::warning('add_retriever_item: resource is empty');
+        //@@@ check that this does not happen
+        return;
+    }
+    if (DBA::selectFirst('retriever_item', [], ['item-uri' => $item['uri'], 'item-uid' => intval($item['uid']), 'resource' => intval($resource['id'])])) {
+        //@@@ check that this worked
         Logger::info("add_retriever_item: retriever item already present for " . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
         return;
     }
-    //@@@ fix this
-    q("INSERT INTO `retriever_item` (`item-uri`, `item-uid`, `contact-id`, `resource`) " .
-      "VALUES ('%s', %d, %d, %d)",
-      DBA::escape($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource["id"]));
-    //@@@ fix this
-    $r = q("SELECT id FROM `retriever_item` WHERE " .
-           "`item-uri` = '%s' AND `item-uid` = %d AND `contact-id` = %d AND `resource` = %d ORDER BY id DESC",
-           DBA::escape($item['uri']), intval($item['uid']), intval($item['contact-id']), intval($resource['id']));
-    if (!count($r)) {
+    DBA::insert('retriever_item', ['item-uri' => $item['uri'], 'item-uid' => intval($item['uid']), 'contact-id' => intval($item['contact-id']), 'resource' => intval($resource['id'])]);
+    $retriever_item = DBA::selectFirst('retriever_item', ['id'], ['item-uri' => $item['uri'], 'item-uid' => intval($item['uid']), 'resource' => intval($resource['id'])]);
+    if (!$retriever_item) {
         Logger::info("add_retriever_item: couldn't create retriever item for " . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
         return;
     }
-    Logger::debug('add_retriever_item: created retriever_item ' . $r[0]['id'] . ' for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
-    return $r[0]['id'];
+    Logger::debug('add_retriever_item: created retriever_item ' . $retriever_item['id'] . ' for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
+    return $retriever_item['id'];
 }
 
 function retriever_get_encoding($resource) {
@@ -454,17 +444,14 @@ function retriever_apply_xslt_text($xslt_text, $doc) {
         Logger::info('retriever_apply_xslt_text: could not load XML');
         return $doc;
     }
-    Logger::debug('@@@ retriever_apply_xslt_text: ' . $xslt_text);
     $xp = new XsltProcessor();
     $xp->importStylesheet($xslt_doc);
     $result = $xp->transformToDoc($doc);
     return $result;
 }
 
-//@@@ I think this is supposed to update the $item, but it doesn't
 function retriever_apply_dom_filter($retriever, &$item, $resource) {
-    //@@@ check if id and uri-id are there //@@@ uri-id definitely is not
-    Logger::debug('retriever_apply_dom_filter: applying XSLT to ' . $item['id'] . ' ' . $item['uri'] . ' contact ' . $item['contact-id'] . ' uri-id ' . $item['uri-id']);
+    Logger::debug('retriever_apply_dom_filter: applying XSLT to uri ' . $item['uri'] . ' uid ' . $item['uid'] . ' contact ' . $item['contact-id']);
 
     if (!array_key_exists('include', $retriever['data']) && !array_key_exists('customxslt', $retriever['data'])) {
         Logger::info('retriever_apply_dom_filter: no include and no customxslt');
@@ -498,13 +485,16 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $body .=  $item['plink'];
     $body .= ']' . $item['plink'] . '[/url]';
 
-    $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?  Consider using item['id'] instead
     Logger::debug('retriever_apply_dom_filter: XSLT result \"' . $body . '\"');
-    Item::update(['body' => $body], ['uri-id' => $uri_id]);
+    $item['body'] = $body;
+    if (array_key_exists('id', $item) && $item['id']) { //@@@ this should be a separate function
+        //@@@ check that this works
+        Logger::debug('@@@ retriever_apply_dom_filter updating item by id ' . $item['id']);
+        Item::update(['body' => $body], ['id' => $item['id']]);
+    }
 }
 
 function retriever_load_into_dom($resource) {
-    Logger::info('@@@ retriever_load_into_dom start');
     $encoding = retriever_get_encoding($resource);
     $content = mb_convert_encoding($resource['data'], 'HTML-ENTITIES', $encoding);
     $doc = new DOMDocument('1.0', 'UTF-8');
@@ -514,12 +504,10 @@ function retriever_load_into_dom($resource) {
     else {
         $doc->loadXML($content);
     }
-    Logger::info('@@@ retriever_load_into_dom end');
     return $doc;
 }
 
 function retriever_extract($doc, $retriever) {
-    Logger::info('@@@ retriever_extract start');
     $params = array('$spec' => $retriever['data']);
     $extract_template = Renderer::getMarkupTemplate('extract.tpl', 'addon/retriever/');
     $extract_xslt = Renderer::replaceMacros($extract_template, $params);
@@ -531,12 +519,10 @@ function retriever_extract($doc, $retriever) {
         Logger::debug('retriever_extract: applying custom XSLT \"' . $retriever['data']['customxslt'] . '\"');
         $doc = retriever_apply_xslt_text($retriever['data']['customxslt'], $doc);
     }
-    Logger::info('@@@ retriever_extract end');
     return $doc;
 }
 
 function retriever_globalise_urls($doc, $resource) {
-    Logger::info('@@@ retriever_globalise_urls start');
     $components = parse_url($resource['redirect-url']);
     $rooturl = $components['scheme'] . "://" . $components['host'];
     $dirurl = $rooturl . dirname($components['path']) . "/";
@@ -544,18 +530,19 @@ function retriever_globalise_urls($doc, $resource) {
     $fix_urls_template = Renderer::getMarkupTemplate('fix-urls.tpl', 'addon/retriever/');
     $fix_urls_xslt = Renderer::replaceMacros($fix_urls_template, $params);
     $doc = retriever_apply_xslt_text($fix_urls_xslt, $doc);
-    Logger::info('@@@ retriever_globalise_urls end');
     return $doc;
 }
 
-function retrieve_images($a, &$item) {
-    // Note that $item doesn't necessarily contain all the fields you would expect, in particular 'id'
-    //@@@ doe sit contain uri-id? //@@@ it definitely does not
+function retrieve_images(&$item) {
+    // Note that $item might not yet have an id or a uri-id
 
-    Logger::debug('@@@ retrieve_images start item id '. (array_key_exists('id', $item) ? $item['id'] : 'undef') . ' uri ' . $item['uri'] . ' uri id ' . $item['uri-id'] . ' plink ' . $item['plink'] . ' guid ' . $item['guid']);
     $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
 
-    $content = DBA::selectFirst('item-content', ['body'], ['uri-id' => $uri_id]);
+    $content = DBA::selectFirst('item-content', [], ['body'], ['uri-id' => $uri_id]);
+            if ($content['body'] != $item['body']) {
+                Logger::warning('@@@ this is probably bad right 3?');
+                //@@@ check for this.
+            }
     $body = $content['body'];
     if (!strlen($body)) {
         Logger::warning('retrieve_images: no body for uri-id ' . $uri_id);
@@ -570,13 +557,13 @@ function retrieve_images($a, &$item) {
     Logger::debug('retrieve_images: found ' . count($matches) . ' images for item ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
     foreach ($matches as $url) {
         if (strpos($url, get_app()->getBaseUrl()) === FALSE) {
-            $resource = add_retriever_resource($a, $url, $item['uid'], $item['contact-id'], true);
+            $resource = add_retriever_resource($url, $item['uid'], $item['contact-id'], true);
     Logger::debug('@@@ check this makes sense 2: ' . $resource['id'] . ' url ' . $resource['url']);
             if (!$resource['completed']) {
                 add_retriever_item($item, $resource);
             }
             else {
-                retriever_transform_images($a, $item, $resource);
+                retriever_transform_images($item, $resource);
             }
         }
     }
@@ -585,14 +572,7 @@ function retrieve_images($a, &$item) {
 function retriever_check_item_completed(&$item)
 {
     $waiting = DBA::selectFirst('retriever_item', [], ['item-uri' => $item['uri'], 'item-uid' => intval($item['uid']), 'contact-id' => intval($item['contact-id']), 'finished' => 0]);
-    Logger::debug('@@@ waiting is ' . $waiting);
-    // TODO: figure out how to do this with DBA module //@@@ selectFirst works
-    $r = q('SELECT count(*) FROM retriever_item WHERE `item-uri` = "%s" ' .
-           'AND `item-uid` = %d AND `contact-id` = %d AND `finished` = 0',
-           DBA::escape($item['uri']), intval($item['uid']),
-           intval($item['contact-id']));
-    $waiting = $r[0]['count(*)'];
-    Logger::debug('retriever_check_item_completed: item ' . $item['uri'] . ' ' . $item['uid'] . ' '. $item['contact-id'] . ' waiting for ' . $waiting . ' resources');
+    Logger::debug('retriever_check_item_completed: item ' . $item['uri'] . ' ' . $item['uid'] . ' '. $item['contact-id'] . ' waiting for resources');
     $old_visible = $item['visible'];
     $item['visible'] = $waiting ? 0 : 1;
     if (array_key_exists('id', $item) && ($item['id'] > 0) && ($old_visible != $item['visible'])) {
@@ -601,10 +581,10 @@ function retriever_check_item_completed(&$item)
     }
 }
 
-function retriever_apply_completed_resource_to_item($retriever, &$item, $resource, $a) {
+function retriever_apply_completed_resource_to_item($retriever, &$item, $resource) {
     Logger::debug('retriever_apply_completed_resource_to_item: retriever ' . ($retriever ? $retriever['id'] : 'none') . ' resource ' . $resource['url'] . ' plink ' . $item['plink']);
     if (strpos($resource['type'], 'image') !== false) {
-        retriever_transform_images($a, $item, $resource);
+        retriever_transform_images($item, $resource);
     }
     if (!$retriever) {
         Logger::warning('retriever_apply_completed_resource_to_item: no retriever');
@@ -614,13 +594,19 @@ function retriever_apply_completed_resource_to_item($retriever, &$item, $resourc
         (strpos($resource['type'], 'xml') !== false)) {
         retriever_apply_dom_filter($retriever, $item, $resource);
         if ($retriever['data']['images'] ) {
-            retrieve_images($a, $item);
+            retrieve_images($item);
         }
     }
 }
 
-//@@@ todo: what is this reference for?  document if needed delete if not
-function retriever_transform_images($a, &$item, $resource) {
+/**
+ * @brief Stores the image downloaded in the supplied resource and updates the item body by replacing the remote URL with the local URL.  The body will be updated in the supplied item array.  If the item has already been stored, and therefore has an ID already, the row in the database will be updated too.
+ *
+ * @param array &$item Row from the item table (by ref)
+ * @param array $resource Row from the resource table containing successfully downloaded image
+ */
+// TODO: split this into two functions, one to store the image, the other to change the item body
+function retriever_transform_images(&$item, $resource) {
     if (!$resource['data']) {
         Logger::info('retriever_transform_images: no data available for ' . $resource['id'] . ' ' . $resource['url']);
         return;
@@ -652,11 +638,16 @@ function retriever_transform_images($a, &$item, $resource) {
         return;
     }
 
-    $content = DBA::selectFirst('item-content', ['body'], ['uri-id' => $uri_id]);
+    $content = DBA::selectFirst('item-content', [], ['body'], ['uri-id' => $uri_id]);
     $body = $content['body'];
+    if ($body != $item['body']) {
+        Logger::warning('@@@ this is probably bad right 1?');
+        //@@@ check for this.
+    }
 
     Logger::debug('retriever_transform_images: replacing ' . $resource['url'] . ' with ' . $new_url . ' in item ' . $item['uri']);
     $body = str_replace($resource["url"], $new_url, $body);
+    $item['body'] = $body;
 
     Item::update(['body' => $body], ['uri-id' => $uri_id]);
 }
@@ -671,7 +662,6 @@ function retriever_content($a) {
         for ($i = 0; $i < count($feeds); ++$i) {
             $feeds[$i]['url'] = $a->getBaseUrl() . '/retriever/' . $feeds[$i]['id'];
         }
-        //@@@ this is broken
         $template = Renderer::getMarkupTemplate('/help.tpl', 'addon/retriever/');
         $a->page['content'] .= Renderer::replaceMacros($template, array(
                                                   '$config' => $a->getBaseUrl() . '/settings/addon',
@@ -799,20 +789,26 @@ function retriever_post_remote_hook(&$a, &$item) {
     $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
     $retriever_rule = get_retriever_rule($item['contact-id'], $item["uid"], false);
     if ($retriever_rule) {
-        retriever_on_item_insert($a, $retriever_rule, $item);
+        retriever_on_item_insert($retriever_rule, $item);
     }
     else {
         if (PConfig::get($item["uid"], 'retriever', 'oembed')) {
             // Convert to HTML and back to take advantage of bbcode's resolution of oembeds.
             $content = DBA::selectFirst('item-content', [], ['uri-id' => $uri_id]);
+            if ($content['body'] != $item['body']) {
+                Logger::warning('@@@ this is probably bad right 2?');
+                //@@@ check for this.
+            }
             $body = HTML::toBBCode(BBCode::convert($content['body']));
             if ($body) {
                 $item['body'] = $body;
-                Item::update(['body' => $body], ['uri-id' => $uri_id]);
+                if (array_key_exists('id', $item) && $item['id']) {
+                    Item::update(['body' => $body], ['id' => $item['id']]);
+                }
             }
         }
         if (PConfig::get($item["uid"], 'retriever', 'all_photos')) {
-            retrieve_images($a, $item);
+            retrieve_images($item);
         }
     }
     retriever_check_item_completed($item);
