@@ -143,6 +143,19 @@ Photos" box in the "Retriever Settings" section and click "Submit".
 <h2>Configure Feeds:</h2>
 <div>
 {{foreach $feeds as $feed}}
-{{include file='contact_template.tpl' contact=$feed}}
+<div class="contact-entry-wrapper" id="contact-entry-wrapper-{{$feed.id}}">
+	<a href="{{$feed.url}} title="{{$feed.img_hover}}">
+		<div class="contact-entry-photo-wrapper">
+			<div class="contact-entry-photo mframe" id="contact-entry-photo-{{$feed.id}}">
+				<img src="{{$feed.thumb}}" {{$feed.sparkle}} alt="{{$feed.name}}"/>
+			</div>
+		</div>
+		<div class="contact-entry-desc">
+			<div class="contact-entry-name" id="contact-entry-name-{{$feed.id}}">
+				{{$feed.name}}
+			</div>
+		</div>
+	</a>
+</div>
 {{/foreach}}
 </div>
