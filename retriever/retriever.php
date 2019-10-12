@@ -23,6 +23,9 @@ use Friendica\Model\ItemURI;
 use Friendica\Model\Item;
 use Friendica\Util\DateTimeFormat;
 
+/**
+ * @brief Installation hook for retriever plugin
+ */
 function retriever_install() {
     Addon::registerHook('plugin_settings', 'addon/retriever/retriever.php', 'retriever_plugin_settings');
     Addon::registerHook('plugin_settings_post', 'addon/retriever/retriever.php', 'retriever_plugin_settings_post');
@@ -53,9 +56,9 @@ function retriever_install() {
     }
     if (Config::get('retriever', 'dbversion') != '0.14') {
         $schema = file_get_contents(dirname(__file__).'/database.sql');
-        $arr = explode(';', $schema);
-        foreach ($arr as $a) {
-            if (!DBA::e($a)) {
+        $tables = explode(';', $schema);
+        foreach ($tables as $table) {
+            if (!DBA::e($table)) {
                 Logger::warning('Unable to create database table: ' . DBA::errorMessage());
                 return;
             }
@@ -65,6 +68,9 @@ function retriever_install() {
     }
 }
 
+/**
+ * @brief Uninstallation hook for retriever plugin
+ */
 function retriever_uninstall() {
     Addon::unregisterHook('plugin_settings', 'addon/retriever/retriever.php', 'retriever_plugin_settings');
     Addon::unregisterHook('plugin_settings_post', 'addon/retriever/retriever.php', 'retriever_plugin_settings_post');
@@ -75,9 +81,17 @@ function retriever_uninstall() {
     Addon::unregisterHook('cron', 'addon/retriever/retriever.php', 'retriever_cron');
 }
 
+/**
+ * @brief Module hook for retriever plugin
+ *
+ * TODO: figure out what this should be used for
+ */
 function retriever_module() {}
 
-function retriever_addon_admin(&$a, &$o) {
+/**
+ * @brief Admin page hook for retriever plugin
+ */
+function retriever_addon_admin() {
     $downloads_per_cron = Config::get('retriever', 'downloads_per_cron');
     $template = Renderer::getMarkupTemplate('admin.tpl', 'addon/retriever/');
     $config = ['downloads_per_cron',
@@ -89,25 +103,36 @@ function retriever_addon_admin(&$a, &$o) {
                  '$submit' => L10n::t('Save Settings')]);
 }
 
-function retriever_addon_admin_post ($a) {
+/**
+ * @brief Admin page post hook for retriever plugin
+ */
+function retriever_addon_admin_post () {
     if (!empty($_POST['downloads_per_cron'])) {
         Config::set('retriever', 'downloads_per_cron', $_POST['downloads_per_cron']);
     }
 }
 
-function retriever_cron($a, $b) {
+/**
+ * @brief Cron jobs for retriever plugin
+ */
+function retriever_cron() {
     $downloads_per_cron = Config::get('retriever', 'downloads_per_cron');
 
     // Do this first, otherwise it can interfere with retriever_retrieve_items
-    retriever_clean_up_completed_resources($downloads_per_cron, $a);
+    retriever_clean_up_completed_resources($downloads_per_cron);
 
-    retriever_retrieve_items($downloads_per_cron, $a);
+    retriever_retrieve_items($downloads_per_cron);
     retriever_tidy();
 }
 
 $retriever_item_count = 0;
 
-function retriever_retrieve_items($max_items, $a) {
+/**
+ * @brief Searches for items in the retriever_items table that should be retrieved and attempts to retrieve them
+ *
+ * @param int $max_items Maximum number of items to retrieve in this call
+ */
+function retriever_retrieve_items($max_items) {
     global $retriever_item_count;
 
     $retriever_schedule = array(array(1,'minute'),
@@ -130,11 +155,7 @@ function retriever_retrieve_items($max_items, $a) {
     $retrieve_items = $max_items - $retriever_item_count;
     do {
         Logger::debug('retriever_retrieve_items: asked for maximum ' . $max_items . ', already retrieved ' . intval($retriever_item_count) . ', retrieve ' . $retrieve_items);
-        // TODO: figure out how to do this with DBA module //@@@ this is possible
-        $retriever_resources2 = DBA::selectToArray('retriever_resource', [], ['`completed` IS NULL AND (`last-try` IS NULL OR ' . implode($schedule_clauses, ' OR ') . ')'], ['order' => ['last-try' => 0], 'limit' => $retrieve_items]);
-        $retriever_resources = q("SELECT * FROM `retriever_resource` WHERE `completed` IS NULL AND (`last-try` IS NULL OR %s) ORDER BY `last-try` ASC LIMIT %d",
-               DBA::escape(implode($schedule_clauses, ' OR ')),
-               intval($retrieve_items));
+        $retriever_resources = DBA::selectToArray('retriever_resource', [], ['`completed` IS NULL AND (`last-try` IS NULL OR ' . implode($schedule_clauses, ' OR ') . ')'], ['order' => ['last-try' => 0], 'limit' => $retrieve_items]);
         if (!is_array($retriever_resources)) {
             break;
         }
@@ -142,7 +163,6 @@ function retriever_retrieve_items($max_items, $a) {
             break;
         }
         Logger::debug('retriever_retrieve_items: found ' . count($retriever_resources) . ' waiting resources in database');
-        Logger::debug('@@@ retriever_retrieve_items: alternative found ' . count($retriever_resources2) . ': ' . print_r($retriever_resources2, true));
         foreach ($retriever_resources as $retriever_resource) {
             retrieve_resource($retriever_resource);
             $retriever_item_count++;
@@ -153,8 +173,12 @@ function retriever_retrieve_items($max_items, $a) {
     Logger::debug('retriever_retrieve_items: finished retrieving items');
 }
 
-// Look for items that are waiting even though the resource has completed.  This shouldn't happen, but is worth cleaning up if it does.
-function retriever_clean_up_completed_resources($max_items, $a) {
+/**
+ * @brief Looks for items that are waiting even though the resource has completed.  This shouldn't happen, but is worth cleaning up if it does.
+ *
+ * @param int $max_items Maximum number of items to retrieve in this call
+ */
+function retriever_clean_up_completed_resources($max_items) {
     // TODO: figure out how to do this with DBA module
     $r = q('SELECT retriever_resource.`id` as resource, retriever_item.`id` as item FROM retriever_resource, retriever_item, retriever_rule WHERE retriever_item.`finished` = 0 AND retriever_item.`resource` = retriever_resource.`id` AND retriever_resource.`completed` IS NOT NULL AND retriever_item.`contact-id` = retriever_rule.`contact-id` AND retriever_item.`item-uid` = retriever_rule.`uid` LIMIT %d',
            intval($max_items));
@@ -179,13 +203,15 @@ function retriever_clean_up_completed_resources($max_items, $a) {
             continue;
         }
         $resource = DBA::selectFirst('retriever_resource', [], ['id' => intval($rr['resource'])]);
-        retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource, $a);
-        Logger::info('@@@ retriever_clean_up_completed_resources tried to update id ' . $retriever_item['id'] . ' to finished, better check that it really worked!');
+        retriever_apply_completed_resource_to_item($retriever_rule, $item, $resource);
         DBA::update('retriever_item', ['finished' => 1], ['id' => intval($retriever_item['id'])], ['finished' => 0]);
         retriever_check_item_completed($item);
     }
 }
 
+/**
+ * @brief Deletes old rows from the retriever_item and retriever_resource table that are unlikely to be needed
+ */
 function retriever_tidy() {
     DBA::delete('retriever_resource', ['completed IS NOT NULL AND completed < DATE_SUB(now(), INTERVAL 1 WEEK)']);
     DBA::delete('retriever_resource', ['completed IS NULL AND created < DATE_SUB(now(), INTERVAL 3 MONTH)']);
@@ -199,7 +225,7 @@ function retriever_tidy() {
 
 function retrieve_dataurl_resource($resource) {
     if (!preg_match("/date:(.*);base64,(.*)/", $resource['url'], $matches)) {
-        Logger::info('retrieve_dataurl_resource: ' . $resource['id'] . ' does not match pattern');
+        Logger::warning('retrieve_dataurl_resource: resource ' . $resource['id'] . ' does not match pattern');
     } else {
         $resource['type'] = $matches[1];
         $resource['data'] = base64url_decode($matches[2]);
@@ -210,15 +236,13 @@ function retrieve_dataurl_resource($resource) {
       DBA::escape($resource['data']),
       DBA::escape($resource['type']),
       intval($resource['id']));
-    retriever_resource_completed($resource, $a);
+    retriever_resource_completed($resource);
 }
 
 function retrieve_resource($resource) {
     if (substr($resource['url'], 0, 5) == "data:") {
         return retrieve_dataurl_resource($resource);
     }
-
-    $a = get_app();
 
     $retriever_rule = get_retriever_rule($resource['contact-id'], $resource['item-uid']);
     if (!$retriever_rule) {
@@ -243,7 +267,6 @@ function retrieve_resource($resource) {
         if (array_key_exists('storecookies', $rule_data) && $rule_data['storecookies']) {
             $retriever_rule['data']['cookiedata'] = file_get_contents($cookiejar);
             DBA::update('retriever_rule', ['data' => json_encode($retriever_rule['data'])], ['id' => intval($retriever_rule["id"])], $retriever_rule);
-            //@@@ check the update worked
             unlink($cookiejar);
         }
         $resource['data'] = $fetch_result->getBody();
@@ -254,18 +277,10 @@ function retrieve_resource($resource) {
     } catch (Exception $e) {
         Logger::info('retrieve_resource: unable to retrieve ' . $resource['url'] . ' - ' . $e->getMessage());
     }
-    // TODO: figure out how to do this with DBA module
-    q("UPDATE `retriever_resource` SET `last-try` = now(), `num-tries` = `num-tries` + 1, `http-code` = %d, `redirect-url` = '%s' WHERE id = %d",
-      intval($resource['http-code']),
-      DBA::escape($resource['redirect-url']),
-      intval($resource['id']));
+    DBA::update('retriever_resource', ['id' => intval($resource['id'])], ['last-try' => DateTimeFormat::utcNow(), 'num-tries' => intval($resource['num-tries']) + 1, 'http-code' => intval($resource['http-code']), 'redirect-url' => $resource['redirect-url']], ['last-try' => false]);
     if ($resource['data']) {
-        // TODO: figure out how to do this with DBA module
-        q("UPDATE `retriever_resource` SET `completed` = now(), `data` = '%s', `type` = '%s' WHERE id = %d",
-          DBA::escape($resource['data']),
-          DBA::escape($resource['type']),
-          intval($resource['id']));
-        retriever_resource_completed($resource, $a);
+        DBA::update('retriever_resource', ['id' => intval($resource['id'])], ['completed' => DateTimeFormat::utcNow(), 'data' => $resource['data'], 'type' => $resource['type']], ['completed' => false]);
+        retriever_resource_completed($resource);
     }
 }
 
@@ -327,7 +342,6 @@ function retriever_resource_completed($resource) {
 function apply_retrospective($retriever, $num) {
     foreach (Item::selectToArray([], ['contact-id' => intval($retriever['contact-id'])], ['order' => ['received' => true], 'limit' => $num]) as $item) {
         Item::update(['visible' => 0], ['id' => intval($item['id'])]);
-        //@@@ check that this works
         foreach (DBA::selectToArray('retriever_item', [], ['item-uri' => $item['uri'], 'item-uid' => $item['uid'], 'contact-id' => $item['contact-id']]) as $retriever_item) {
             DBA::delete('retriever_resource', ['id' => $retriever_item['resource']]);
             DBA::delete('retriever_item', ['id' => $retriever_item['id']]);
@@ -336,9 +350,14 @@ function apply_retrospective($retriever, $num) {
     }
 }
 
-// TODO: Currently this waits until the next cron before actually downloading.  Should do it immediately.
-//@@@ I think the above statement is wrong.  Check!
-// TODO: This queries then inserts.  It should use some kind of lock to avoid requesting the same resource twice.
+/**
+ * @brief Queues an item for retrieval.  It does not actually perform the retrieval.
+ *
+ * @param array $retriever Retriever rule configuration for this contact
+ * @param array $item Item that should be retrieved.  This may or may not have been already stored in the database.
+ *
+ * TODO: This queries then inserts.  It should use some kind of lock to avoid requesting the same resource twice.
+ */
 function retriever_on_item_insert($retriever, &$item) {
     if (!$retriever || !$retriever['id']) {
         Logger::info('retriever_on_item_insert: No retriever supplied');
@@ -388,7 +407,6 @@ function add_retriever_resource($url, $uid, $cid, $binary = false) {
         }
 
         DBA::insert('retriever_resource', ['item-uid' => intval($uid), 'contact-id' => intval($cid), 'type' => $type, 'binary' => ($binary ? 1 : 0), 'url' => $url, 'completed' => DateTimeFormat::utcNow(), 'data' => $data]);
-        // @@@ check that this makes sense
         $resource = DBA::selectFirst('retriever_resource', [], ['url' => $url, 'item-uid' => intval($uid), 'contact-id' => intval($cid)]);
         if ($resource) {
             retriever_resource_completed($resource);
@@ -396,6 +414,7 @@ function add_retriever_resource($url, $uid, $cid, $binary = false) {
         return $resource;
     }
 
+    // 800 characters is the size of this field in the database
     if (strlen($url) > 800) {
         Logger::warning('add_retriever_resource: URL is longer than 800 characters');
     }
@@ -419,7 +438,6 @@ function add_retriever_item(&$item, $resource) {
         return;
     }
     if (DBA::selectFirst('retriever_item', [], ['item-uri' => $item['uri'], 'item-uid' => intval($item['uid']), 'resource' => intval($resource['id'])])) {
-        //@@@ check that this worked
         Logger::info("add_retriever_item: retriever item already present for " . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
         return;
     }
@@ -493,12 +511,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
     $body .= ']' . $item['plink'] . '[/url]';
 
     Logger::debug('retriever_apply_dom_filter: XSLT result \"' . $body . '\"');
-    $item['body'] = $body;
-    if (array_key_exists('id', $item) && $item['id']) { //@@@ this should be a separate function
-        //@@@ check that this works
-        Logger::debug('@@@ retriever_apply_dom_filter updating item by id ' . $item['id']);
-        Item::update(['body' => $body], ['id' => $item['id']]);
-    }
+    retriever_set_body($item, $body);
 }
 
 function retriever_load_into_dom($resource) {
@@ -541,34 +554,27 @@ function retriever_globalise_urls($doc, $resource) {
 }
 
 function retriever_get_body($item) {
-    if (array_key_exists('id', $item) && $item['id']) {
-        // item has already been stored in database
-        if (!array_key_exists('uri-id', $item) || !$item['uri-id']) {
-            Logger::warning('retriever_get_body: item uri ' . $item['uri'] . ' has id but no uri-id');
-            //@@@ check never happens
-            return $item['body'];
-        }
-        $content = DBA::selectFirst('item-content', [], ['body'], ['uri-id' => $item['uri-id']]);
-        if (!$content) {
-            Logger::warning('retriever_get_body: item-content uri-id ' . $item['uri-id'] . ' has no content');
-            //@@@ check never happens
-            return $item['body'];
-        }
-        if (!$content['body']) {
-            Logger::warning('retriever_get_body: item-content uri-id ' . $item['uri-id'] . ' has no body');
-            //@@@ check never happens
-            return $item['body'];
-        }
-        if ($content['body'] != $item['body']) {
-            Logger::warning('@@@ this is probably bad content: ' . $content['body'] . ' item ' . $item['body']);
-            //@@@ check for this.
-        }
-        Logger::debug('@@@ retriever_get_body uri-id ' . $item['uri-id'] . ' body: ' . $content['body']);
-        return $content['body'];
+    if (!array_key_exists('uri-id', $item) || !$item['uri-id']) {
+        // item has not yet been stored in database
+        return $item['body'];
     }
-    // item has not yet been stored in database
-    Logger::debug('@@@ retriever_get_body id ' . $item['id'] . ' body: ' . $item['body']);
-    return $item['body'];
+
+    // item has been stored in database, body is stored in the item-content table
+    $content = DBA::selectFirst('item-content', ['body'], ['uri-id' => $item['uri-id']]);
+    if (!$content) {
+        Logger::warning('retriever_get_body: item-content uri-id ' . $item['uri-id'] . ' has no content');
+        return $item['body'];
+    }
+    if (!$content['body']) {
+        Logger::warning('retriever_get_body: item-content uri-id ' . $item['uri-id'] . ' has no body');
+        //@@@ check never happens
+        return $item['body'];
+    }
+    if ($content['body'] != $item['body']) {
+        Logger::warning('@@@ this is probably bad @@@ content: ' . $content['body'] . ' @@@ item: ' . $item['body']);
+        //@@@ check for this.
+    }
+    return $content['body'];
 }
 
 function retriever_set_body(&$item, $body, $allow_empty = false) {
@@ -577,16 +583,15 @@ function retriever_set_body(&$item, $body, $allow_empty = false) {
         return;
     }
     $item['body'] = $body;
-    Logger::debug('@@@ retriever_set_body set array value to ' . $body);
-    if (array_key_exists('id', $item) && $item['id']) {
-        // item has already been stored in database
-        Logger::debug('@@@ retriever_set_body updating item ' . print_r($item, true) . ' to ' . $body);
-        Item::update(['body' => $body], ['id' => intval($item['id'])]);
+    if (!array_key_exists('id', $item) || !$item['id']) {
+        // item has not yet been stored in database
+        return;
     }
+    Item::update(['body' => $body], ['id' => intval($item['id'])]);
 }
 
 /**
- * @brief @@@
+ * @brief Searches for images in the item and adds corresponding retriever_items.  If the images have already been downloaded, updates the body in the supplied item array.
  *
  * @param array &$item Row from the item table (by ref)
  */
@@ -609,7 +614,6 @@ function retrieve_images(&$item) {
         }
         if (strpos($url, get_app()->getBaseUrl()) === FALSE) {
             $resource = add_retriever_resource($url, $item['uid'], $item['contact-id'], true);
-    Logger::debug('@@@ check this makes sense 2: ' . $resource['id'] . ' url ' . $resource['url']);
             if (!$resource['completed']) {
                 add_retriever_item($item, $resource);
             }
@@ -662,8 +666,6 @@ function retriever_transform_images(&$item, $resource) {
         Logger::info('retriever_transform_images: no data available for ' . $resource['id'] . ' ' . $resource['url']);
         return;
     }
-
-    $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
 
     $data = $resource['data'];
     $type = $resource['type'];
@@ -745,7 +747,7 @@ function retriever_content($a) {
             DBA::update('retriever_rule', ['data' => json_encode($retriever_rule['data'])], ['id' => intval($retriever_rule["id"])], ['data' => '']);
             $a->page['content'] .= "<p><b>Settings Updated";
             if (!empty($_POST["retriever_retrospective"])) {
-                apply_retrospective($a, $retriever_rule, $_POST["retriever_retrospective"]);
+                apply_retrospective($retriever_rule, $_POST["retriever_retrospective"]);
                 $a->page['content'] .= " and retrospectively applied to " . $_POST["retriever_retrospective"] . " posts";
             }
             $a->page['content'] .= ".</p></b>";
@@ -825,13 +827,8 @@ function retriever_contact_photo_menu($a, &$args) {
 }
 
 function retriever_post_remote_hook(&$a, &$item) {
-    // @@@ I believe this should either never have the id, or always should.  This needs more investigation.
-    // @@@ and if it does not, does it have a content row?
-    Logger::debug('@@@ retriever_post_remote_hook uri ' . $item['uri'] . ' has id ' . array_key_exists('id', $item) . ' has uri-id ' . array_key_exists('uri-id', $item));
-
     Logger::info('retriever_post_remote_hook: ' . $item['uri'] . ' ' . $item['uid'] . ' ' . $item['contact-id']);
 
-    $uri_id = ItemURI::getIdByURI($item['uri']); //@@@ why can't I get this from the item itself?
     $retriever_rule = get_retriever_rule($item['contact-id'], $item["uid"], false);
     if ($retriever_rule) {
         retriever_on_item_insert($retriever_rule, $item);
@@ -850,7 +847,7 @@ function retriever_post_remote_hook(&$a, &$item) {
     retriever_check_item_completed($item);
 }
 
-function retriever_plugin_settings(&$a,&$s) {
+function retriever_plugin_settings(&$a, &$s) {
     $all_photos = PConfig::get(local_user(), 'retriever', 'all_photos');
     $oembed = PConfig::get(local_user(), 'retriever', 'oembed');
     $template = Renderer::getMarkupTemplate('/settings.tpl', 'addon/retriever/');
