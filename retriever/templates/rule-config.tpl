@@ -142,7 +142,9 @@ document.addEventListener('DOMContentLoaded', function() {
 {{include file="field_checkbox.tpl" field=$modurl}}
 {{include file="field_input.tpl" field=$pattern}}
 {{include file="field_input.tpl" field=$replace}}
+{{if $allow_images}}
 {{include file="field_checkbox.tpl" field=$images}}
+{{/if}}
 {{include file="field_textarea.tpl" field=$customxslt}}
 {{include file="field_checkbox.tpl" field=$storecookies}}
 {{include file="field_textarea.tpl" field=$cookiedata}}
