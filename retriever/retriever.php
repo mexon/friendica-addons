@@ -831,6 +831,7 @@ function retriever_content($a) {
 		$template = Renderer::getMarkupTemplate('/help.tpl', 'addon/retriever/');
 		$a->page['content'] .= Renderer::replaceMacros($template, array(
 								       '$config' => $a->getBaseUrl . '/settings/addon',
+								       '$allow_images' => Config::get('retriever', 'allow_images'),
 								       '$feeds' => $feeds));
 		return;
 	}
