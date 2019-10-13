@@ -131,6 +131,7 @@ fails, the plugin will keep trying at progressively longer intervals
 for up to a month, in case the website is temporarily overloaded or
 the network is down.
 </p>
+{{if $allow_images}}
 <h3>Retrieving Images</h3>
 <p>
 Retriever can also optionally download images and store them in the
@@ -140,6 +141,7 @@ an RSS feed or not.  Go to the "Settings" page and
 click <a href="$config">"Plugin settings"</a>.  Then check the "All
 Photos" box in the "Retriever Settings" section and click "Submit".
 </p>
+{{/if}}
 <h2>Configure Feeds:</h2>
 <div>
 {{foreach $feeds as $feed}}
