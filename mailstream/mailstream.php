@@ -367,7 +367,7 @@ function mailstream_cron($a, $b) {
 	mailstream_tidy();
 }
 
-function mailstream_addon_settings(&$a,&$s) {
+function mailstream_addon_settings(&$a, &$s) {
 	$enabled = PConfig::get(local_user(), 'mailstream', 'enabled');
 	$address = PConfig::get(local_user(), 'mailstream', 'address');
 	$nolikes = PConfig::get(local_user(), 'mailstream', 'nolikes');
