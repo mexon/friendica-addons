@@ -352,7 +352,7 @@ function mailstream_cron($a, $b) {
 	mailstream_tidy();
 }
 
-function mailstream_addon_settings(&$a,&$s) {
+function mailstream_addon_settings(&$a, &$s) {
 	$enabled = DI::pConfig()->get(local_user(), 'mailstream', 'enabled');
 	$address = DI::pConfig()->get(local_user(), 'mailstream', 'address');
 	$nolikes = DI::pConfig()->get(local_user(), 'mailstream', 'nolikes');
