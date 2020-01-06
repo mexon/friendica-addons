@@ -103,12 +103,22 @@ function phototrack_photo_use($photo, $table, $field, $id) {
 function phototrack_check_field_url($a, $table, $field, $id, $url) {
     Logger::info('@@@ phototrack_check_field_url table ' . $table . ' field ' . $field . ' id ' . $id . ' url ' . $url);
     $baseurl = $a->getBaseURL();
-    if (strpos($url, $baseurl) !== FALSE) {
+    if (strpos($url, $baseurl) === FALSE) {
+        return;
+    }
+    else {
         $url = substr($url, strlen($baseurl));
         Logger::info('@@@ phototrack_check_field_url funny url stuff ' . $url . ' base ' . $baseurl);
     }
-    if (strpos($url, '/photo/') !== FALSE) {
-        $rid = substr($url, strlen('/photo/'));
+    if (strpos($url, '/photo/') === FALSE) {
+        return;
+    }
+    else {
+        $url = substr($url, strlen('/photo/'));
+        Logger::info('@@@ phototrack_check_field_url more url stuff ' . $url);
+    }
+    if (preg_match('/([0-9a-z]{32})/', $url, $matches)) {
+        $rid = $matches[0];
         Logger::info('@@@ phototrack_check_field_url rid ' . $rid);
         phototrack_photo_use($rid, $table, $field, $id);
     }
