@@ -714,7 +714,7 @@ function retrieve_images(&$item) {
 		if (!$url) {
 			continue;
 		}
-		if (strpos($url, System::baseUrl()) === FALSE) {
+		if (strpos($url, DI::baseUrl()) === FALSE) {
 			$resource = add_retriever_resource($url, $item['uid'], $item['contact-id'], true);
 			if (!$resource['completed']) {
 				add_retriever_item($item, $resource);
@@ -800,7 +800,7 @@ function retriever_transform_images(&$item, $resource) {
 		return;
 	}
 	$photo = Photo::store($image, $uid, $cid, $rid, $filename, $album, 0, 0, "", "", "", "", $desc);
-	$new_url = System::baseUrl() . '/photo/' . $rid . '-0.' . $image->getExt();
+	$new_url = DI::baseUrl() . '/photo/' . $rid . '-0.' . $image->getExt();
 	if (!strlen($new_url)) {
 		Logger::warning('retriever_transform_images: no replacement URL for image ' . $resource['url']);
 		return;
@@ -826,7 +826,7 @@ function retriever_content($a) {
 	if ($a->argv[1] === 'help') {
 		$feeds = DBA::selectToArray('contact', ['id', 'name', 'thumb'], ['uid' => local_user(), 'network' => 'feed']);
 		for ($i = 0; $i < count($feeds); ++$i) {
-			$feeds[$i]['url'] = System::baseUrl() . '/retriever/' . $feeds[$i]['id'];
+			$feeds[$i]['url'] = DI::baseUrl() . '/retriever/' . $feeds[$i]['id'];
 		}
 		$template = Renderer::getMarkupTemplate('/help.tpl', 'addon/retriever/');
 		$a->page['content'] .= Renderer::replaceMacros($template, array(
@@ -950,7 +950,7 @@ function retriever_contact_photo_menu($a, &$args) {
 		return;
 	}
 	if ($args["contact"]["network"] == "feed") {
-		$args["menu"]['retriever'] = array(L10n::t('Retriever'), System::baseUrl() . '/retriever/' . $args["contact"]['id']);
+		$args["menu"]['retriever'] = array(L10n::t('Retriever'), DI::baseUrl() . '/retriever/' . $args["contact"]['id']);
 	}
 }
 
