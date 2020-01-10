@@ -22,6 +22,7 @@ use Friendica\Database\DBA;
 use Friendica\Model\ItemURI;
 use Friendica\Model\Item;
 use Friendica\Util\DateTimeFormat;
+use Friendica\DI;
 
 /**
  * @brief Installation hook for retriever plugin
