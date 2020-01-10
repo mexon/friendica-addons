@@ -103,7 +103,7 @@ function phototrack_photo_use($photo, $table, $field, $id) {
 
 function phototrack_check_field_url($a, $table, $field, $id, $url) {
     Logger::info('@@@ phototrack_check_field_url table ' . $table . ' field ' . $field . ' id ' . $id . ' url ' . $url);
-    $baseurl = DI::baseUrl();
+    $baseurl = DI::baseUrl()->get(true);
     if (strpos($url, $baseurl) === FALSE) {
         return;
     }
@@ -126,7 +126,7 @@ function phototrack_check_field_url($a, $table, $field, $id, $url) {
 }
 
 function phototrack_check_field_bbcode($a, $table, $field, $id, $value) {
-    $baseurl = DI::baseUrl();
+    $baseurl = DI::baseUrl()->get(true);
     $matches = array();
     preg_match_all("/\[img(\=([0-9]*)x([0-9]*))?\](.*?)\[\/img\]/ism", $value, $matches);
     foreach ($matches[4] as $url) {
