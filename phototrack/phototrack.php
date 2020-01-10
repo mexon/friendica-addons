@@ -25,6 +25,7 @@ use Friendica\Core\Config;
 use Friendica\Core\Logger;
 use Friendica\Object\Image;
 use Friendica\Database\DBA;
+use Friendica\DI;
 
 if (!defined('PHOTOTRACK_DEFAULT_BATCH_SIZE')) {
     define('PHOTOTRACK_DEFAULT_BATCH_SIZE', 1000);
@@ -102,7 +103,7 @@ function phototrack_photo_use($photo, $table, $field, $id) {
 
 function phototrack_check_field_url($a, $table, $field, $id, $url) {
     Logger::info('@@@ phototrack_check_field_url table ' . $table . ' field ' . $field . ' id ' . $id . ' url ' . $url);
-    $baseurl = $a->getBaseURL();
+    $baseurl = DI::baseUrl();
     if (strpos($url, $baseurl) === FALSE) {
         return;
     }
@@ -125,7 +126,7 @@ function phototrack_check_field_url($a, $table, $field, $id, $url) {
 }
 
 function phototrack_check_field_bbcode($a, $table, $field, $id, $value) {
-    $baseurl = $a->getBaseURL();
+    $baseurl = DI::baseUrl();
     $matches = array();
     preg_match_all("/\[img(\=([0-9]*)x([0-9]*))?\](.*?)\[\/img\]/ism", $value, $matches);
     foreach ($matches[4] as $url) {
