@@ -9,7 +9,6 @@
 use Friendica\Core\Addon;
 use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
-use Friendica\Core\L10n;
 use Friendica\Database\DBA;
 
 function publicise_install() {
@@ -71,11 +70,11 @@ function publicise_addon_admin(&$a,&$o) {
     $template = Renderer::getMarkupTemplate('admin.tpl', 'addon/publicise/');
     $o .= Renderer::replaceMacros($template, array(
                              '$feeds' => $contacts,
-                             '$feed_t' => L10n::t('Feed'),
-                             '$publicised_t' => L10n::t('Publicised'),
-                             '$comments_t' => L10n::t('Allow Comments/Likes'),
-                             '$expire_t' => L10n::t('Expire Articles After (Days)'),
-                             '$submit_t' => L10n::t('Submit')));
+                             '$feed_t' => DI::l10n()->t('Feed'),
+                             '$publicised_t' => DI::l10n()->t('Publicised'),
+                             '$comments_t' => DI::l10n()->t('Allow Comments/Likes'),
+                             '$expire_t' => DI::l10n()->t('Expire Articles After (Days)'),
+                             '$submit_t' => DI::l10n()->t('Submit')));
 }
 
 function publicise_make_string($in) {
