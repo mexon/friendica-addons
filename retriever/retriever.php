@@ -7,8 +7,6 @@
    */
 
 use Friendica\Core\Addon;
-use Friendica\Core\Config;
-use Friendica\Core\PConfig;
 use Friendica\Core\Logger;
 use Friendica\Core\Renderer;
 use Friendica\Core\System;
@@ -17,7 +15,6 @@ use Friendica\Content\Text\BBCode;
 use Friendica\Model\Photo;
 use Friendica\Object\Image;
 use Friendica\Util\Network;
-use Friendica\Core\L10n;
 use Friendica\Database\DBA;
 use Friendica\Model\ItemURI;
 use Friendica\Model\Item;
@@ -34,7 +31,7 @@ function retriever_install() {
 	Addon::registerHook('contact_photo_menu', 'addon/retriever/retriever.php', 'retriever_contact_photo_menu');
 	Addon::registerHook('cron', 'addon/retriever/retriever.php', 'retriever_cron');
 
-	if (Config::get('retriever', 'dbversion') != '0.14') {
+	if (DI::config()->get('retriever', 'dbversion') != '0.14') {
 		$schema = file_get_contents(dirname(__file__).'/database.sql');
 		$tables = explode(';', $schema);
 		foreach ($tables as $table) {
@@ -43,8 +40,8 @@ function retriever_install() {
 				return;
 			}
 		}
-		Config::set('retriever', 'downloads_per_cron', '100');
-		Config::set('retriever', 'dbversion', '0.14');
+		DI::config()->set('retriever', 'downloads_per_cron', '100');
+		DI::config()->set('retriever', 'dbversion', '0.14');
 	}
 }
 
@@ -77,22 +74,22 @@ function retriever_module() {}
 function retriever_addon_admin(&$a, &$o) {
 	$template = Renderer::getMarkupTemplate('admin.tpl', 'addon/retriever/');
 
-	$downloads_per_cron = Config::get('retriever', 'downloads_per_cron');
+	$downloads_per_cron = DI::config()->get('retriever', 'downloads_per_cron');
 	$downloads_per_cron_config = ['downloads_per_cron',
-				      L10n::t('Downloads per Cron'),
+				      DI::l10n()->t('Downloads per Cron'),
 				      $downloads_per_cron,
-				      L10n::t('Maximum number of downloads to attempt during each run of the cron job.')];
+				      DI::l10n()->t('Maximum number of downloads to attempt during each run of the cron job.')];
 
-	$allow_images = Config::get('retriever', 'allow_images');
+	$allow_images = DI::config()->get('retriever', 'allow_images');
 	$allow_images_config = ['allow_images',
-				      L10n::t('Allow Retrieving Images'),
+				      DI::l10n()->t('Allow Retrieving Images'),
 				      $allow_images,
-				      L10n::t('Allow users to request images be downloaded as well as text.<br><b>Warning: the images are not automatically deleted and may fill up your database.</b>')];
+				      DI::l10n()->t('Allow users to request images be downloaded as well as text.<br><b>Warning: the images are not automatically deleted and may fill up your database.</b>')];
 
 	$o .= Renderer::replaceMacros($template, [
 					      '$downloads_per_cron' => $downloads_per_cron_config,
 					      '$allow_images' => $allow_images_config,
-					      '$submit' => L10n::t('Save Settings')]);
+					      '$submit' => DI::l10n()->t('Save Settings')]);
 }
 
 /**
@@ -100,16 +97,16 @@ function retriever_addon_admin(&$a, &$o) {
  */
 function retriever_addon_admin_post () {
 	if (!empty($_POST['downloads_per_cron'])) {
-		Config::set('retriever', 'downloads_per_cron', $_POST['downloads_per_cron']);
+		DI::config()->set('retriever', 'downloads_per_cron', $_POST['downloads_per_cron']);
 	}
-	Config::set('retriever', 'allow_images', $_POST['allow_images']);
+	DI::config()->set('retriever', 'allow_images', $_POST['allow_images']);
 }
 
 /**
  * @brief Cron jobs for retriever plugin
  */
 function retriever_cron() {
-	$downloads_per_cron = Config::get('retriever', 'downloads_per_cron');
+	$downloads_per_cron = DI::config()->get('retriever', 'downloads_per_cron');
 
 	// Do this first, otherwise it can interfere with retriever_retrieve_items
 	retriever_clean_up_completed_resources($downloads_per_cron);
@@ -581,7 +578,7 @@ function retriever_apply_dom_filter($retriever, &$item, $resource) {
 		Logger::info('retriever_apply_dom_filter retriever ' . $retriever['id'] . ' item ' . $item['id'] . ': output was empty');
 		return;
 	}
-	$body .= "\n\n" . L10n::t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
+	$body .= "\n\n" . DI::l10n()->t('Retrieved') . ' ' . date("Y-m-d") . ': [url=';
 	$body .=  $item['plink'];
 	$body .= ']' . $item['plink'] . '[/url]';
 
@@ -695,7 +692,7 @@ function retriever_set_body(&$item, $body) {
  * @param array &$item Item to be searched for images and updated (by ref).  This may or may not be already stored in the database.
  */
 function retrieve_images(&$item) {
-	if (!Config::get('retriever', 'allow_images')) {
+	if (!DI::config()->get('retriever', 'allow_images')) {
 		return;
 	}
 
@@ -832,7 +829,7 @@ function retriever_content($a) {
 		$template = Renderer::getMarkupTemplate('/help.tpl', 'addon/retriever/');
 		$a->page['content'] .= Renderer::replaceMacros($template, array(
 								       '$config' => $a->getBaseUrl . '/settings/addon',
-								       '$allow_images' => Config::get('retriever', 'allow_images'),
+								       '$allow_images' => DI::config()->get('retriever', 'allow_images'),
 								       '$feeds' => $feeds));
 		return;
 	}
@@ -879,62 +876,62 @@ function retriever_content($a) {
 		$a->page['content'] .= Renderer::replaceMacros($template, array(
 								       '$enable' => array(
 									       'retriever_enable',
-									       L10n::t('Enabled'),
+									       DI::l10n()->t('Enabled'),
 									       $retriever_rule['data']['enable']),
 								       '$modurl' => array(
 									       'retriever_modurl',
-									       L10n::t('Modify URL'),
+									       DI::l10n()->t('Modify URL'),
 									       $retriever_rule['data']['modurl'],
-									       L10n::t("Modify each article's URL with regular expressions before retrieving.")),
+									       DI::l10n()->t("Modify each article's URL with regular expressions before retrieving.")),
 								       '$pattern' => array(
 									       'retriever_pattern',
-									       L10n::t('URL Pattern'),
+									       DI::l10n()->t('URL Pattern'),
 									       $retriever_rule['data']['pattern'],
-									       L10n::t('Regular expression matching part of the URL to replace')),
+									       DI::l10n()->t('Regular expression matching part of the URL to replace')),
 								       '$replace' => array(
 									       'retriever_replace',
-									       L10n::t('URL Replace'),
+									       DI::l10n()->t('URL Replace'),
 									       $retriever_rule['data']['replace'],
-									       L10n::t('Text to replace matching part of above regular expression')),
-								       '$allow_images' => Config::get('retriever', 'allow_images'),
+									       DI::l10n()->t('Text to replace matching part of above regular expression')),
+								       '$allow_images' => DI::config()->get('retriever', 'allow_images'),
 								       '$images' => array(
 									       'retriever_images',
-									       L10n::t('Download Images'),
+									       DI::l10n()->t('Download Images'),
 									       $retriever_rule['data']['images']),
 								       '$retrospective' => array(
 									       'retriever_retrospective',
-									       L10n::t('Retrospectively Apply'),
+									       DI::l10n()->t('Retrospectively Apply'),
 									       '0',
-									       L10n::t('Reapply the rules to this number of posts')),
+									       DI::l10n()->t('Reapply the rules to this number of posts')),
 								       'storecookies' => array(
 									       'retriever_storecookies',
-									       L10n::t('Store cookies'),
+									       DI::l10n()->t('Store cookies'),
 									       $retriever_rule['data']['storecookies'],
-									       L10n::t("Preserve cookie data across fetches.")),
+									       DI::l10n()->t("Preserve cookie data across fetches.")),
 								       '$cookiedata' => array(
 									       'retriever_cookiedata',
-									       L10n::t('Cookie Data'),
+									       DI::l10n()->t('Cookie Data'),
 									       $retriever_rule['data']['cookiedata'],
-									       L10n::t("Latest cookie data for this feed.  Netscape cookie file format.")),
+									       DI::l10n()->t("Latest cookie data for this feed.  Netscape cookie file format.")),
 								       '$customxslt' => array(
 									       'retriever_customxslt',
-									       L10n::t('Custom XSLT'),
+									       DI::l10n()->t('Custom XSLT'),
 									       $retriever_rule['data']['customxslt'],
-									       L10n::t("When standard rules aren't enough, apply custom XSLT to the article")),
-								       '$title' => L10n::t('Retrieve Feed Content'),
+									       DI::l10n()->t("When standard rules aren't enough, apply custom XSLT to the article")),
+								       '$title' => DI::l10n()->t('Retrieve Feed Content'),
 								       '$help' => $a->getBaseUrl . '/retriever/help',
-								       '$help_t' => L10n::t('Get Help'),
-								       '$submit_t' => L10n::t('Submit'),
-								       '$submit' => L10n::t('Save Settings'),
+								       '$help_t' => DI::l10n()->t('Get Help'),
+								       '$submit_t' => DI::l10n()->t('Submit'),
+								       '$submit' => DI::l10n()->t('Save Settings'),
 								       '$id' => ($retriever_rule["id"] ? $retriever_rule["id"] : "create"),
-								       '$tag_t' => L10n::t('Tag'),
-								       '$attribute_t' => L10n::t('Attribute'),
-								       '$value_t' => L10n::t('Value'),
-								       '$add_t' => L10n::t('Add'),
-								       '$remove_t' => L10n::t('Remove'),
-								       '$include_t' => L10n::t('Include'),
+								       '$tag_t' => DI::l10n()->t('Tag'),
+								       '$attribute_t' => DI::l10n()->t('Attribute'),
+								       '$value_t' => DI::l10n()->t('Value'),
+								       '$add_t' => DI::l10n()->t('Add'),
+								       '$remove_t' => DI::l10n()->t('Remove'),
+								       '$include_t' => DI::l10n()->t('Include'),
 								       '$include' => $retriever_rule['data']['include'],
-								       '$exclude_t' => L10n::t('Exclude'),
+								       '$exclude_t' => DI::l10n()->t('Exclude'),
 								       '$exclude' => $retriever_rule['data']['exclude']));
 		return;
 	}
@@ -951,7 +948,7 @@ function retriever_contact_photo_menu($a, &$args) {
 		return;
 	}
 	if ($args["contact"]["network"] == "feed") {
-		$args["menu"]['retriever'] = array(L10n::t('Retriever'), DI::baseUrl()->get(true) . '/retriever/' . $args["contact"]['id']);
+		$args["menu"]['retriever'] = array(DI::l10n()->t('Retriever'), DI::baseUrl()->get(true) . '/retriever/' . $args["contact"]['id']);
 	}
 }
 
@@ -969,13 +966,13 @@ function retriever_post_remote_hook(&$a, &$item) {
 		retriever_on_item_insert($retriever_rule, $item);
 	}
 	else {
-		if (PConfig::get($item["uid"], 'retriever', 'oembed')) {
+		if (PDI::config()->get($item["uid"], 'retriever', 'oembed')) {
 			// Convert to HTML and back to take advantage of bbcode's resolution of oembeds.
 			$body = retriever_get_body($item);
 			$body = HTML::toBBCode(BBCode::convert($body));
 			retriever_set_body($item, $body);
 		}
-		if (PConfig::get($item["uid"], 'retriever', 'all_photos')) {
+		if (PDI::config()->get($item["uid"], 'retriever', 'all_photos')) {
 			retrieve_images($item);
 		}
 	}
@@ -989,21 +986,21 @@ function retriever_post_remote_hook(&$a, &$item) {
  * @param string $s HTML string to which to append settings content (by ref)
  */
 function retriever_addon_settings(&$a, &$s) {
-	$all_photos = PConfig::get(local_user(), 'retriever', 'all_photos');
-	$oembed = PConfig::get(local_user(), 'retriever', 'oembed');
+	$all_photos = PDI::config()->get(local_user(), 'retriever', 'all_photos');
+	$oembed = PDI::config()->get(local_user(), 'retriever', 'oembed');
 	$template = Renderer::getMarkupTemplate('/settings.tpl', 'addon/retriever/');
-	$config = array('$submit' => L10n::t('Save Settings'),
-			'$title' => L10n::t('Retriever Settings'),
+	$config = array('$submit' => DI::l10n()->t('Save Settings'),
+			'$title' => DI::l10n()->t('Retriever Settings'),
 			'$help' => $a->getBaseUrl . '/retriever/help',
-			'$allow_images' => Config::get('retriever', 'allow_images'));
+			'$allow_images' => DI::config()->get('retriever', 'allow_images'));
 	$config['$allphotos'] = array('retriever_all_photos',
-				      L10n::t('All Photos'),
+				      DI::l10n()->t('All Photos'),
 				      $all_photos,
-				      L10n::t('Check this to retrieve photos for all posts'));
+				      DI::l10n()->t('Check this to retrieve photos for all posts'));
 	$config['$oembed'] = array('retriever_oembed',
-				   L10n::t('Resolve OEmbed'),
+				   DI::l10n()->t('Resolve OEmbed'),
 				   $oembed,
-				   L10n::t('Check this to attempt to retrieve embedded content for all posts'));
+				   DI::l10n()->t('Check this to attempt to retrieve embedded content for all posts'));
 	$s .= Renderer::replaceMacros($template, $config);
 }
 
@@ -1015,15 +1012,15 @@ function retriever_addon_settings(&$a, &$s) {
  */
 function retriever_addon_settings_post($a, $post) {
 	if ($post['retriever_all_photos']) {
-		PConfig::set(local_user(), 'retriever', 'all_photos', $post['retriever_all_photos']);
+		PDI::config()->set(local_user(), 'retriever', 'all_photos', $post['retriever_all_photos']);
 	}
 	else {
-		PConfig::delete(local_user(), 'retriever', 'all_photos');
+		PDI::config()->delete(local_user(), 'retriever', 'all_photos');
 	}
 	if ($post['retriever_oembed']) {
-		PConfig::set(local_user(), 'retriever', 'oembed', $post['retriever_oembed']);
+		PDI::config()->set(local_user(), 'retriever', 'oembed', $post['retriever_oembed']);
 	}
 	else {
-		PConfig::delete(local_user(), 'retriever', 'oembed');
+		PDI::config()->delete(local_user(), 'retriever', 'oembed');
 	}
 }
