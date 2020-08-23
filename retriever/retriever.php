@@ -966,13 +966,13 @@ function retriever_post_remote_hook(&$a, &$item) {
 		retriever_on_item_insert($retriever_rule, $item);
 	}
 	else {
-		if (PDI::config()->get($item["uid"], 'retriever', 'oembed')) {
+		if (DI::config()->get($item["uid"], 'retriever', 'oembed')) {
 			// Convert to HTML and back to take advantage of bbcode's resolution of oembeds.
 			$body = retriever_get_body($item);
 			$body = HTML::toBBCode(BBCode::convert($body));
 			retriever_set_body($item, $body);
 		}
-		if (PDI::config()->get($item["uid"], 'retriever', 'all_photos')) {
+		if (DI::config()->get($item["uid"], 'retriever', 'all_photos')) {
 			retrieve_images($item);
 		}
 	}
@@ -986,8 +986,8 @@ function retriever_post_remote_hook(&$a, &$item) {
  * @param string $s HTML string to which to append settings content (by ref)
  */
 function retriever_addon_settings(&$a, &$s) {
-	$all_photos = PDI::config()->get(local_user(), 'retriever', 'all_photos');
-	$oembed = PDI::config()->get(local_user(), 'retriever', 'oembed');
+	$all_photos = DI::config()->get(local_user(), 'retriever', 'all_photos');
+	$oembed = DI::config()->get(local_user(), 'retriever', 'oembed');
 	$template = Renderer::getMarkupTemplate('/settings.tpl', 'addon/retriever/');
 	$config = array('$submit' => DI::l10n()->t('Save Settings'),
 			'$title' => DI::l10n()->t('Retriever Settings'),
@@ -1012,15 +1012,15 @@ function retriever_addon_settings(&$a, &$s) {
  */
 function retriever_addon_settings_post($a, $post) {
 	if ($post['retriever_all_photos']) {
-		PDI::config()->set(local_user(), 'retriever', 'all_photos', $post['retriever_all_photos']);
+		DI::config()->set(local_user(), 'retriever', 'all_photos', $post['retriever_all_photos']);
 	}
 	else {
-		PDI::config()->delete(local_user(), 'retriever', 'all_photos');
+		DI::config()->delete(local_user(), 'retriever', 'all_photos');
 	}
 	if ($post['retriever_oembed']) {
-		PDI::config()->set(local_user(), 'retriever', 'oembed', $post['retriever_oembed']);
+		DI::config()->set(local_user(), 'retriever', 'oembed', $post['retriever_oembed']);
 	}
 	else {
-		PDI::config()->delete(local_user(), 'retriever', 'oembed');
+		DI::config()->delete(local_user(), 'retriever', 'oembed');
 	}
 }
