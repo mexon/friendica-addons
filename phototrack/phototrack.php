@@ -21,7 +21,6 @@
  */
 
 use Friendica\Core\Addon;
-use Friendica\Core\Config;
 use Friendica\Core\Logger;
 use Friendica\Object\Image;
 use Friendica\Database\DBA;
@@ -43,7 +42,7 @@ function phototrack_install() {
     Addon::registerHook('notifier_end', 'addon/phototrack/phototrack.php', 'phototrack_notifier_end');
     Addon::registerHook('cron', 'addon/phototrack/phototrack.php', 'phototrack_cron');
 
-    if (Config::get('phototrack', 'dbversion') != '0.1') {
+    if (DI::config()->get('phototrack', 'dbversion') != '0.1') {
         $schema = file_get_contents(dirname(__file__).'/database.sql');
         $arr = explode(';', $schema);
         foreach ($arr as $a) {
@@ -52,7 +51,7 @@ function phototrack_install() {
                 return;
             }
         }
-        Config::set('phototrack', 'dbversion', '0.1');
+        DI::config()->set('phototrack', 'dbversion', '0.1');
     }
 }
 
@@ -190,7 +189,7 @@ function phototrack_check_row($a, $table, $row) {
 }
 
 function phototrack_batch_size() {
-    $batch_size = Config::get('phototrack', 'batch_size');
+    $batch_size = DI::config()->get('phototrack', 'batch_size');
     if ($batch_size > 0) {
         return $batch_size;
     }
@@ -210,13 +209,13 @@ function phototrack_search_table($a, $table) {
 }
 
 function phototrack_cron_time() {
-    $prev_remaining = Config::get('phototrack', 'remaining_items');
+    $prev_remaining = DI::config()->get('phototrack', 'remaining_items');
     if ($prev_remaining > 10 * phototrack_batch_size()) {
         Logger::debug('phototrack: more than ' . (10 * phototrack_batch_size()) . ' items remaining');
         return true;
     }
-    $last = Config::get('phototrack', 'last_search');
-    $search_interval = intval(Config::get('phototrack', 'search_interval'));
+    $last = DI::config()->get('phototrack', 'last_search');
+    $search_interval = intval(DI::config()->get('phototrack', 'search_interval'));
     if (!$search_interval) {
         $search_interval = PHOTOTRACK_DEFAULT_SEARCH_INTERVAL;
     }
@@ -234,7 +233,7 @@ function phototrack_cron($a, $b) {
     if (!phototrack_cron_time()) {
         return;
     }
-    Config::set('phototrack', 'last_search', time());
+    DI::config()->set('phototrack', 'last_search', time());
 
     $remaining = 0;
     $remaining += phototrack_search_table($a, 'item');
@@ -244,7 +243,7 @@ function phototrack_cron($a, $b) {
     $remaining += phototrack_search_table($a, 'fsuggest');
     $remaining += phototrack_search_table($a, 'gcontact');
 
-    Config::set('phototrack', 'remaining_items', $remaining);
+    DI::config()->set('phototrack', 'remaining_items', $remaining);
     if ($remaining === 0) {
         phototrack_tidy();
     }
