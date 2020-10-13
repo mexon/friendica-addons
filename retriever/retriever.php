@@ -828,7 +828,7 @@ function retriever_content($a) {
 		}
 		$template = Renderer::getMarkupTemplate('/help.tpl', 'addon/retriever/');
 		$a->page['content'] .= Renderer::replaceMacros($template, array(
-								       '$config' => $a->getBaseUrl . '/settings/addon',
+								       '$config' => DI::baseUrl()->get(true) . '/settings/addon',
 								       '$allow_images' => DI::config()->get('retriever', 'allow_images'),
 								       '$feeds' => $feeds));
 		return;
@@ -877,27 +877,27 @@ function retriever_content($a) {
 								       '$enable' => array(
 									       'retriever_enable',
 									       DI::l10n()->t('Enabled'),
-									       $retriever_rule['data']['enable']),
+									       array_key_exists('enable', $retriever_rule['data']) ? $retriever_rule['data']['enable'] : ""),
 								       '$modurl' => array(
 									       'retriever_modurl',
 									       DI::l10n()->t('Modify URL'),
-									       $retriever_rule['data']['modurl'],
+									       array_key_exists('modurl', $retriever_rule['data']) ? $retriever_rule['data']['modurl'] : "",
 									       DI::l10n()->t("Modify each article's URL with regular expressions before retrieving.")),
 								       '$pattern' => array(
 									       'retriever_pattern',
 									       DI::l10n()->t('URL Pattern'),
-									       $retriever_rule['data']['pattern'],
+									       array_key_exists('pattern', $retriever_rule['data']) ? $retriever_rule['data']['pattern'] : "",
 									       DI::l10n()->t('Regular expression matching part of the URL to replace')),
 								       '$replace' => array(
 									       'retriever_replace',
 									       DI::l10n()->t('URL Replace'),
-									       $retriever_rule['data']['replace'],
+									       array_key_exists('replace', $retriever_rule['data']) ? $retriever_rule['data']['replace'] : "",
 									       DI::l10n()->t('Text to replace matching part of above regular expression')),
 								       '$allow_images' => DI::config()->get('retriever', 'allow_images'),
 								       '$images' => array(
 									       'retriever_images',
 									       DI::l10n()->t('Download Images'),
-									       $retriever_rule['data']['images']),
+									       array_key_exists('images', $retriever_rule['data']) ? $retriever_rule['data']['images'] : ""),
 								       '$retrospective' => array(
 									       'retriever_retrospective',
 									       DI::l10n()->t('Retrospectively Apply'),
@@ -906,20 +906,20 @@ function retriever_content($a) {
 								       'storecookies' => array(
 									       'retriever_storecookies',
 									       DI::l10n()->t('Store cookies'),
-									       $retriever_rule['data']['storecookies'],
+									       array_key_exists('storecookies', $retriever_rule['data']) ? $retriever_rule['data']['storecookies'] : "",
 									       DI::l10n()->t("Preserve cookie data across fetches.")),
 								       '$cookiedata' => array(
 									       'retriever_cookiedata',
 									       DI::l10n()->t('Cookie Data'),
-									       $retriever_rule['data']['cookiedata'],
+									       array_key_exists('cookiedata', $retriever_rule['data']) ? $retriever_rule['data']['cookiedata'] : "",
 									       DI::l10n()->t("Latest cookie data for this feed.  Netscape cookie file format.")),
 								       '$customxslt' => array(
 									       'retriever_customxslt',
 									       DI::l10n()->t('Custom XSLT'),
-									       $retriever_rule['data']['customxslt'],
+									       array_key_exists('customxslt', $retriever_rule['data']) ? $retriever_rule['data']['customxslt'] : "",
 									       DI::l10n()->t("When standard rules aren't enough, apply custom XSLT to the article")),
 								       '$title' => DI::l10n()->t('Retrieve Feed Content'),
-								       '$help' => $a->getBaseUrl . '/retriever/help',
+								       '$help' => DI::baseUrl()->get(true) . '/retriever/help',
 								       '$help_t' => DI::l10n()->t('Get Help'),
 								       '$submit_t' => DI::l10n()->t('Submit'),
 								       '$submit' => DI::l10n()->t('Save Settings'),
@@ -991,7 +991,7 @@ function retriever_addon_settings(&$a, &$s) {
 	$template = Renderer::getMarkupTemplate('/settings.tpl', 'addon/retriever/');
 	$config = array('$submit' => DI::l10n()->t('Save Settings'),
 			'$title' => DI::l10n()->t('Retriever Settings'),
-			'$help' => $a->getBaseUrl . '/retriever/help',
+			'$help' => DI::baseUrl()->get(true) . '/retriever/help',
 			'$allow_images' => DI::config()->get('retriever', 'allow_images'));
 	$config['$allphotos'] = array('retriever_all_photos',
 				      DI::l10n()->t('All Photos'),
