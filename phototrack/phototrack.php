@@ -144,7 +144,6 @@ function phototrack_post_remote_end(&$a, &$item) {
 }
 
 function phototrack_notifier_end($item) {
-        $a = get_app();
 }
 
 function phototrack_check_row($a, $table, $row) {
