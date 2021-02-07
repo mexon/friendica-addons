@@ -273,7 +273,7 @@ function retrieve_resource($resource) {
 			$cookiejar = tempnam(get_temppath(), 'cookiejar-retriever-');
 			file_put_contents($cookiejar, $rule_data['cookiedata']);
 		}
-		$fetch_result = Network::fetchUrlFull($resource['url'], $resource['binary'], $redirects, '', $cookiejar);
+		$fetch_result = DI::httpRequest()->fetchFull($resource['url'], $resource['binary'], $redirects, '', $cookiejar);
 		if (array_key_exists('storecookies', $rule_data) && $rule_data['storecookies']) {
 			$retriever_rule['data']['cookiedata'] = file_get_contents($cookiejar);
 			DBA::update('retriever_rule', ['data' => json_encode($retriever_rule['data'])], ['id' => intval($retriever_rule["id"])], $retriever_rule);
