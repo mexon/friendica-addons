@@ -18,6 +18,7 @@ use Friendica\Util\Network;
 use Friendica\Database\DBA;
 use Friendica\Model\ItemURI;
 use Friendica\Model\Item;
+use Friendica\Model\Post;
 use Friendica\Util\DateTimeFormat;
 use Friendica\DI;
 
@@ -322,7 +323,7 @@ function get_retriever_rule($contact_id, $uid, $create) {
  * @return array Item that was found, or undef if no item could be found
  */
 function retriever_get_item($retriever_item) {
-	$item = Item::selectFirst([], ['uri' => $retriever_item['item-uri'], 'uid' => intval($retriever_item['item-uid']), 'contact-id' => intval($retriever_item['contact-id'])]);
+	$item = Post::selectFirst([], ['uri' => $retriever_item['item-uri'], 'uid' => intval($retriever_item['item-uid']), 'contact-id' => intval($retriever_item['contact-id'])]);
 	if (!DBA::isResult($item)) {
 		Logger::warning('retriever_get_item: no item found for uri ' . $retriever_item['item-uri']);
 		return;
@@ -377,7 +378,7 @@ function retriever_resource_completed($resource) {
  * @param int $num The number of existing items to queue for retrieval
  */
 function apply_retrospective($retriever, $num) {
-	foreach (Item::selectToArray([], ['contact-id' => intval($retriever['contact-id'])], ['order' => ['received' => true], 'limit' => $num]) as $item) {
+	foreach (Post::selectToArray([], ['contact-id' => intval($retriever['contact-id'])], ['order' => ['received' => true], 'limit' => $num]) as $item) {
 		Item::update(['visible' => 0], ['id' => intval($item['id'])]);
 		foreach (DBA::selectToArray('retriever_item', [], ['item-uri' => $item['uri'], 'item-uid' => $item['uid'], 'contact-id' => $item['contact-id']]) as $retriever_item) {
 			DBA::delete('retriever_resource', ['id' => $retriever_item['resource']]);
