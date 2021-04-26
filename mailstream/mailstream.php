@@ -316,7 +316,7 @@ function mailstream_subject($item)
 		return DI::l10n()->t("Friendica post");
 	}
 	$contact = $r[0];
-	if (!DBA::isResult($rows)) {
+	if (!DBA::isResult($r)) {
 		Logger::error('mailstream_subject no contact for item id ' . $item['id'] . ' plink ' . $item['plink'] . ' contact id ' . $item['contact-id'] . ' uid ' . $item['uid']);
 		return DI::l10n()->t("Friendica post");
 	}
