@@ -229,7 +229,7 @@ function mailstream_subject($item) {
 	$r = q("SELECT * FROM `contact` WHERE `id` = %d AND `uid` = %d",
 		intval($item['contact-id']), intval($item['uid']));
 	$contact = $r[0];
-	if (!DBA::isResult($rows)) {
+	if (!DBA::isResult($r)) {
 		Logger::error('mailstream_subject no contact for item id ' . $item['id'] . ' plink ' . $item['plink'] . ' contact id ' . $item['contact-id'] . ' uid ' . $item['uid']);
 		return DI::l10n()->t("Friendica post");
 	}
