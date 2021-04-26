@@ -290,7 +290,7 @@ function mailstream_send(\Friendica\App $a, $message_id, $item, $user) {
 		$mail->CharSet = 'utf-8';
 		$template = Renderer::getMarkupTemplate('mail.tpl', 'addon/mailstream/');
 		$mail->AltBody = BBCode::toPlaintext($item['body']);
-		$item['body'] = BBCode::convert($item['body']);
+		$item['body'] = BBCode::convert($item['body'], false, BBCode::CONNECTORS);
 		$item['url'] = DI::baseUrl()->get() . '/display/' . $item['guid'];
 		$mail->Body = Renderer::replaceMacros($template, [
 						 '$upstream' => DI::l10n()->t('Upstream'),
