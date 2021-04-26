@@ -258,9 +258,9 @@ function phototrack_tidy() {
             Logger::debug('phototrack: remove photo ' . $row['resource-id']);
             q('DELETE FROM photo WHERE `resource-id` = "' . $row['resource-id'] . '"');
         }
+        Logger::info('phototrack_tidy: deleted ' . count($rows) . ' photos');
     }
     q('DROP TABLE `phototrack-temp`');
-    Logger::info('phototrack_tidy: deleted ' . count($rows) . ' photos');
     $rows = q('SELECT id FROM phototrack_photo_use WHERE checked < DATE_SUB(NOW(), INTERVAL 14 DAY)');
     foreach ($rows as $row) {
         q('DELETE FROM phototrack_photo_use WHERE id = ' . $row['id']);
