@@ -253,7 +253,7 @@ function phototrack_tidy() {
     q('CREATE TABLE IF NOT EXISTS `phototrack-temp` (`resource-id` char(255) not null)');
     q('INSERT INTO `phototrack-temp` SELECT DISTINCT(`resource-id`) FROM photo WHERE photo.`created` < DATE_SUB(NOW(), INTERVAL 2 MONTH)');
     $rows = q('SELECT `phototrack-temp`.`resource-id` FROM `phototrack-temp` LEFT OUTER JOIN phototrack_photo_use ON (`phototrack-temp`.`resource-id` = phototrack_photo_use.`resource-id`) WHERE phototrack_photo_use.id IS NULL limit ' . /*$batch_size*/1000);
-    if (DBA::isResult($ms_item_ids)) {
+    if (DBA::isResult($rows)) {
         foreach ($rows as $row) {
             Logger::debug('phototrack: remove photo ' . $row['resource-id']);
             q('DELETE FROM photo WHERE `resource-id` = "' . $row['resource-id'] . '"');
