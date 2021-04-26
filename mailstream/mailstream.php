@@ -333,6 +333,7 @@ function mailstream_cron($a, $b) {
 	// mailstream_post_remote_hook fails for some reason will this get
 	// used, and in that case it's worth holding off a bit anyway.
 	$ms_item_ids = q("SELECT `mailstream_item`.`message-id`, `mailstream_item`.`uri`, `post-view`.`id` FROM `mailstream_item` JOIN `post-view` ON (`mailstream_item`.`uid` = `post-view`.`uid` AND `mailstream_item`.`uri` = `post-view`.`uri` AND `mailstream_item`.`contact-id` = `post-view`.`contact-id`) WHERE `mailstream_item`.`completed` IS NULL AND `mailstream_item`.`created` < DATE_SUB(NOW(), INTERVAL 1 HOUR) AND `post-view`.`visible` = 1 ORDER BY `mailstream_item`.`created` LIMIT 100");
+	if (DBA::isResult($ms_item_ids)) {
 	Logger::debug('mailstream_cron processing ' . count($ms_item_ids) . ' items');
 	foreach ($ms_item_ids as $ms_item_id) {
 		if (!$ms_item_id['message-id'] || !strlen($ms_item_id['message-id'])) {
@@ -348,6 +349,7 @@ function mailstream_cron($a, $b) {
 			Logger::info('mailstream_cron: Unable to find item ' . $ms_item_id['id']);
 			q("UPDATE `mailstream_item` SET `completed` = now() WHERE `message-id` = %d", intval($ms_item_id['message-id']));
 		}
+	}
 	}
 	mailstream_tidy();
 }
