@@ -241,6 +241,9 @@ function retrieve_dataurl_resource($resource) {
  */
 function retrieve_resource($resource) {
 	$components = parse_url($resource['url']);
+	if (!$components) {
+		Logger::warning('retrieve_resource: URL ' . $resource['url'] . ' could not be parsed');
+	}
 	if ($components['scheme'] == "data") {
 		return retrieve_dataurl_resource($resource);
 	}
