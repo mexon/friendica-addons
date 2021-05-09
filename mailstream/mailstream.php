@@ -364,6 +364,10 @@ function mailstream_subject($item)
  */
 function mailstream_send($message_id, $item, $user)
 {
+	if (rand(0, 7) != 0) {
+		Logger::info('@@@ mailstream_send randomly pretend to fail ' . $message_id);
+                return false;
+	}
 	if (!$item['visible']) {
 		return;
 	}
