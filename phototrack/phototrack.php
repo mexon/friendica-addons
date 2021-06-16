@@ -251,7 +251,7 @@ function phototrack_cron($a, $b) {
 function phototrack_tidy() {
     $batch_size = phototrack_batch_size();
     q('CREATE TABLE IF NOT EXISTS `phototrack-temp` (`resource-id` char(255) not null)');
-    q('INSERT INTO `phototrack-temp` SELECT DISTINCT(`resource-id`) FROM photo WHERE photo.`created` < DATE_SUB(NOW(), INTERVAL 2 MONTH)');
+    q('INSERT INTO `phototrack-temp` SELECT DISTINCT(`resource-id`) FROM photo WHERE photo.`created` < DATE_SUB(NOW(), INTERVAL 14 DAY)');
     $rows = q('SELECT `phototrack-temp`.`resource-id` FROM `phototrack-temp` LEFT OUTER JOIN phototrack_photo_use ON (`phototrack-temp`.`resource-id` = phototrack_photo_use.`resource-id`) WHERE phototrack_photo_use.id IS NULL limit ' . /*$batch_size*/1000);
     if (DBA::isResult($rows)) {
         foreach ($rows as $row) {
